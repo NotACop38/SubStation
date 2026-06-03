@@ -59,7 +59,7 @@ A detection is **done** only when all are true:
 
 **Tasks**
 
-- [ ] **Freeze the event-log schema for Modbus** in `docs/schema.md`: envelope (`PRD.md` §6.3) + Modbus `detail` from the verified ICSNPP fields. (Gate: ICSNPP VERIFY done.)
+- [x] **Freeze the event-log schema for Modbus** in `docs/schema.md`: envelope (`PRD.md` §6.3) + Modbus `detail` from the verified ICSNPP fields. (Gate: ICSNPP VERIFY done.) (`docs/schema.md` frozen for Modbus; machine-readable `substation/schema/event-log.schema.json` (draft 2020-12); dependency-free validator `substation/schema/` + `python -m substation.schema`; wired into `make ci` via the `schema` target over committed golden events `tests/data/events/`. `.jsonl`, one event per line. DNP3/S7 `detail` stay unconstrained until Phases 3/4.)
 - [ ] Implement the **scenario model** + YAML loader.
 - [ ] Implement the **JSON emitter** (envelope + Modbus detail) from the scenario model.
 - [ ] Implement the **PCAP emitter** for Modbus (scapy or hand-built/template per the spike).

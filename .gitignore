@@ -20,6 +20,8 @@ htmlcov/
 artifacts/
 *.pcap
 *.jsonl
+# ...except committed golden event fixtures used by the schema-validation gate.
+!tests/data/events/**/*.jsonl
 
 # Generated coverage map outputs (keep the dir, ignore generated files)
 /coverage/*

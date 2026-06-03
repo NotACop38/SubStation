@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/notacop38/substation/blob/main/substation/schema/event-log.schema.json",
+  "title": "Substation event-log event",
+  "description": "One newline-delimited JSON (.jsonl) protocol event: the normalized envelope (PRD.md §6.3) plus a per-protocol `detail` object modeled on ICSNPP fields. One event per line; this schema validates a single line/object. Modbus `detail` is FROZEN against ICSNPP modbus_detailed.log (docs/spikes/01-icsnpp-modbus-fields.md).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ts",
+    "uid",
+    "conn",
+    "proto",
+    "is_orig",
+    "direction",
+    "func_code",
+    "func_name",
+    "action_class",
+    "is_exception",
+    "detail"
+  ],
+  "properties": {
+    "ts": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Event timestamp as Unix epoch seconds (Zeek `ts`)."
+    },
+    "uid": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Zeek-style connection uid (ICSNPP `uid`)."
+    },
+    "conn": { "$ref": "#/$defs/conn" },
+    "proto": {
+      "type": "string",
+      "enum": ["modbus", "dnp3", "s7comm"],
+      "description": "Protocol discriminator; selects the `detail` shape."
+    },
+    "is_orig": {
+      "type": "boolean",
+      "description": "ICSNPP `is_orig`: true when this event originated from the connection originator (request side)."
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["request", "response"],
+      "description": "Normalized direction derived from is_orig: request when true, response when false."
+    },
+    "func_code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "Raw one-byte function/command code. Modbus exception responses carry function_code | 0x80."
+    },
+    "func_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Decoded, normalized function name. For Modbus: Zeek `Modbus::function_codes[func_code]`, with an `_EXCEPTION` suffix on exception responses."
+    },
+    "action_class": {
+      "type": "string",
+      "enum": ["read", "write", "control", "diagnostic", "scan_indicator", "other"],
+      "description": "Normalized verb that drives cross-protocol logic (X1) and shared Sigma rules. See docs/schema.md for the Modbus func -> action_class mapping."
+    },
+    "is_exception": {
+      "type": "boolean",
+      "description": "True when this event is an error/exception (Modbus: func_name ends in _EXCEPTION / detail.exception_code present)."
+    },
+    "error": {
+      "type": ["string", "null"],
+      "description": "Decoded exception/error name when is_exception is true (Modbus mirrors detail.exception_code, e.g. ILLEGAL_FUNCTION); null or absent otherwise."
+    },
+    "detail": {
+      "type": "object",
+      "description": "Per-protocol detail object mirroring ICSNPP fields. Constrained per `proto` below."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["proto"],
+        "properties": { "proto": { "const": "modbus" } }
+      },
+      "then": {
+        "properties": { "detail": { "$ref": "#/$defs/modbus_detail" } }
+      }
+    }
+  ],
+  "$defs": {
+    "conn": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Zeek conn tuple (ICSNPP `id`). Endpoints are originator/responder, not per-direction source/destination; derive source/destination through is_orig (spike 01).",
+      "required": ["orig_h", "orig_p", "resp_h", "resp_p"],
+      "properties": {
+        "orig_h": { "type": "string", "minLength": 1, "description": "Originator host (id.orig_h)." },
+        "orig_p": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Originator port (id.orig_p)." },
+        "resp_h": { "type": "string", "minLength": 1, "description": "Responder host (id.resp_h)." },
+        "resp_p": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Responder port (id.resp_p)." }
+      }
+    },
+    "modbus_detail": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Modbus detail modeled on ICSNPP modbus_detailed.log (Modbus_Detailed record in icsnpp-modbus scripts/main.zeek). All fields optional, mirroring Zeek's optional record fields. Sub-shapes for mask-write (0x16), read/write-multiple (0x17) and read-device-identification (0x2B) are pulled in when those function codes appear.",
+      "properties": {
+        "tid": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Modbus transaction id (`tid`)." },
+        "unit": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Modbus unit identifier (`unit`). NB: ICSNPP README spells this `uint` for some logs; code/`main.zeek` says `unit` — code wins (spike 01)." },
+        "func": { "type": "string", "minLength": 1, "description": "ICSNPP `func` (Zeek function name); mirrors envelope func_name." },
+        "address": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Starting address of the value(s) field (`address`)." },
+        "quantity": { "type": "integer", "minimum": 0, "description": "Number of coils / discrete inputs / registers (`quantity`)." },
+        "request_values": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Request value(s) (`request_values`)." },
+        "response_values": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Response value(s) (`response_values`)." },
+        "modbus_detailed_link_id": { "type": "string", "description": "Links this row to the mask-write / read-write-multiple / read-device-id extended logs (`modbus_detailed_link_id`)." },
+        "matched": { "type": "boolean", "description": "Request/response were paired (`matched`)." },
+        "request_subfunction_code": { "type": "string", "description": "Diagnostics subfunction (func 0x08) on the request (`request_subfunction_code`)." },
+        "response_subfunction_code": { "type": "string", "description": "Diagnostics subfunction (func 0x08) on the response (`response_subfunction_code`)." },
+        "request_data": { "type": "string", "description": "Extra/padding bytes in the request (`request_data`)." },
+        "response_data": { "type": "string", "description": "Extra/padding bytes in the response (`response_data`)." },
+        "exception_code": { "type": "string", "minLength": 1, "description": "Exception name on an exception response (`exception_code`). Drives envelope is_exception/error and M2." },
+        "mei_type": { "type": "string", "description": "MEI type for encapsulated interface transport (`mei_type`)." },
+        "mask_write": { "$ref": "#/$defs/modbus_mask_write" },
+        "read_write_multiple": { "$ref": "#/$defs/modbus_read_write_multiple" },
+        "read_device_identification": { "$ref": "#/$defs/modbus_read_device_identification" }
+      }
+    },
+    "modbus_mask_write": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ICSNPP modbus_mask_write_register.log fields specific to MASK_WRITE_REGISTER (func 0x16); `address` is carried on the parent detail.",
+      "properties": {
+        "and_mask": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "AND mask (`and_mask`)." },
+        "or_mask": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "OR mask (`or_mask`)." }
+      }
+    },
+    "modbus_read_write_multiple": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ICSNPP modbus_read_write_multiple_registers.log fields specific to READ_WRITE_MULTIPLE_REGISTERS (func 0x17).",
+      "properties": {
+        "write_start_address": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Write start address (`write_start_address`)." },
+        "write_registers": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Registers written (`write_registers`)." },
+        "read_start_address": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Read start address (`read_start_address`)." },
+        "read_quantity": { "type": "integer", "minimum": 0, "description": "Number of registers read (`read_quantity`)." },
+        "read_registers": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Registers read back (`read_registers`)." }
+      }
+    },
+    "modbus_read_device_identification": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ICSNPP modbus_read_device_identification.log fields specific to READ_DEVICE_IDENTIFICATION (func 0x2B / MEI 14; Zeek >= 6.1).",
+      "properties": {
+        "conformity_level_code": { "type": "integer", "minimum": 0, "description": "Conformity level code (`conformity_level_code`)." },
+        "conformity_level": { "type": "string", "description": "Conformity level string (`conformity_level`)." },
+        "device_id_code": { "type": "integer", "minimum": 0, "description": "Device id code (`device_id_code`)." },
+        "object_id_code": { "type": "integer", "minimum": 0, "description": "Object id code (`object_id_code`)." },
+        "object_id": { "type": "string", "description": "Object id string (`object_id`)." },
+        "object_value": { "type": "string", "description": "Object value (`object_value`)." }
+      }
+    }
+  }
+}

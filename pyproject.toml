@@ -45,6 +45,11 @@ Homepage = "https://github.com/notacop38/substation"
 [tool.setuptools.packages.find]
 include = ["substation*"]
 
+[tool.setuptools.package-data]
+# Ship the machine-readable event-log JSON Schema with the package so the
+# validator (and external tools) can load it from an installed distribution.
+"substation.schema" = ["*.json"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100
