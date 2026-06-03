@@ -52,8 +52,7 @@ security: ## Security audit: bandit (code) + pip-audit (deps)
 ## ---------------------------------------------------------------------------
 ## Product targets (stubs until later phases)
 ## ---------------------------------------------------------------------------
-demo: ## Tier-1 one-command demo: generate -> detect -> report (stub)
-	@echo "make demo: Tier-1 demo not yet implemented (Phase 0 stub)."
+demo: ## Tier-1 one-command demo: generate -> detect -> report (Phase 0 no-op)
 	$(PY) -m substation.cli demo
 
 verify: ## Tier-2 fidelity validation: Zeek/ICSNPP + Suricata (stub)

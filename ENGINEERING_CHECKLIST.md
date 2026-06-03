@@ -36,8 +36,8 @@ A detection is **done** only when all are true:
 
 - [ ] Confirm `PRD.md` §7 locked decisions with the lead.
 - [x] Create repo layout per `PRD.md` §6.9 (empty packages + placeholders).
-- [ ] Define the **scenario YAML format** (actors, exchanges, timing, `benign|anomalous` label, `exercises:` detection IDs) and document it inline with a commented example.
-- [ ] Stand up the **one-command entrypoint** as a stub (`cli.py` + `make demo`) that runs an end-to-end no-op (loads a trivial scenario → writes empty artifacts → prints a placeholder coverage map). Prove the wiring before the logic.
+- [x] Define the **scenario YAML format** (actors, exchanges, timing, `benign|anomalous` label, `exercises:` detection IDs) and document it inline with a commented example. (`docs/scenario-format.md` + commented `scenarios/modbus/benign-poll.yaml`; typed model + strict loader in `substation/scenarios/`.)
+- [x] Stand up the **one-command entrypoint** as a stub (`cli.py` + `make demo`) that runs an end-to-end no-op (loads a trivial scenario → writes empty artifacts → prints a placeholder coverage map). Prove the wiring before the logic. (`substation demo` exercises load→generate→detect→report; emit/detect/coverage stages are wired no-ops.)
 - [x] `pyproject.toml` with pinned deps (scapy, pySigma, pytest, Jinja2) targeting Python 3.11+.
 - [ ] **VERIFY spike — Sigma offline evaluation:** confirm a working Sigma-to-Python evaluation path over `.jsonl` for the harness; record the chosen mechanism in `docs/schema.md` notes.
 - [ ] **VERIFY spike — scapy capability (Modbus first):** confirm whether scapy can assemble the Modbus PDUs we need, or whether we hand-build / splice template PCAPs. Record the verdict per protocol.

@@ -1,0 +1,100 @@
+# =============================================================================
+# Substation scenario format — fully commented reference example
+# =============================================================================
+# A scenario is the SINGLE SOURCE OF TRUTH for one simulator run (PRD.md §6.1).
+# The same model drives BOTH emitters (PCAP + JSON) so the two outputs can never
+# drift. This file is also the canonical, documented example of the format; the
+# schema is described in docs/scenario-format.md.
+#
+# This particular scenario is a trivial BENIGN Modbus poll used by `make demo`
+# to prove the generate -> detect -> report pipeline is wired end to end. In
+# Phase 0 it produces no real telemetry — the exchanges below describe intent
+# only; the per-protocol encoders that turn them into bytes land in Phase 1.
+#
+# Loader rules (enforced — see substation/scenarios/loader.py):
+#   * unknown keys are rejected at every level,
+#   * protocol/label/role must be from the closed enums below,
+#   * every exchange source/target must match a declared actor id.
+# -----------------------------------------------------------------------------
+
+# Human-readable, filesystem-safe name. Used to name the artifacts this scenario
+# produces (e.g. artifacts/<name>.pcap and artifacts/<name>.jsonl).
+name: benign-poll
+
+# Free-form prose describing what the scenario models and why it exists.
+description: >-
+  Continuous benign Modbus polling from an HMI to a PLC, plus one legitimate
+  setpoint write from the allow-listed engineering workstation. Models normal OT
+  operation so allow-list and scan detections have a credible "quiet" baseline
+  (PRD.md §8). Used as the Phase-0 end-to-end wiring demo.
+
+# One of: modbus | dnp3 | s7comm  (the closed v1 protocol set, PRD.md §5).
+protocol: modbus
+
+# Ground-truth intent: benign | anomalous.
+#   benign    -> the detections in `exercises.quiet` MUST stay silent.
+#   anomalous -> the detections in `exercises.fires` MUST fire.
+# The test harness (Phase 1+) uses this to enforce the Detection Contract.
+label: benign
+
+# Scenario-level timing. Both fields are seconds and optional.
+timing:
+  start: 0.0            # wall-clock offset of the first exchange (seconds).
+  default_interval: 2.0 # default spacing between exchanges when not overridden.
+
+# Network participants. Roles are first-class because credible detections need a
+# legitimate writer/master, not just an attacker (PRD.md §6.4, §8).
+#   roles: master | hmi | ews | outstation | plc
+#   port is optional (Modbus/TCP is 502 by convention).
+actors:
+  - id: hmi-1          # unique id, referenced by exchanges below.
+    role: hmi
+    host: 10.0.0.10
+  - id: ews-1          # engineering workstation: an allow-listed writer.
+    role: ews
+    host: 10.0.0.11
+  - id: plc-1          # the outstation/PLC being polled.
+    role: plc
+    host: 10.0.0.50
+    port: 502
+
+# Ordered list of protocol exchanges. Order is significant. Each exchange:
+#   source/target -> actor ids declared above (validated by the loader).
+#   function      -> protocol function name (free-form in Phase 0).
+#   offset        -> seconds from `timing.start` (optional, default 0.0).
+#   params        -> opaque per-protocol payload bag (frozen per protocol later).
+exchanges:
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters   # routine benign poll.
+    offset: 0.0
+    params:
+      unit_id: 1
+      address: 0
+      quantity: 10
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters   # the HMI keeps polling.
+    offset: 2.0
+    params:
+      unit_id: 1
+      address: 0
+      quantity: 10
+  - source: ews-1
+    target: plc-1
+    function: WriteSingleRegister    # legitimate setpoint write from the EWS.
+    offset: 4.0
+    params:
+      unit_id: 1
+      address: 40
+      value: 1500
+
+# Detections this scenario is meant to exercise (links to the Detection
+# Contract, PRD.md §6.6). Both lists hold detection IDs (e.g. M1, M2, M3).
+#   fires -> must alert on this scenario (use in anomalous scenarios).
+#   quiet -> must stay silent on this scenario (use in benign scenarios).
+exercises:
+  quiet:
+    - M1   # unauthorized write: EWS is allow-listed, so M1 must NOT fire.
+    - M2   # illegal function code: all functions here are legal.
+    - M3   # function-code / unit-id sweep: steady polling is not a sweep.
