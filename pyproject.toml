@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "substation"
+version = "0.0.0"
+description = "Defensive ICS detection-content pack (Modbus/DNP3/S7) with a files-only protocol traffic simulator."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Substation contributors" }]
+keywords = ["ics", "ot", "modbus", "dnp3", "s7comm", "sigma", "zeek", "attack", "detection"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Security",
+]
+
+# Runtime deps (Tier 1 headline path is pure-Python). Pinned per Phase 0.
+dependencies = [
+    "scapy==2.7.0",
+    "pysigma==1.3.3",
+    "Jinja2==3.1.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff==0.15.8",
+    "mypy==1.19.1",
+    "pytest==9.0.2",
+    "bandit==1.9.4",
+    "pip-audit==2.10.0",
+]
+
+[project.scripts]
+substation = "substation.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/notacop38/substation"
+
+[tool.setuptools.packages.find]
+include = ["substation*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["substation", "tests"]
+
+[tool.ruff.lint]
+# Format + lint are both driven by ruff (see Makefile).
+select = ["E", "F", "I", "W", "B", "UP", "SIM", "C4", "S"]
+# S = flake8-bandit style checks at lint time; full bandit runs separately in `make security`.
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use asserts (S101) and fixtures freely.
+"tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+no_implicit_reexport = true
+show_error_codes = true
+files = ["substation", "tests"]
+
+[[tool.mypy.overrides]]
+# Third-party libs without type stubs (revisited as code lands). pytest ships
+# py.typed and is fully typed when visible; this only matters when mypy runs in
+# an isolated env (e.g. a uv-managed tool) that can't see the test deps.
+module = ["scapy.*", "sigma.*", "pytest", "pytest.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Shipped code is strict. Tests are too, except: pytest's mark decorators read as
+# untyped when pytest isn't importable in mypy's environment, so relax just that
+# one rule for tests to keep the gate green regardless of how mypy is installed.
+module = ["tests.*"]
+disallow_untyped_decorators = false
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+
+[tool.bandit]
+# Tests are allowed asserts/fixtures; scan only shipped code by default.
+exclude_dirs = ["tests", ".git", ".venv"]

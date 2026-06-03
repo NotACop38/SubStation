@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Substation pre-push hook — the local "continuous" gate.
+#
+# Runs `make ci` and blocks the push if it fails. This is intentional: there is
+# NO cloud CI / GitHub Actions for this project, so this hook is how we keep the
+# default branch green. Enable it once with `make hooks`.
+#
+# Bypass (use sparingly, e.g. pushing a WIP branch): git push --no-verify
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+echo "pre-push: running 'make ci' before push..."
+if ! make ci; then
+    echo
+    echo "pre-push: 'make ci' FAILED — push blocked." >&2
+    echo "Fix the failures and try again, or bypass with 'git push --no-verify'." >&2
+    exit 1
+fi
+
+echo "pre-push: 'make ci' passed — allowing push."

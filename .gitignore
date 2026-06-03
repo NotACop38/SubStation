@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated telemetry artifacts (the simulator writes these; never commit them)
+artifacts/
+*.pcap
+*.jsonl
+
+# Generated coverage map outputs (keep the dir, ignore generated files)
+/coverage/*
+!/coverage/.gitkeep
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
