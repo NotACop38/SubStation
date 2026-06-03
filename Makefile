@@ -10,7 +10,7 @@ SRC := substation tests
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev ci format format-check lint type test security \
+.PHONY: help dev ci format format-check lint type test schema security \
         demo verify release hooks clean
 
 help: ## Show available targets
@@ -24,7 +24,7 @@ dev: ## Install the package with dev tooling (pinned)
 ## ---------------------------------------------------------------------------
 ## CI — the local gate. Run this after any change; it must pass before "done".
 ## ---------------------------------------------------------------------------
-ci: format-check lint type test ## Run the full local CI gate
+ci: format-check lint type test schema ## Run the full local CI gate
 	@echo "--- [placeholder] detection harness (Tier 1 generate->detect->report) — Phase 1"
 	@echo "--- [placeholder] security (bandit + pip-audit) — wire via 'make security' in Phase 2"
 	@echo "--- [placeholder] coverage-build (ATT&CK-for-ICS coverage map) — Phase 1/2"
@@ -45,6 +45,9 @@ type: ## Type-check in strict mode (mypy)
 test: ## Run unit tests (pytest)
 	pytest
 
+schema: ## Validate emitted .jsonl events against the frozen event-log JSON Schema
+	$(PY) -m substation.schema
+
 security: ## Security audit: bandit (code) + pip-audit (deps)
 	bandit -q -r $(PKG)
 	pip-audit
@@ -52,8 +55,7 @@ security: ## Security audit: bandit (code) + pip-audit (deps)
 ## ---------------------------------------------------------------------------
 ## Product targets (stubs until later phases)
 ## ---------------------------------------------------------------------------
-demo: ## Tier-1 one-command demo: generate -> detect -> report (stub)
-	@echo "make demo: Tier-1 demo not yet implemented (Phase 0 stub)."
+demo: ## Tier-1 one-command demo: generate -> detect -> report (Phase 0 no-op)
 	$(PY) -m substation.cli demo
 
 verify: ## Tier-2 fidelity validation: Zeek/ICSNPP + Suricata (stub)

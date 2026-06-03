@@ -24,6 +24,7 @@ dependencies = [
     "scapy==2.7.0",
     "pysigma==1.3.3",
     "Jinja2==3.1.6",
+    "PyYAML==6.0.3",
 ]
 
 [project.optional-dependencies]
@@ -43,6 +44,11 @@ Homepage = "https://github.com/notacop38/substation"
 
 [tool.setuptools.packages.find]
 include = ["substation*"]
+
+[tool.setuptools.package-data]
+# Ship the machine-readable event-log JSON Schema with the package so the
+# validator (and external tools) can load it from an installed distribution.
+"substation.schema" = ["*.json"]
 
 [tool.ruff]
 target-version = "py311"
@@ -74,7 +80,7 @@ files = ["substation", "tests"]
 # Third-party libs without type stubs (revisited as code lands). pytest ships
 # py.typed and is fully typed when visible; this only matters when mypy runs in
 # an isolated env (e.g. a uv-managed tool) that can't see the test deps.
-module = ["scapy.*", "sigma.*", "pytest", "pytest.*"]
+module = ["scapy.*", "sigma.*", "yaml", "yaml.*", "pytest", "pytest.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

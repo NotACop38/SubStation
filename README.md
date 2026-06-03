@@ -15,6 +15,13 @@ and safety invariants.
 ```sh
 make dev     # install with pinned dev tooling
 make ci      # the local gate: format-check, lint, type-check, tests
-make demo    # Tier-1 demo (stub for now)
+make demo    # Tier-1 loop end to end (Phase 0 no-op): load -> generate -> detect -> report
 make hooks   # install the pre-push hook that runs `make ci`
 ```
+
+`make demo` loads a scenario, writes (currently empty) PCAP/JSON artifacts under
+`artifacts/`, runs (currently no) detections, and prints a placeholder coverage
+map — proving the generate→detect→report pipeline is wired before any real logic
+lands. Scenarios are human-editable YAML; the format is documented in
+[`docs/scenario-format.md`](docs/scenario-format.md) with a fully commented
+example at [`scenarios/modbus/benign-poll.yaml`](scenarios/modbus/benign-poll.yaml).

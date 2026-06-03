@@ -36,15 +36,20 @@ A detection is **done** only when all are true:
 
 - [ ] Confirm `PRD.md` §7 locked decisions with the lead.
 - [x] Create repo layout per `PRD.md` §6.9 (empty packages + placeholders).
-- [ ] Define the **scenario YAML format** (actors, exchanges, timing, `benign|anomalous` label, `exercises:` detection IDs) and document it inline with a commented example.
-- [ ] Stand up the **one-command entrypoint** as a stub (`cli.py` + `make demo`) that runs an end-to-end no-op (loads a trivial scenario → writes empty artifacts → prints a placeholder coverage map). Prove the wiring before the logic.
+- [x] Define the **scenario YAML format** (actors, exchanges, timing, `benign|anomalous` label, `exercises:` detection IDs) and document it inline with a commented example. (`docs/scenario-format.md` + commented `scenarios/modbus/benign-poll.yaml`; typed model + strict loader in `substation/scenarios/`.)
+- [x] Stand up the **one-command entrypoint** as a stub (`cli.py` + `make demo`) that runs an end-to-end no-op (loads a trivial scenario → writes empty artifacts → prints a placeholder coverage map). Prove the wiring before the logic. (`substation demo` exercises load→generate→detect→report; emit/detect/coverage stages are wired no-ops.)
 - [x] `pyproject.toml` with pinned deps (scapy, pySigma, pytest, Jinja2) targeting Python 3.11+.
-- [ ] **VERIFY spike — Sigma offline evaluation:** confirm a working Sigma-to-Python evaluation path over `.jsonl` for the harness; record the chosen mechanism in `docs/schema.md` notes.
-- [ ] **VERIFY spike — scapy capability (Modbus first):** confirm whether scapy can assemble the Modbus PDUs we need, or whether we hand-build / splice template PCAPs. Record the verdict per protocol.
-- [ ] **VERIFY spike — ICSNPP fields (Modbus first):** pull the **current** ICSNPP Modbus parser field names / detail-log shapes; draft the Modbus `detail` object from real names, not memory.
+- [x] **VERIFY spike — Sigma offline evaluation:** confirm a working Sigma-to-Python evaluation path over `.jsonl` for the harness; record the chosen mechanism in `docs/schema.md` notes. (`docs/spikes/03-sigma-offline-evaluation.md` — verdict: walk the pySigma-parsed condition AST in pytest; passing prototype. Also bumped `PyYAML` pin 6.0.1→6.0.3 to satisfy pySigma.)
+- [x] **VERIFY spike — scapy capability (Modbus first):** confirm whether scapy can assemble the Modbus PDUs we need, or whether we hand-build / splice template PCAPs. Record the verdict per protocol. (`docs/spikes/02-scapy-modbus-capability.md` — verdict: **use scapy `contrib.modbus`**; all 8 needed PDUs incl. exception responses build + round-trip; no hand-build/splice for Modbus.)
+- [x] **VERIFY spike — ICSNPP fields (Modbus first):** pull the **current** ICSNPP Modbus parser field names / detail-log shapes; draft the Modbus `detail` object from real names, not memory. (`docs/spikes/01-icsnpp-modbus-fields.md` — `modbus_detailed.log` fields verified against cisagov/icsnpp-modbus `main.zeek`; not yet frozen — re-pull against a pinned commit at Phase-1 freeze.)
 
 **Deliverables:** runnable (no-op) skeleton; scenario format doc; three spike notes.
 **Exit criteria:** `make demo` runs end to end doing nothing useful but proving the pipeline; spikes answered; decisions confirmed.
+
+> **Phase-0 spike notes:** `docs/spikes/01-icsnpp-modbus-fields.md`,
+> `docs/spikes/02-scapy-modbus-capability.md`,
+> `docs/spikes/03-sigma-offline-evaluation.md`. Findings only — nothing frozen; the
+> schema freeze and ATT&CK-ID verification remain Phase-1 gates.
 
 -----
 
@@ -54,7 +59,7 @@ A detection is **done** only when all are true:
 
 **Tasks**
 
-- [ ] **Freeze the event-log schema for Modbus** in `docs/schema.md`: envelope (`PRD.md` §6.3) + Modbus `detail` from the verified ICSNPP fields. (Gate: ICSNPP VERIFY done.)
+- [x] **Freeze the event-log schema for Modbus** in `docs/schema.md`: envelope (`PRD.md` §6.3) + Modbus `detail` from the verified ICSNPP fields. (Gate: ICSNPP VERIFY done.) (`docs/schema.md` frozen for Modbus; machine-readable `substation/schema/event-log.schema.json` (draft 2020-12); dependency-free validator `substation/schema/` + `python -m substation.schema`; wired into `make ci` via the `schema` target over committed golden events `tests/data/events/`. `.jsonl`, one event per line. DNP3/S7 `detail` stay unconstrained until Phases 3/4.)
 - [ ] Implement the **scenario model** + YAML loader.
 - [ ] Implement the **JSON emitter** (envelope + Modbus detail) from the scenario model.
 - [ ] Implement the **PCAP emitter** for Modbus (scapy or hand-built/template per the spike).
