@@ -15,7 +15,9 @@ The event log is **newline-delimited JSON** (`.jsonl`): **one event object per
 line**, no enclosing array, UTF-8. This matches how Zeek logs stream and is
 trivial to process line-by-line. Blank lines are ignored. The JSON Schema
 validates a **single line** (one event); the validator applies it to every
-non-blank line of a file.
+non-blank line of a file. Blank lines are ignored; a non-JSON line — including
+the non-standard `NaN`/`Infinity` barewords that Python's `json.dumps` emits by
+default — fails the gate rather than slipping through numeric checks.
 
 ## Design: ICSNPP-aligned detail + a thin normalized envelope
 
@@ -41,7 +43,7 @@ minimal change (`PRD.md` §6.3).
 | `conn`         | object              | yes | Zeek conn tuple — see below. |
 | `proto`        | enum                | yes | `modbus` \| `dnp3` \| `s7comm`. Selects the `detail` shape. |
 | `is_orig`      | boolean             | yes | ICSNPP `is_orig`: true when the event is from the connection originator (request side). |
-| `direction`    | enum                | yes | `request` \| `response`, derived from `is_orig` (true → request). |
+| `direction`    | enum                | yes | `request` \| `response`, derived from `is_orig` (true → request). The schema **enforces** this agreement — a line where `direction` and `is_orig` disagree fails the gate. |
 | `func_code`    | integer 0–255       | yes | Raw one-byte function/command code. Modbus exception responses carry `function_code \| 0x80`. |
 | `func_name`    | string (non-empty)  | yes | Decoded, normalized function name (Modbus: Zeek `Modbus::function_codes[func_code]`, `_EXCEPTION` suffix on exceptions). |
 | `action_class` | enum                | yes | Normalized verb: `read` \| `write` \| `control` \| `diagnostic` \| `scan_indicator` \| `other`. Drives X1 + shared logic. |
@@ -145,6 +147,10 @@ the parent `detail`):
 | `func_name`      | ICSNPP `func` (Zeek `Modbus::function_codes`). |
 | `is_exception`   | true when `func_name` ends in `_EXCEPTION` / `detail.exception_code` present. |
 | `error`          | decoded `detail.exception_code`. |
+
+When `is_exception` is true on a Modbus event the schema **requires** a non-null
+`error` **and** `detail.exception_code` (M2 keys on the decoded name, so neither
+may be absent on an exception event).
 | `conn`           | ICSNPP `id`. |
 
 ### `action_class` mapping (Modbus)

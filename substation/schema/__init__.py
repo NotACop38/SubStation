@@ -65,6 +65,11 @@ def load_event_schema() -> dict[str, Any]:
     return schema
 
 
+def _reject_json_constant(constant: str) -> Any:
+    """``json.loads`` ``parse_constant`` hook: refuse NaN/Infinity barewords."""
+    raise ValueError(f"non-standard JSON constant {constant!r}")
+
+
 def _type_name(value: Any) -> str:
     for name, check in _TYPE_CHECKS.items():
         if check(value):
@@ -187,6 +192,10 @@ def iter_jsonl_errors(path: str | Path, schema: dict[str, Any] | None = None) ->
     """Yield ``"<file>:<line>: <error>"`` for every violation in a ``.jsonl`` file.
 
     Blank lines are skipped. A line that is not valid JSON is itself an error.
+    The non-standard ``NaN``/``Infinity``/``-Infinity`` constants (which Python's
+    ``json.dumps`` emits by default) are rejected like any other malformed line —
+    otherwise they parse to floats whose comparisons silently pass every numeric
+    bound and slip through the gate.
     """
     root = schema if schema is not None else load_event_schema()
     p = Path(path)
@@ -196,9 +205,12 @@ def iter_jsonl_errors(path: str | Path, schema: dict[str, Any] | None = None) ->
             if not stripped:
                 continue
             try:
-                event = json.loads(stripped)
+                event = json.loads(stripped, parse_constant=_reject_json_constant)
             except json.JSONDecodeError as exc:
                 yield f"{p}:{lineno}: not valid JSON: {exc.msg}"
+                continue
+            except ValueError as exc:
+                yield f"{p}:{lineno}: not valid JSON: {exc}"
                 continue
             for err in _validate(event, root, "", root):
                 yield f"{p}:{lineno}: {err}"

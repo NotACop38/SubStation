@@ -75,12 +75,42 @@
   },
   "allOf": [
     {
+      "$comment": "Direction is derived from is_orig, not free — enforce the invariant (true -> request, false -> response) so an event cannot pass the gate while classifying endpoints inconsistently.",
+      "if": {
+        "required": ["is_orig"],
+        "properties": { "is_orig": { "const": true } }
+      },
+      "then": {
+        "properties": { "direction": { "const": "request" } }
+      },
+      "else": {
+        "properties": { "direction": { "const": "response" } }
+      }
+    },
+    {
       "if": {
         "required": ["proto"],
         "properties": { "proto": { "const": "modbus" } }
       },
       "then": {
         "properties": { "detail": { "$ref": "#/$defs/modbus_detail" } }
+      }
+    },
+    {
+      "$comment": "A Modbus exception must carry the decoded exception name: error mirrors detail.exception_code and drives M2, so neither may be absent/null on an exception event.",
+      "if": {
+        "required": ["proto", "is_exception"],
+        "properties": {
+          "proto": { "const": "modbus" },
+          "is_exception": { "const": true }
+        }
+      },
+      "then": {
+        "required": ["error"],
+        "properties": {
+          "error": { "type": "string", "minLength": 1 },
+          "detail": { "required": ["exception_code"] }
+        }
       }
     }
   ],

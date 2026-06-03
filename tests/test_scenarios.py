@@ -147,6 +147,48 @@ def test_exchange_params_are_immutable(tmp_path: Path) -> None:
         scenario.exchanges[0].params["unit_id"] = 2  # type: ignore[index]
 
 
+@pytest.mark.parametrize("bad_port", ["-1", "70000", "65536"])
+def test_actor_port_out_of_range_rejected(tmp_path: Path, bad_port: str) -> None:
+    text = _MINIMAL.replace(
+        "- {id: a, role: hmi, host: 10.0.0.1}",
+        f"- {{id: a, role: hmi, host: 10.0.0.1, port: {bad_port}}}",
+    )
+    with pytest.raises(ScenarioError) as exc:
+        load_scenario(_write(tmp_path, text))
+    assert "out of range" in str(exc.value)
+
+
+def test_actor_port_in_range_ok(tmp_path: Path) -> None:
+    text = _MINIMAL.replace(
+        "- {id: a, role: hmi, host: 10.0.0.1}",
+        "- {id: a, role: hmi, host: 10.0.0.1, port: 502}",
+    )
+    scenario = load_scenario(_write(tmp_path, text))
+    assert scenario.actor("a").port == 502
+
+
+def test_duplicate_yaml_key_rejected(tmp_path: Path) -> None:
+    text = _MINIMAL.replace("label: benign", "label: benign\nlabel: anomalous")
+    with pytest.raises(ScenarioError) as exc:
+        load_scenario(_write(tmp_path, text))
+    assert "duplicate key" in str(exc.value)
+
+
+def test_nested_params_are_deep_frozen(tmp_path: Path) -> None:
+    text = _MINIMAL.replace(
+        "exchanges: []",
+        "exchanges:\n"
+        "  - {source: a, target: a, function: Read, "
+        "params: {nested: {k: 1}, values: [1, 2, 3]}}",
+    )
+    scenario = load_scenario(_write(tmp_path, text))
+    params = scenario.exchanges[0].params
+    # Nested list is frozen to a tuple; nested mapping is read-only.
+    assert params["values"] == (1, 2, 3)
+    with pytest.raises(TypeError):
+        params["nested"]["k"] = 2  # type: ignore[index]
+
+
 def test_detection_in_both_fires_and_quiet_rejected(tmp_path: Path) -> None:
     text = _MINIMAL + "exercises:\n  fires: [M1]\n  quiet: [M1]\n"
     with pytest.raises(ScenarioError) as exc:

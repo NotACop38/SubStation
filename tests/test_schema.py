@@ -153,6 +153,79 @@ def test_non_json_line_is_an_error(tmp_path: Path) -> None:
     assert errors and "not valid JSON" in errors[0]
 
 
+def _a_valid_exception() -> dict[str, Any]:
+    return {
+        "ts": 1717372810.222,
+        "uid": "CnXyz93c4lR5ghi03",
+        "conn": {"orig_h": "10.0.0.99", "orig_p": 40001, "resp_h": "10.0.0.50", "resp_p": 502},
+        "proto": "modbus",
+        "is_orig": False,
+        "direction": "response",
+        "func_code": 132,
+        "func_name": "READ_INPUT_REGISTERS_EXCEPTION",
+        "action_class": "read",
+        "is_exception": True,
+        "error": "ILLEGAL_DATA_ADDRESS",
+        "detail": {"tid": 7, "unit": 1, "exception_code": "ILLEGAL_DATA_ADDRESS"},
+    }
+
+
+def test_direction_must_match_is_orig_request() -> None:
+    event = _a_valid_read_request()  # is_orig True
+    event["direction"] = "response"
+    assert any("direction" in e for e in iter_event_errors(event))
+
+
+def test_direction_must_match_is_orig_response() -> None:
+    event = _a_valid_exception()  # is_orig False
+    event["direction"] = "request"
+    assert any("direction" in e for e in iter_event_errors(event))
+
+
+def test_valid_exception_passes() -> None:
+    validate_event(_a_valid_exception())
+
+
+def test_modbus_exception_requires_error_present() -> None:
+    event = _a_valid_exception()
+    del event["error"]
+    assert any("error" in e for e in iter_event_errors(event))
+
+
+def test_modbus_exception_rejects_null_error() -> None:
+    event = _a_valid_exception()
+    event["error"] = None
+    assert any("error" in e for e in iter_event_errors(event))
+
+
+def test_modbus_exception_requires_exception_code() -> None:
+    event = _a_valid_exception()
+    del event["detail"]["exception_code"]
+    assert any("exception_code" in e for e in iter_event_errors(event))
+
+
+def test_non_exception_does_not_require_error() -> None:
+    # The exception constraint must not fire on ordinary events.
+    assert list(iter_event_errors(_a_valid_read_request())) == []
+
+
+def test_nan_constant_rejected_in_jsonl(tmp_path: Path) -> None:
+    f = tmp_path / "nan.jsonl"
+    event = _a_valid_read_request()
+    f.write_text(json.dumps(event).replace('"ts": 1717372800.123', '"ts": NaN'), encoding="utf-8")
+    errors = list(iter_jsonl_errors(f))
+    assert errors and "not valid JSON" in errors[0]
+
+
+def test_infinity_constant_rejected_in_jsonl(tmp_path: Path) -> None:
+    f = tmp_path / "inf.jsonl"
+    event = _a_valid_read_request()
+    event["detail"]["address"] = float("inf")  # json.dumps emits bareword Infinity
+    f.write_text(json.dumps(event) + "\n", encoding="utf-8")
+    errors = list(iter_jsonl_errors(f))
+    assert errors and "not valid JSON" in errors[0]
+
+
 def test_dnp3_and_s7_detail_unconstrained_for_now() -> None:
     # Only Modbus detail is frozen; other protocols accept any object until their
     # schema freeze (Phases 3/4). The envelope still applies.

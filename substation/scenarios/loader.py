@@ -13,6 +13,7 @@ See ``docs/scenario-format.md`` and the fully commented example at
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
 
@@ -53,6 +54,40 @@ _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 class ScenarioError(ValueError):
     """Raised when a scenario file is malformed or internally inconsistent."""
+
+
+class _StrictLoader(yaml.SafeLoader):  # type: ignore[misc]  # yaml is untyped (Any base)
+    """A safe YAML loader that rejects duplicate mapping keys.
+
+    PyYAML's default safe loader silently keeps the *last* value when a key is
+    repeated, so a hand-authored scenario with two ``label:`` (or ``exercises:``)
+    blocks could quietly change the Detection Contract. The strict loader makes
+    that a parse error instead.
+    """
+
+
+def _construct_mapping_no_duplicates(
+    loader: _StrictLoader, node: yaml.nodes.MappingNode, deep: bool = False
+) -> dict[object, object]:
+    loader.flatten_mapping(node)
+    mapping: dict[object, object] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_StrictLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_mapping_no_duplicates,
+)
 
 
 def _require_mapping(value: object, where: str) -> dict[str, object]:
@@ -98,6 +133,27 @@ def _str_tuple(value: object, where: str) -> tuple[str, ...]:
     return tuple(out)
 
 
+def _deep_freeze(value: object) -> object:
+    """Recursively make a parsed params value immutable.
+
+    ``MappingProxyType`` only protects the top level, so a nested mapping/list in
+    ``params`` could still be mutated through the shared scenario — breaking the
+    single-source-of-truth invariant and letting the PCAP and JSON emitters
+    observe different data. Freeze mappings to read-only proxies and lists to
+    tuples, all the way down.
+    """
+    if isinstance(value, dict):
+        return MappingProxyType({str(k): _deep_freeze(v) for k, v in value.items()})
+    if isinstance(value, list):
+        return tuple(_deep_freeze(item) for item in value)
+    return value
+
+
+def _freeze_params(params: dict[str, object]) -> Mapping[str, object]:
+    """Deep-freeze a params mapping into an immutable ``Mapping``."""
+    return MappingProxyType({k: _deep_freeze(v) for k, v in params.items()})
+
+
 def _parse_actor(raw: object, where: str) -> Actor:
     data = _require_mapping(raw, where)
     _reject_unknown(data, _ACTOR_KEYS, where)
@@ -112,6 +168,10 @@ def _parse_actor(raw: object, where: str) -> Actor:
     if port_raw is not None:
         if isinstance(port_raw, bool) or not isinstance(port_raw, int):
             raise ScenarioError(f"{where}.port: expected an integer")
+        # A TCP/Zeek endpoint must be in range; an out-of-range port here would
+        # later produce PCAP/JSON that violates the event schema's 0–65535 bound.
+        if not 0 <= port_raw <= 65535:
+            raise ScenarioError(f"{where}.port: {port_raw} out of range (0–65535)")
         port = port_raw
     return Actor(
         id=_require_str(data, "id", where),
@@ -133,7 +193,7 @@ def _parse_exchange(raw: object, where: str) -> Exchange:
         target=_require_str(data, "target", where),
         function=_require_str(data, "function", where),
         offset=_opt_number(data, "offset", where, 0.0),
-        params=MappingProxyType(params),
+        params=_freeze_params(params),
     )
 
 
@@ -229,7 +289,11 @@ def load_scenario(path: str | Path) -> Scenario:
     except OSError as exc:
         raise ScenarioError(f"{p}: cannot read scenario file: {exc}") from exc
     try:
-        raw = yaml.safe_load(text)
+        # _StrictLoader is a SafeLoader subclass (no arbitrary object construction)
+        # that additionally rejects duplicate mapping keys; this is as safe as
+        # yaml.safe_load. noqa/nosec silence the ruff/bandit yaml.load heuristics,
+        # which only whitelist the loader by name.
+        raw = yaml.load(text, Loader=_StrictLoader)  # noqa: S506  # nosec B506
     except yaml.YAMLError as exc:
         raise ScenarioError(f"{p}: invalid YAML: {exc}") from exc
     if raw is None:
