@@ -12,7 +12,9 @@ See ``docs/scenario-format.md`` and the fully commented example at
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from types import MappingProxyType
 
 import yaml
 
@@ -43,6 +45,10 @@ _ACTOR_KEYS = {"id", "role", "host", "port"}
 _EXCHANGE_KEYS = {"source", "target", "function", "offset", "params"}
 _TIMING_KEYS = {"start", "default_interval"}
 _EXERCISES_KEYS = {"fires", "quiet"}
+
+# A scenario name is used to derive artifact filenames (artifacts/<name>.pcap),
+# so it must be a filesystem-safe basename: no path separators, no traversal.
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 class ScenarioError(ValueError):
@@ -118,14 +124,16 @@ def _parse_actor(raw: object, where: str) -> Actor:
 def _parse_exchange(raw: object, where: str) -> Exchange:
     data = _require_mapping(raw, where)
     _reject_unknown(data, _EXCHANGE_KEYS, where)
-    params_raw = data.get("params", {})
-    params = _require_mapping(params_raw, f"{where}.params") if params_raw else {}
+    params_raw = data.get("params")
+    # Only an absent or explicit-null params defaults to empty; any present value
+    # (including falsy ones like [] or 0) must be a real mapping.
+    params = {} if params_raw is None else _require_mapping(params_raw, f"{where}.params")
     return Exchange(
         source=_require_str(data, "source", where),
         target=_require_str(data, "target", where),
         function=_require_str(data, "function", where),
         offset=_opt_number(data, "offset", where, 0.0),
-        params=params,
+        params=MappingProxyType(params),
     )
 
 
@@ -145,10 +153,15 @@ def _parse_exercises(raw: object) -> Exercises:
         return Exercises()
     data = _require_mapping(raw, "exercises")
     _reject_unknown(data, _EXERCISES_KEYS, "exercises")
-    return Exercises(
-        fires=_str_tuple(data.get("fires"), "exercises.fires"),
-        quiet=_str_tuple(data.get("quiet"), "exercises.quiet"),
-    )
+    fires = _str_tuple(data.get("fires"), "exercises.fires")
+    quiet = _str_tuple(data.get("quiet"), "exercises.quiet")
+    # A detection cannot be required to both fire and stay quiet on one run.
+    both = set(fires) & set(quiet)
+    if both:
+        raise ScenarioError(
+            f"exercises: detection(s) {sorted(both)} listed in both 'fires' and 'quiet'"
+        )
+    return Exercises(fires=fires, quiet=quiet)
 
 
 def _parse_scenario(raw: object) -> Scenario:
@@ -189,8 +202,15 @@ def _parse_scenario(raw: object) -> Scenario:
         if ex.target not in actor_ids:
             raise ScenarioError(f"exchanges[{i}].target: unknown actor '{ex.target}'")
 
+    name = _require_str(data, "name", "scenario")
+    if not _SAFE_NAME.match(name):
+        raise ScenarioError(
+            f"scenario.name: '{name}' is not a filesystem-safe basename "
+            "(allowed: letters, digits, '.', '_', '-'; no path separators)"
+        )
+
     return Scenario(
-        name=_require_str(data, "name", "scenario"),
+        name=name,
         protocol=protocol,
         label=label,
         actors=actors,

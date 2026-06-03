@@ -106,3 +106,49 @@ def test_invalid_yaml_raises(tmp_path: Path) -> None:
     with pytest.raises(ScenarioError) as exc:
         load_scenario(_write(tmp_path, "name: [unterminated\n"))
     assert "invalid YAML" in str(exc.value)
+
+
+@pytest.mark.parametrize("bad_name", ["../escaped", "a/b", "sub/dir", ".", ""])
+def test_unsafe_scenario_name_rejected(tmp_path: Path, bad_name: str) -> None:
+    text = _MINIMAL.replace("name: t", f"name: {bad_name!r}")
+    with pytest.raises(ScenarioError):
+        load_scenario(_write(tmp_path, text))
+
+
+@pytest.mark.parametrize("falsy", ["[]", "0", "false", "''"])
+def test_falsy_params_rejected(tmp_path: Path, falsy: str) -> None:
+    text = _MINIMAL.replace(
+        "exchanges: []",
+        f"exchanges:\n  - {{source: a, target: a, function: Read, params: {falsy}}}",
+    )
+    with pytest.raises(ScenarioError) as exc:
+        load_scenario(_write(tmp_path, text))
+    assert "params" in str(exc.value)
+
+
+def test_absent_or_null_params_default_to_empty(tmp_path: Path) -> None:
+    text = _MINIMAL.replace(
+        "exchanges: []",
+        "exchanges:\n"
+        "  - {source: a, target: a, function: Read}\n"
+        "  - {source: a, target: a, function: Read, params: null}",
+    )
+    scenario = load_scenario(_write(tmp_path, text))
+    assert all(dict(ex.params) == {} for ex in scenario.exchanges)
+
+
+def test_exchange_params_are_immutable(tmp_path: Path) -> None:
+    text = _MINIMAL.replace(
+        "exchanges: []",
+        "exchanges:\n  - {source: a, target: a, function: Read, params: {unit_id: 1}}",
+    )
+    scenario = load_scenario(_write(tmp_path, text))
+    with pytest.raises(TypeError):
+        scenario.exchanges[0].params["unit_id"] = 2  # type: ignore[index]
+
+
+def test_detection_in_both_fires_and_quiet_rejected(tmp_path: Path) -> None:
+    text = _MINIMAL + "exercises:\n  fires: [M1]\n  quiet: [M1]\n"
+    with pytest.raises(ScenarioError) as exc:
+        load_scenario(_write(tmp_path, text))
+    assert "both" in str(exc.value)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from substation import cli
 from substation.coverage import render_coverage_map
 from substation.detect import Hit, run_detections
@@ -30,8 +31,9 @@ def test_detect_returns_no_hits_on_empty_log(tmp_path: Path) -> None:
     assert run_detections(result.jsonl) == []
 
 
-def test_detect_handles_missing_file(tmp_path: Path) -> None:
-    assert run_detections(tmp_path / "nope.jsonl") == []
+def test_detect_raises_on_missing_log(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        run_detections(tmp_path / "nope.jsonl")
 
 
 def test_coverage_map_lists_exercised_detections() -> None:

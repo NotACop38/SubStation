@@ -64,6 +64,19 @@ def _cmd_demo(args: argparse.Namespace) -> int:
 
     print("substation demo (Phase 0 no-op) — exercising every stage end to end\n")
 
+    # The bundled demo scenario lives in the repo tree (PRD.md §6.9 keeps
+    # scenarios/ outside the package), so it is only present for an in-tree
+    # checkout. If it is missing — e.g. running the installed console script
+    # without the repo — fail with an actionable hint rather than a cryptic load
+    # error.
+    if scenario_path == _DEMO_SCENARIO and not scenario_path.exists():
+        print(
+            f"error: bundled demo scenario not found at {scenario_path}.\n"
+            "Run `make demo` from a repo checkout, or pass --scenario PATH.",
+            file=sys.stderr,
+        )
+        return 1
+
     # --- load ---------------------------------------------------------------
     try:
         scenario: Scenario = load_scenario(scenario_path)

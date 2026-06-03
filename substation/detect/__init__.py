@@ -27,8 +27,14 @@ def run_detections(events_path: str | Path) -> list[Hit]:
 
     Phase 0 no-op: reads the (empty) log and returns an empty hit list. Reading
     the file here proves the detect stage is wired to the emit stage's output.
+
+    A *missing* log is an error, not an empty input: silently treating it as
+    "no events" would let the pipeline (and future Detection Contract checks)
+    report quiet/green even though the detector never consumed any telemetry.
     """
     path = Path(events_path)
-    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    if not path.exists():
+        raise FileNotFoundError(f"event log not found: {path} (was the generate stage run?)")
+    lines = path.read_text(encoding="utf-8").splitlines()
     _ = lines  # no rules yet; counting events is a Phase 1 concern.
     return []

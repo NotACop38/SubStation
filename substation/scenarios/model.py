@@ -12,8 +12,10 @@ mapping until the per-protocol encoders land in Phase 1+.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from types import MappingProxyType
 
 __all__ = [
     "Protocol",
@@ -25,6 +27,13 @@ __all__ = [
     "Exercises",
     "Scenario",
 ]
+
+_EMPTY_PARAMS: Mapping[str, object] = MappingProxyType({})
+
+
+def _empty_params() -> Mapping[str, object]:
+    """Default factory: a shared immutable empty params mapping."""
+    return _EMPTY_PARAMS
 
 
 class Protocol(StrEnum):
@@ -77,14 +86,15 @@ class Exchange:
 
     ``offset`` is seconds from the scenario start (``Timing.start``). ``params``
     is an opaque per-protocol payload bag — its shape is frozen per protocol when
-    the encoders land; Phase 0 treats it as free-form.
+    the encoders land; Phase 0 treats it as free-form. It is an immutable mapping
+    so no pipeline stage can mutate the shared scenario (single source of truth).
     """
 
     source: str
     target: str
     function: str
     offset: float = 0.0
-    params: dict[str, object] = field(default_factory=dict)
+    params: Mapping[str, object] = field(default_factory=_empty_params)
 
 
 @dataclass(frozen=True, slots=True)

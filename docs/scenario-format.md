@@ -17,7 +17,7 @@ document is the reference for the fields and validation rules.
 
 | Key           | Required | Type             | Notes                                                        |
 |---------------|----------|------------------|--------------------------------------------------------------|
-| `name`        | yes      | string           | Filesystem-safe; names the generated artifacts.              |
+| `name`        | yes      | string           | Filesystem-safe basename (`[A-Za-z0-9._-]`, no path separators); names the generated artifacts. |
 | `description` | no       | string           | Free-form prose.                                             |
 | `protocol`    | yes      | enum             | `modbus` \| `dnp3` \| `s7comm` (closed v1 set, `PRD.md` §5). |
 | `label`       | yes      | enum             | `benign` \| `anomalous` — ground-truth intent.               |
@@ -78,6 +78,9 @@ Exchanges referencing an undeclared actor id are rejected.
 |---------|----------|-----------------|---------------------------------------------|
 | `fires` | no       | list of strings | Detection IDs that must alert (anomalous).  |
 | `quiet` | no       | list of strings | Detection IDs that must stay silent (benign).|
+
+A detection ID may not appear in both `fires` and `quiet` (unsatisfiable) — the
+loader rejects it.
 
 ## Loading
 
