@@ -60,9 +60,9 @@ A detection is **done** only when all are true:
 **Tasks**
 
 - [x] **Freeze the event-log schema for Modbus** in `docs/schema.md`: envelope (`PRD.md` §6.3) + Modbus `detail` from the verified ICSNPP fields. (Gate: ICSNPP VERIFY done.) (`docs/schema.md` frozen for Modbus; machine-readable `substation/schema/event-log.schema.json` (draft 2020-12); dependency-free validator `substation/schema/` + `python -m substation.schema`; wired into `make ci` via the `schema` target over committed golden events `tests/data/events/`. `.jsonl`, one event per line. DNP3/S7 `detail` stay unconstrained until Phases 3/4.)
-- [ ] Implement the **scenario model** + YAML loader.
-- [ ] Implement the **JSON emitter** (envelope + Modbus detail) from the scenario model.
-- [ ] Implement the **PCAP emitter** for Modbus (scapy or hand-built/template per the spike).
+- [x] Implement the **scenario model** + YAML loader. (Built in Phase 0: `substation/scenarios/model.py` + `loader.py`; consumed here by `build_events`.)
+- [x] Implement the **JSON emitter** (envelope + Modbus detail) from the scenario model. (`substation/emit/json_emitter.py`; every event is validated against the frozen schema before it is written.)
+- [x] Implement the **PCAP emitter** for Modbus (scapy or hand-built/template per the spike). (`substation/emit/pcap_emitter.py` via `scapy.contrib.modbus` per spike 02. **One** shared event model — `substation/protocols/modbus.py` `build_events` → `ModbusEvent` — drives both emitters, so PCAP and JSON cannot drift (PRD §6.1). A benign scenario emits matching artifacts: one Modbus/TCP segment per JSON event; output is byte-deterministic.)
 - [ ] Author **benign Modbus scenarios**: continuous HMI/EWS polling **and** legitimate setpoint writes from allow-listed sources (required for credible allow-list/scan detections — `PRD.md` §8).
 - [ ] Author **anomalous Modbus scenarios** for M1–M3 (≥M1, M2, M3 at minimum).
 - [ ] Author **detections** (deliberately mix engines to prove both rails):
@@ -91,7 +91,7 @@ A detection is **done** only when all are true:
 - [ ] **README:** “why this exists,” the one-command quick start (<5 min to first success), Tier 1 vs Tier 2 explanation, safety statement (files-only; defensive-only).
 - [ ] Finalize `docs/schema.md` as the binding contract.
 - [ ] Add the **ATT&CK Navigator layer** export to the coverage builder.
-- [ ] Enforce the **files-only invariant** in code (guard against socket sends) + assert it in tests.
+- [x] Enforce the **files-only invariant** in code (guard against socket sends) + assert it in tests. (Pulled forward to Phase 1: `substation/emit/guard.py` `files_only_guard` wraps all emission and makes every socket connect/transmit primitive raise `FilesOnlyViolation`; `tests/test_files_only.py` proves generation opens **no** socket and the guard blocks connect/send.)
 
 **Deliverables:** green CI (both tiers); polished demo; README; Navigator layer.
 **Exit criteria:** clean clone → one command → hits + coverage map on Linux/macOS with only Python 3.11+ (Tier 1); CI green including Tier-2 fidelity check.
