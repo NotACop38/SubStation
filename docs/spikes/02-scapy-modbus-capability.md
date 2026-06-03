@@ -51,8 +51,16 @@ Recorded so the encoder doesn't waste time rediscovering them:
 | `ModbusPDU10WriteMultipleRegistersRequest`  | `funcCode, startAddr, quantityRegisters, byteCount, outputsValue` |
 | `ModbusPDU03ReadHoldingRegistersError`      | `funcCode, exceptCode`                                   |
 
-Exception classes follow the pattern `ModbusPDU<NN><Name>Error` with `exceptCode`;
-the response ADU sets the high bit of the function code automatically (0x03 → 0x83).
+Exception classes follow the pattern `ModbusPDU<NN><Name>Error` with `exceptCode`.
+**The high-bit (0x80) function code comes from the Error PDU class's own `funcCode`
+default — not from the ADU.** `ModbusADUResponse` only frames the payload and computes
+the MBAP length; it does **not** rewrite a child funcCode. In the probe,
+`ModbusPDU03ReadHoldingRegistersError` defaulted `funcCode=0x83`, which is why the
+bytes ended `...8302`. Encoder guidance: instantiate the matching `…Error` class and
+let `funcCode` default (or set it explicitly to `0x80 | base_code`); do **not** pass
+the normal base code (e.g. `0x03`) expecting the ADU to flip it — that yields a
+malformed "normal response carrying an exception byte" and Zeek/ICSNPP will not log
+the intended Modbus exception (breaking M2 exception scenarios).
 
 ## Gotchas / notes
 

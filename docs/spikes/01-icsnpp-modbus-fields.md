@@ -27,7 +27,7 @@ the Modbus `detail` object in `docs/schema.md` is drawn from real names, not mem
 ## What ICSNPP adds
 
 Zeek's built-in parser writes `modbus.log` (**unchanged** by ICSNPP). ICSNPP adds
-**five** extended logs:
+**four** extended logs (per the README's "adding four new Modbus log files"):
 
 - `modbus_detailed.log` ← **primary source for our Modbus `detail` object**
 - `modbus_mask_write_register.log` (func 0x16)
@@ -96,9 +96,27 @@ WRITE_FILE_RECORD, …  (+ matching *_EXCEPTION variants)
 ## Source/Destination fields caveat
 
 ICSNPP's extended logs add explicit `source_h/source_p/destination_h/destination_p`
-that are **swapped on responses** so they always reflect the true Modbus
-client→server direction (see README "Source and Destination Fields"). Our normalized
-envelope's `is_orig`/`direction` should follow the same convention.
+that reflect the **true per-packet** source/destination, because Zeek's `id` struct
+never switches the original originator/responder roles (so on a response the `id`
+still lists the client as originator). Per the README "Source and Destination Fields"
+pseudocode, the mapping is driven by `is_orig`, **not** a fixed client→server
+convention:
+
+```
+if is_orig == True:   source = id.orig_{h,p};  destination = id.resp_{h,p}
+if is_orig == False:  source = id.resp_{h,p};  destination = id.orig_{h,p}
+```
+
+So on a **response/exception** (`is_orig == False`) the source is the *server/PLC* and
+the destination is the *client/master* — the endpoints are intentionally per-direction,
+not always client→server. Implication for the normalized envelope: derive
+`is_orig`/`direction` from ICSNPP's `is_orig`, and when a detection needs a stable
+"who is the writer/master" identity (e.g. M1 allow-list) it must interpret
+`source_*`/`destination_*` **through** `is_orig` rather than assuming source==client —
+otherwise response/exception events get inverted endpoints and skew allow-list and
+exception detections. (`modbus_detailed.log` itself does not carry the
+`source_*`/`destination_*` fields; they appear on the mask-write / read-write-multiple /
+read-device-id logs, so this matters when those sub-shapes feed the envelope.)
 
 ## Decision / impact
 
