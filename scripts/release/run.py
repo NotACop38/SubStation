@@ -76,9 +76,7 @@ def _run(cmd: list[str], *, dry_run: bool = False) -> None:
 
 def _git(*args: str, check: bool = True) -> str:
     """Run a git command and return its stripped stdout."""
-    result = subprocess.run(
-        ["git", *args], cwd=_REPO_ROOT, capture_output=True, text=True
-    )
+    result = subprocess.run(["git", *args], cwd=_REPO_ROOT, capture_output=True, text=True)
     if check and result.returncode != 0:
         raise ReleaseError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout.strip()
@@ -160,11 +158,7 @@ def _update_changelog(version: str, date: str) -> bool:
     if not body.strip():
         body = "- No user-facing changes recorded for this release."
 
-    replacement = (
-        "## [Unreleased]\n\n"
-        f"## [{version}] - {date}\n\n"
-        f"{body}\n"
-    )
+    replacement = f"## [Unreleased]\n\n## [{version}] - {date}\n\n{body}\n"
     new_text = text[: unreleased.start()] + replacement + text[unreleased.end() :]
     # Collapse any run of >2 blank lines the splice may introduce.
     new_text = re.sub(r"\n{3,}", "\n\n", new_text)
@@ -193,8 +187,16 @@ def _build_distributions(args: argparse.Namespace) -> None:
     # --no-isolation: use the already-installed, pinned setuptools/wheel backend
     # (keeps the build offline + deterministic, matching the Tier-1 promise).
     _run(
-        [sys.executable, "-m", "build", "--sdist", "--wheel", "--no-isolation",
-         "--outdir", str(_DIST)],
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--sdist",
+            "--wheel",
+            "--no-isolation",
+            "--outdir",
+            str(_DIST),
+        ],
         dry_run=args.dry_run,
     )
 
@@ -222,31 +224,47 @@ def _regenerate_artifacts(args: argparse.Namespace) -> None:
             "# Tier-1 loop: generate -> detect -> report, pure Python.\n\n"
         )
         _DEMO_TRANSCRIPT.write_text(header + result.stdout, encoding="utf-8")
-    # Stage the regenerated, committed artifacts (dist/ stays git-ignored).
-    _run(
-        ["git", "add", "--", str(_DOCS_COVERAGE), str(_DEMO_TRANSCRIPT)],
-        dry_run=args.dry_run,
-    )
+    # NB: staging happens in _commit_and_tag so a real release captures the *full*
+    # intended tree (incl. any --allow-dirty source changes) and an idempotent
+    # re-run over an existing tag never commits on top of it.
 
 
-def _commit_and_tag(version: str, args: argparse.Namespace) -> None:
+def _working_tree_dirty() -> bool:
+    return bool(_git("status", "--porcelain"))
+
+
+def _commit_and_tag(version: str, args: argparse.Namespace, already_released: bool) -> None:
     tag = f"v{version}"
-    _run(["git", "add", "--", str(_PYPROJECT), str(_CHANGELOG)], dry_run=args.dry_run)
 
+    if already_released:
+        # The tag already exists. Committing now would create a *second* "Release
+        # <tag>" commit that the existing tag does not point at, and the re-synced
+        # artifacts would not be part of the tagged release. So never commit here:
+        # the regenerated artifacts live in the working tree for inspection only.
+        if not args.dry_run and _working_tree_dirty():
+            print(
+                f"release: WARNING — the working tree differs from the tagged release "
+                f"{tag}. Regenerated artifacts were NOT committed (the tag stays "
+                "authoritative). If you intend to change the release, delete the tag "
+                "and cut a new version deliberately."
+            )
+        else:
+            print(f"release: {tag} already released; artifacts unchanged — nothing to do.")
+        print(f"release: tag {tag} left in place (idempotent; NOT pushed).")
+        return
+
+    # A real release: stage the FULL intended tree (the regenerated artifacts plus
+    # any --allow-dirty source changes that were just gated, built, and tested) so
+    # the tagged commit is self-consistent with the wheel/sdist. dist/ and other
+    # generated outputs stay out via .gitignore.
+    _run(["git", "add", "-A"], dry_run=args.dry_run)
     staged = _git("diff", "--cached", "--name-only")
     if not staged and not args.dry_run:
         print("release: nothing staged — working tree already at this release")
     else:
-        message = f"Release {tag}"
-        _run(["git", "commit", "-m", message], dry_run=args.dry_run)
+        _run(["git", "commit", "-m", f"Release {tag}"], dry_run=args.dry_run)
 
-    if _tag_exists(tag):
-        print(f"release: tag {tag} already exists — leaving it in place (idempotent)")
-    else:
-        _run(
-            ["git", "tag", "-a", tag, "-m", f"Substation {tag}"],
-            dry_run=args.dry_run,
-        )
+    _run(["git", "tag", "-a", tag, "-m", f"Substation {tag}"], dry_run=args.dry_run)
     print(f"release: tagged {tag} locally (NOT pushed — push the tag manually if desired)")
 
 
@@ -309,8 +327,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             dirty = _git("status", "--porcelain")
             if dirty:
                 raise ReleaseError(
-                    "working tree is not clean; commit/stash first or pass --allow-dirty:\n"
-                    + dirty
+                    "working tree is not clean; commit/stash first or pass --allow-dirty:\n" + dirty
                 )
 
         _gate(args)
@@ -326,7 +343,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         _build_distributions(args)
         _regenerate_artifacts(args)
-        _commit_and_tag(target, args)
+        _commit_and_tag(target, args, already_released)
 
         print(f"release: done — {tag} is built, recorded, and tagged locally.")
         return 0
