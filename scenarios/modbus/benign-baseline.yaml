@@ -1,0 +1,113 @@
+# =============================================================================
+# Benign Modbus baseline — the credible "quiet" ground truth for M1/M2/M3
+# =============================================================================
+# This is the realistic normal-operation scenario every Modbus detection must
+# stay SILENT on (PRD.md §6.4, §8: without a legitimate writer/master and
+# continuous polling the allow-list and sweep detections are untestable and not
+# credible). It models, on one PLC:
+#   * continuous HMI polling (reads, repeated over time), and
+#   * an engineering workstation (EWS) that both polls AND performs legitimate
+#     setpoint writes — from an allow-listed source, to in-policy registers.
+#
+# Allow-list policy this scenario establishes (the detections key off it):
+#   * Permitted writers (HMI/EWS):  hmi-1 10.0.0.10, ews-1 10.0.0.11
+#   * PLC / outstation:             plc-1 10.0.0.50:502, unit id 1
+#   * Writable setpoint registers:  holding registers 40–49 (by policy)
+# Anything outside that — a write from another host, to another unit/register,
+# an illegal function code, or one source sweeping many codes/units — is what the
+# anomalous-*.yaml scenarios model.
+# -----------------------------------------------------------------------------
+
+name: benign-baseline
+description: >-
+  Normal OT operation on one Modbus PLC: continuous HMI polling plus an
+  engineering workstation that polls and writes legitimate setpoints from an
+  allow-listed source to in-policy registers. The canonical quiet baseline that
+  M1 (unauthorized write), M2 (illegal function code) and M3 (function/unit
+  sweep) must all stay silent on (PRD.md §8).
+
+protocol: modbus
+label: benign
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: hmi-1            # operator HMI: continuous read-only polling.
+    role: hmi
+    host: 10.0.0.10
+  - id: ews-1            # engineering workstation: allow-listed writer.
+    role: ews
+    host: 10.0.0.11
+  - id: plc-1            # the PLC being polled / written.
+    role: plc
+    host: 10.0.0.50
+    port: 502
+
+exchanges:
+  # Exchanges are listed in chronological (monotonic-offset) order: write_jsonl
+  # emits in file order while write_pcap sorts packets by timestamp, so keeping
+  # offsets monotonic keeps the JSON log and the PCAP in lockstep (PRD.md §6.1).
+
+  # --- continuous HMI polling: the steady SCADA read cadence ----------------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 0.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadInputRegisters
+    offset: 2.0
+    params: { unit_id: 1, address: 0, quantity: 8 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 4.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+
+  # --- EWS periodic supervisory poll (interleaved into the HMI cadence) ------
+  - source: ews-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 5.0
+    params: { unit_id: 1, address: 40, quantity: 10 }
+
+  # --- HMI polling continues ------------------------------------------------
+  - source: hmi-1
+    target: plc-1
+    function: ReadCoils
+    offset: 6.0
+    params: { unit_id: 1, address: 0, quantity: 16 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 8.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+
+  # --- legitimate setpoint writes from the allow-listed EWS -----------------
+  # In-policy: allow-listed source, unit 1, writable setpoint registers 40–49.
+  - source: ews-1
+    target: plc-1
+    function: WriteSingleRegister
+    offset: 10.0
+    params: { unit_id: 1, address: 40, value: 1500 }
+  - source: ews-1
+    target: plc-1
+    function: WriteMultipleRegisters
+    offset: 12.0
+    params: { unit_id: 1, address: 42, values: [1200, 1250, 1300] }
+
+  # --- HMI keeps polling after the write: operation is continuous -----------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 14.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+
+exercises:
+  quiet:
+    - M1   # writes here are from the allow-listed EWS to in-policy registers.
+    - M2   # every function code is legal/standard.
+    - M3   # steady polling + a couple of writes is not a code/unit sweep.

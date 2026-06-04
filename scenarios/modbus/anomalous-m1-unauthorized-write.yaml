@@ -1,0 +1,81 @@
+# =============================================================================
+# Anomalous (M1) — unauthorized register/coil write
+# =============================================================================
+# M1 (PRD.md §5.1): a Modbus WRITE function from a source that is NOT on the
+# allow-list of permitted writers (HMI/EWS), or to a unit/register outside
+# policy. This must fire M1 while staying quiet for M2 (no illegal codes) and
+# M3 (no code/unit sweep). Per PRD.md §8 the rule is allow-list-by-source, NOT
+# "any write" — so the scenario keeps the legitimate HMI/EWS traffic alongside
+# the rogue writer to prove the detection discriminates.
+#
+# Allow-list recap (see benign-baseline.yaml): permitted writers are
+# hmi-1 10.0.0.10 and ews-1 10.0.0.11; PLC plc-1 10.0.0.50 unit 1; writable
+# setpoint registers 40–49. rogue-1 (10.0.0.77) is NOT an allow-listed writer.
+# -----------------------------------------------------------------------------
+
+name: anomalous-m1-unauthorized-write
+description: >-
+  An unauthorized writer (10.0.0.77, not on the HMI/EWS allow-list) issues
+  Modbus write functions to the PLC — a single-register setpoint write and a
+  multi-coil write — amid normal HMI polling and a legitimate EWS setpoint
+  write. Fires M1 (unauthorized write); stays quiet on M2 and M3.
+
+protocol: modbus
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: hmi-1            # legitimate, allow-listed: read-only polling.
+    role: hmi
+    host: 10.0.0.10
+  - id: ews-1            # legitimate, allow-listed writer.
+    role: ews
+    host: 10.0.0.11
+  - id: rogue-1         # NOT allow-listed — the unauthorized writer (M1).
+    role: master
+    host: 10.0.0.77
+  - id: plc-1
+    role: plc
+    host: 10.0.0.50
+    port: 502
+
+exchanges:
+  # --- normal background traffic the detection must NOT confuse for M1 ------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 0.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+  - source: ews-1
+    target: plc-1
+    function: WriteSingleRegister     # legitimate setpoint write (allow-listed).
+    offset: 2.0
+    params: { unit_id: 1, address: 40, value: 1500 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadInputRegisters
+    offset: 4.0
+    params: { unit_id: 1, address: 0, quantity: 8 }
+
+  # --- the unauthorized writes (M1) -----------------------------------------
+  # Non-allow-listed source writing process setpoints / forcing coils.
+  - source: rogue-1
+    target: plc-1
+    function: WriteSingleRegister
+    offset: 6.0
+    params: { unit_id: 1, address: 40, value: 9999 }
+  - source: rogue-1
+    target: plc-1
+    function: WriteMultipleCoils
+    offset: 8.0
+    params: { unit_id: 1, address: 8, values: [1, 1, 0, 1] }
+
+exercises:
+  fires:
+    - M1   # writes originate from a non-allow-listed source (10.0.0.77).
+  quiet:
+    - M2   # all function codes are legal Modbus writes.
+    - M3   # two writes from one host is not a function-code/unit-id sweep.
