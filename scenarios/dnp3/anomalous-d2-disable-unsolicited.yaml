@@ -1,0 +1,68 @@
+# =============================================================================
+# Anomalous (D2) — disable unsolicited responses (alarm/telemetry blinding)
+# =============================================================================
+# D2 (PRD.md §5.2): a DNP3 DISABLE_UNSOLICITED command suppresses the outstation's
+# spontaneous event reporting — blinding the master to alarms/telemetry (Inhibit
+# Response Function). Keyed by allow-list source: a sanctioned maintenance disable
+# from the real master stays quiet, but a disable from any other source is the
+# blinding signal. The scenario keeps the legitimate master polling + unsolicited
+# reporting alongside the rogue disable to prove the detection discriminates
+# (PRD.md §8).
+#
+# Allow-list recap (dnp3-benign-baseline.yaml): permitted master master-1
+# 10.0.1.10; outstation rtu-1 10.0.1.50:20000. rogue-1 (10.0.1.77) is NOT the
+# allow-listed master.
+# -----------------------------------------------------------------------------
+
+name: dnp3-anomalous-d2-disable-unsolicited
+description: >-
+  An unexpected source (10.0.1.77) sends DISABLE_UNSOLICITED to the outstation,
+  suppressing its spontaneous event reporting, amid normal master polling and
+  unsolicited responses. Fires D2 (disable unsolicited responses); stays quiet on
+  D1 (no restart) and D3 (no unauthorized operate).
+
+protocol: dnp3
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: master-1        # legitimate, allow-listed master.
+    role: master
+    host: 10.0.1.10
+  - id: rogue-1         # NOT allow-listed — the blinding source (D2).
+    role: master
+    host: 10.0.1.77
+  - id: rtu-1
+    role: outstation
+    host: 10.0.1.50
+    port: 20000
+
+exchanges:
+  # --- normal background traffic --------------------------------------------
+  - source: master-1
+    target: rtu-1
+    function: Read
+    offset: 0.0
+    params: { object_type: Binary Input With Status, range_low: 0, range_high: 9, object_count: 10 }
+  - source: rtu-1
+    target: master-1
+    function: UnsolicitedResponse
+    offset: 1.0
+    params: { object_type: Binary Input With Status, range_low: 3, range_high: 3, object_count: 1 }
+
+  # --- the blinding command (D2) --------------------------------------------
+  # A compliant outstation stops sending unsolicited event data after this.
+  - source: rogue-1
+    target: rtu-1
+    function: DisableUnsolicited
+    offset: 3.0
+
+exercises:
+  fires:
+    - D2   # DISABLE_UNSOLICITED from a non-allow-listed source (10.0.1.77).
+  quiet:
+    - D1   # no COLD_RESTART / WARM_RESTART is issued.
+    - D3   # no operate/direct-operate from a non-allow-listed source.

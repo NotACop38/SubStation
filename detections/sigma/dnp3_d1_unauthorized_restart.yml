@@ -1,0 +1,61 @@
+# =============================================================================
+# Substation detection D1 — Unauthorized DNP3 cold/warm restart
+# =============================================================================
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Rationale, data source and the full false-positive profile live in
+# detections/docs/D1-unauthorized-restart.md (the Detection Contract doc, §6.6).
+#
+# Keys on the restart command + an allow-list of permitted control sources, NOT
+# "any restart": a sanctioned maintenance restart from the real master is benign,
+# so a write-only rule would be false positives (PRD.md §8). A COLD_RESTART or
+# WARM_RESTART request from a source that is not the allow-listed master fires.
+# -----------------------------------------------------------------------------
+title: DNP3 Device Restart From Unauthorized Source
+id: 6e2c1f8a-3b4d-4f1e-9a2c-1d7e5b0a9c34
+status: experimental
+description: |
+  A DNP3 device-restart function (COLD_RESTART / WARM_RESTART) issued by a source
+  that is not the allow-listed master. Substation detection D1 (PRD.md §5.2):
+  forcing an outstation to restart inhibits its response/reporting function. Keyed
+  by restart command AND source allow-list, not "any restart", so a sanctioned
+  maintenance restart from the real master stays quiet (the OT-realism guardrail,
+  PRD.md §8).
+references:
+  - https://attack.mitre.org/techniques/T0816/
+  - https://attack.mitre.org/techniques/T0814/
+  - PRD.md §5.2 (D1); detections/docs/D1-unauthorized-restart.md
+author: Substation
+date: 2026-06-04
+logsource:
+  product: ot
+  service: dnp3
+detection:
+  # A DNP3 device-restart request. func_name carries the Zeek
+  # DNP3::function_codes name (docs/schema.md); direction: request keys on the
+  # command itself, so conn.orig_h is the issuing source.
+  restart_command:
+    proto: dnp3
+    direction: request
+    func_name:
+      - COLD_RESTART
+      - WARM_RESTART
+  # The permitted control source (the allow-listed master). A restart from any
+  # other source is unauthorized. orig_h is the source on a request (derive
+  # source through is_orig, docs/schema.md → conn).
+  authorized_source:
+    conn.orig_h: '10.0.1.10' # master-1 — the allow-listed SCADA master
+  condition: restart_command and not authorized_source
+fields:
+  - conn.orig_h
+  - func_name
+falsepositives:
+  - A sanctioned maintenance restart issued from the allow-listed master is handled
+    by the allow-list — the master's address is listed, so its restarts stay quiet.
+    Keep the allow-list current as masters are added/relocated.
+  - A redundant/standby master performing failover restarts from an unlisted
+    address — pre-authorize it (add it to the control-source allow-list).
+level: high
+tags:
+  - attack.inhibit-response-function
+  - attack.t0816
+  - attack.t0814

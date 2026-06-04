@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/notacop38/substation/blob/main/substation/schema/event-log.schema.json",
   "title": "Substation event-log event",
-  "description": "One newline-delimited JSON (.jsonl) protocol event: the normalized envelope (PRD.md §6.3) plus a per-protocol `detail` object modeled on ICSNPP fields. One event per line; this schema validates a single line/object. Modbus `detail` is FROZEN against ICSNPP modbus_detailed.log (docs/spikes/01-icsnpp-modbus-fields.md).",
+  "description": "One newline-delimited JSON (.jsonl) protocol event: the normalized envelope (PRD.md §6.3) plus a per-protocol `detail` object modeled on ICSNPP fields. One event per line; this schema validates a single line/object. Modbus `detail` is FROZEN against ICSNPP modbus_detailed.log (docs/spikes/01-icsnpp-modbus-fields.md); DNP3 `detail` is FROZEN against Zeek dnp3.log + ICSNPP dnp3_control.log/dnp3_objects.log (docs/spikes/04-icsnpp-dnp3-fields.md). S7 `detail` stays unconstrained until Phase 4.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -97,6 +97,15 @@
       }
     },
     {
+      "if": {
+        "required": ["proto"],
+        "properties": { "proto": { "const": "dnp3" } }
+      },
+      "then": {
+        "properties": { "detail": { "$ref": "#/$defs/dnp3_detail" } }
+      }
+    },
+    {
       "$comment": "A Modbus exception must carry the decoded exception name: error mirrors detail.exception_code and drives M2, so neither may be absent/null on an exception event.",
       "if": {
         "required": ["proto", "is_exception"],
@@ -171,6 +180,47 @@
         "read_start_address": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Read start address (`read_start_address`)." },
         "read_quantity": { "type": "integer", "minimum": 0, "description": "Number of registers read (`read_quantity`)." },
         "read_registers": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Registers read back (`read_registers`)." }
+      }
+    },
+    "dnp3_detail": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "DNP3 detail modeled on Zeek base dnp3.log (DNP3::Info) plus ICSNPP dnp3_control.log / dnp3_objects.log (icsnpp-dnp3 scripts/main.zeek; docs/spikes/04-icsnpp-dnp3-fields.md). All fields optional, mirroring Zeek/ICSNPP optional record fields. control (CROB/PCB) and objects (object-header) sub-shapes are pulled in for SELECT/OPERATE and READ/RESPONSE messages respectively.",
+      "properties": {
+        "fc_request": { "type": "string", "minLength": 1, "description": "Request function name (dnp3.log fc_request = DNP3::function_codes[fc]); mirrors envelope func_name on requests." },
+        "fc_reply": { "type": "string", "minLength": 1, "description": "Reply function name (dnp3.log fc_reply); mirrors envelope func_name on responses (RESPONSE / UNSOLICITED_RESPONSE)." },
+        "iin": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Response internal-indication bits (dnp3.log iin, 2-byte field)." },
+        "control": { "$ref": "#/$defs/dnp3_control" },
+        "objects": { "$ref": "#/$defs/dnp3_objects" }
+      }
+    },
+    "dnp3_control": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ICSNPP dnp3_control.log fields (Control record) for SELECT/OPERATE Control-Relay-Output-Block / Pattern-Control-Block commands. is_orig and source_*/destination_* are not duplicated here — the envelope conn + is_orig carry them (spike 04).",
+      "properties": {
+        "block_type": { "type": "string", "description": "Control_Relay_Output_Block or Pattern_Control_Block (block_type)." },
+        "function_code": { "type": "string", "description": "Function code string for this control row (function_code: SELECT/OPERATE/RESPONSE)." },
+        "index_number": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Object index number (index_number)." },
+        "trip_control_code": { "type": "string", "description": "Nul, Close, or Trip (trip_control_code)." },
+        "operation_type": { "type": "string", "description": "Nul, Pulse_On, Pulse_Off, Latch_On, or Latch_Off (operation_type)." },
+        "clear_bit": { "type": "boolean", "description": "Control-code clear bit set/unset (clear_bit)." },
+        "execute_count": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Number of times to execute (execute_count)." },
+        "on_time": { "type": "integer", "minimum": 0, "maximum": 4294967295, "description": "On time in ms (on_time)." },
+        "off_time": { "type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Off time in ms (off_time)." },
+        "status_code": { "type": "string", "description": "Status code string on a RESPONSE (status_code)." }
+      }
+    },
+    "dnp3_objects": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ICSNPP dnp3_objects.log fields (Objects record) for READ/RESPONSE object headers. On a READ request only function_code + object_type are populated; range/count are populated on the RESPONSE (spike 04).",
+      "properties": {
+        "function_code": { "type": "string", "description": "Function code string for this object row (function_code: READ/RESPONSE)." },
+        "object_type": { "type": "string", "description": "DNP3 object/device type string (object_type, dnp3_objects[obj_type])." },
+        "object_count": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Number of objects (object_count)." },
+        "range_low": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Range low of object (range_low)." },
+        "range_high": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Range high of object (range_high)." }
       }
     },
     "modbus_read_device_identification": {

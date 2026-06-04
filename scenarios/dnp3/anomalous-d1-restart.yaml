@@ -1,0 +1,71 @@
+# =============================================================================
+# Anomalous (D1) — cold/warm restart issued from an unexpected source
+# =============================================================================
+# D1 (PRD.md §5.2): a DNP3 device-restart function (COLD_RESTART / WARM_RESTART)
+# from a source that is NOT the allow-listed master — forcing an outstation to
+# restart inhibits its response/reporting function. Allow-list by source (not
+# "any restart"): a sanctioned maintenance restart from the real master must stay
+# quiet, so the scenario keeps the legitimate master traffic alongside the rogue
+# restart to prove the detection discriminates (PRD.md §8).
+#
+# Allow-list recap (see dnp3-benign-baseline.yaml): permitted master is
+# master-1 10.0.1.10; outstation rtu-1 10.0.1.50:20000. rogue-1 (10.0.1.77) is
+# NOT the allow-listed master.
+# -----------------------------------------------------------------------------
+
+name: dnp3-anomalous-d1-restart
+description: >-
+  An unexpected source (10.0.1.77, not the allow-listed master) issues a DNP3
+  COLD_RESTART to the outstation amid normal master polling and unsolicited
+  reporting. Fires D1 (cold/warm restart from an unexpected source); stays quiet
+  on D2 (no disable-unsolicited) and D3 (no unauthorized operate).
+
+protocol: dnp3
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: master-1        # legitimate, allow-listed master.
+    role: master
+    host: 10.0.1.10
+  - id: rogue-1         # NOT allow-listed — the unexpected restart source (D1).
+    role: master
+    host: 10.0.1.77
+  - id: rtu-1
+    role: outstation
+    host: 10.0.1.50
+    port: 20000
+
+exchanges:
+  # --- normal background traffic the detection must NOT confuse for D1 ------
+  - source: master-1
+    target: rtu-1
+    function: Read
+    offset: 0.0
+    params: { object_type: Binary Input With Status, range_low: 0, range_high: 9, object_count: 10 }
+  - source: rtu-1
+    target: master-1
+    function: UnsolicitedResponse
+    offset: 1.0
+    params: { object_type: Binary Input With Status, range_low: 3, range_high: 3, object_count: 1 }
+  - source: master-1
+    target: rtu-1
+    function: Read
+    offset: 2.0
+    params: { object_type: 16-Bit Analog Input, range_low: 0, range_high: 7, object_count: 8 }
+
+  # --- the restart from the unexpected source (D1) --------------------------
+  - source: rogue-1
+    target: rtu-1
+    function: ColdRestart
+    offset: 4.0
+
+exercises:
+  fires:
+    - D1   # COLD_RESTART originates from a non-allow-listed source (10.0.1.77).
+  quiet:
+    - D2   # no DISABLE_UNSOLICITED is sent.
+    - D3   # no operate/direct-operate from a non-allow-listed source.
