@@ -184,6 +184,10 @@ def _gate(args: argparse.Namespace) -> None:
 
 def _build_distributions(args: argparse.Namespace) -> None:
     print("release: building sdist + wheel into dist/")
+    # The distributions ship the library + `substation` CLI only. scenarios/,
+    # detections/, and docs/coverage/ deliberately live OUTSIDE the package
+    # (PRD §6.9), so the demo/coverage/detection paths run from a repo checkout,
+    # not a bare wheel install (see CHANGELOG "Packaging"). This is intentional.
     # --no-isolation: use the already-installed, pinned setuptools/wheel backend
     # (keeps the build offline + deterministic, matching the Tier-1 promise).
     _run(

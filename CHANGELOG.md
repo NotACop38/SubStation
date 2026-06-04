@@ -50,3 +50,16 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
   codebase-wide static no-raw-socket-send invariant test.
 - Defensive-only: detections model the network signature of malicious behavior;
   no exploit code or payloads against real equipment.
+
+### Packaging
+
+- The sdist + wheel ship the **library + `substation` CLI** only. The bundled
+  scenarios (`scenarios/`), detection content (`detections/`), and the published
+  coverage snapshot (`docs/coverage/`) deliberately live **outside** the Python
+  package (PRD §6.9), so the headline `make demo` / coverage / detection-harness
+  paths run from a **repo checkout** (`make dev` + `make demo`), not from a
+  bare `pip install` of the wheel. This is intentional, not an oversight: the
+  detection pack and scenarios are versioned repo content, not importable package
+  data. Install the wheel for the simulator/CLI as a library; clone the repo to
+  run the demo and detections.
+
