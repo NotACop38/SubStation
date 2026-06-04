@@ -50,7 +50,7 @@ exchanges:
     target: rtu-1
     function: Read
     offset: 0.0
-    params: { object_type: Binary Input, range_low: 0, range_high: 9, object_count: 10 }
+    params: { object_type: Binary Input With Status, range_low: 0, range_high: 9, object_count: 10 }
 
   # --- the sweep: 9 distinct function codes from one source, short window ----
   # One request each — diversity is the signal, not volume. None of these are the
@@ -59,7 +59,7 @@ exchanges:
     target: rtu-1
     function: Read
     offset: 1.0
-    params: { object_type: Binary Input, range_low: 0, range_high: 0, object_count: 1 }
+    params: { object_type: Binary Input With Status, range_low: 0, range_high: 0, object_count: 1 }
   - source: scanner-1
     target: rtu-1
     function: Write

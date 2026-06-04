@@ -117,6 +117,90 @@ def test_unsolicited_response_is_outstation_originated(tmp_path: Path) -> None:
     assert unsol[0]["conn"]["orig_h"] == "10.0.1.10"
 
 
+def _objects_offset(is_orig: bool) -> int:
+    """Byte offset of the object header in a DNP3 frame body.
+
+    body = transport(1) + app_control(1) + func_code(1) [+ iin(2) on a response].
+    """
+    return 3 if is_orig else 5
+
+
+def test_object_type_round_trips_into_pcap_group_var(tmp_path: Path) -> None:
+    # The PCAP group/variation is derived from the same object_type string the JSON
+    # carries, so they cannot drift (PR #9 P1). Baseline mixes Binary Input + Analog.
+    from substation.protocols.dnp3 import OBJECT_TYPES
+
+    scenario = load_scenario(_BASELINE)
+    result = write_artifacts(scenario, tmp_path)
+    events = _json_events(result.jsonl)
+    frames = _dnp3_frames(result.pcap)
+    for event, frame in zip(events, frames, strict=True):
+        objs = event["detail"].get("objects")
+        if not objs:
+            continue
+        group, var, _ = OBJECT_TYPES[objs["object_type"]]
+        body = frame[10:]
+        off = _objects_offset(event["is_orig"])
+        assert (body[off], body[off + 1]) == (group, var)
+
+
+def test_response_range_above_255_round_trips(tmp_path: Path) -> None:
+    # 2-byte range qualifier: a range > 255 is preserved on the wire (PR #9 P2).
+    scenario = load_scenario(_write_scenario(tmp_path, _BIG_RANGE_SCENARIO))
+    result = write_artifacts(scenario, tmp_path)
+    resp = next(e for e in _json_events(result.jsonl) if e["func_name"] == "RESPONSE")
+    assert (resp["detail"]["objects"]["range_low"], resp["detail"]["objects"]["range_high"]) == (
+        300,
+        309,
+    )
+    frame = next(f for f in _dnp3_frames(result.pcap) if f[12] == 0x81)
+    body = frame[10:]
+    off = _objects_offset(False)
+    assert body[off + 2] == 0x01  # 2-byte range qualifier
+    low = int.from_bytes(body[off + 3 : off + 5], "little")
+    high = int.from_bytes(body[off + 5 : off + 7], "little")
+    assert (low, high) == (300, 309)
+
+
+def test_control_index_above_255_round_trips(tmp_path: Path) -> None:
+    # 2-byte CROB index qualifier: an index > 255 is preserved on the wire (PR #9 P2).
+    scenario = load_scenario(_write_scenario(tmp_path, _BIG_INDEX_SCENARIO))
+    result = write_artifacts(scenario, tmp_path)
+    operate = next(e for e in _json_events(result.jsonl) if e["func_name"] == "OPERATE")
+    assert operate["detail"]["control"]["index_number"] == 300
+    frame = next(f for f in _dnp3_frames(result.pcap) if f[12] == 0x04)
+    body = frame[10:]
+    off = _objects_offset(True)
+    assert body[off : off + 3] == bytes([0x0C, 0x01, 0x28])  # CROB, qualifier 0x28
+    assert int.from_bytes(body[off + 5 : off + 7], "little") == 300
+
+
+def test_inconsistent_object_count_rejected(tmp_path: Path) -> None:
+    scenario = load_scenario(_write_scenario(tmp_path, _BAD_COUNT_SCENARIO))
+    with pytest.raises(Dnp3Error, match="must equal the range span"):
+        write_artifacts(scenario, tmp_path)
+
+
+def test_unknown_object_type_rejected(tmp_path: Path) -> None:
+    scenario = load_scenario(_write_scenario(tmp_path, _BAD_OBJECT_TYPE_SCENARIO))
+    with pytest.raises(Dnp3Error, match="unknown DNP3 object type"):
+        write_artifacts(scenario, tmp_path)
+
+
+def test_lockstep_holds_for_out_of_order_offsets(tmp_path: Path) -> None:
+    # Explicit offsets authored out of order on one connection: per-connection
+    # timestamp serialization keeps JSON file order == PCAP timestamp order, so the
+    # SYN/FIN still bracket every segment (mirrors the Modbus PR #5 guarantee; PR #9).
+    scenario = load_scenario(_write_scenario(tmp_path, _OUT_OF_ORDER_SCENARIO))
+    result = write_artifacts(scenario, tmp_path)
+    events = _json_events(result.jsonl)
+    frames = _dnp3_frames(result.pcap)
+    assert [_frame_function_code(f) for f in frames] == [int(e["func_code"]) for e in events]
+    # Timestamps are non-decreasing in file order (the serialization clamp).
+    ts = [e["ts"] for e in events]
+    assert ts == sorted(ts)
+
+
 def test_unsupported_function_raises(tmp_path: Path) -> None:
     scenario = load_scenario(_write_scenario(tmp_path, _BAD_FN_SCENARIO))
     with pytest.raises(Dnp3Error, match="unsupported DNP3 function"):
@@ -154,11 +238,11 @@ exchanges:
   - source: master
     target: rtu
     function: Read
-    params: {object_type: Binary Input, range_low: 0, range_high: 1, object_count: 2}
+    params: {object_type: Binary Input With Status, range_low: 0, range_high: 1, object_count: 2}
   - source: rtu
     target: master
     function: UnsolicitedResponse
-    params: {object_type: Binary Input, range_low: 0, range_high: 0, object_count: 1}
+    params: {object_type: Binary Input With Status, range_low: 0, range_high: 0, object_count: 1}
 """
 
 _BAD_FN_SCENARIO = """
@@ -181,4 +265,77 @@ actors:
   - {id: rtu, role: outstation, host: 10.0.1.50, port: 20000}
 exchanges:
   - {source: rtu, target: master, function: Read}
+"""
+
+_BIG_RANGE_SCENARIO = """
+name: dnp3-bigrange
+protocol: dnp3
+label: benign
+actors:
+  - {id: m, role: master, host: 10.0.1.10}
+  - {id: r, role: outstation, host: 10.0.1.50, port: 20000}
+exchanges:
+  - source: m
+    target: r
+    function: Read
+    params: {object_type: 16-Bit Analog Input, range_low: 300, range_high: 309, object_count: 10}
+"""
+
+_BIG_INDEX_SCENARIO = """
+name: dnp3-bigindex
+protocol: dnp3
+label: benign
+actors:
+  - {id: m, role: master, host: 10.0.1.10}
+  - {id: r, role: outstation, host: 10.0.1.50, port: 20000}
+exchanges:
+  - source: m
+    target: r
+    function: Operate
+    params: {index_number: 300, operation_type: Latch_On, trip_control_code: Close}
+"""
+
+_BAD_COUNT_SCENARIO = """
+name: dnp3-badcount
+protocol: dnp3
+label: benign
+actors:
+  - {id: m, role: master, host: 10.0.1.10}
+  - {id: r, role: outstation, host: 10.0.1.50, port: 20000}
+exchanges:
+  - source: m
+    target: r
+    function: Read
+    params: {object_type: Binary Input With Status, range_low: 0, range_high: 0, object_count: 10}
+"""
+
+_BAD_OBJECT_TYPE_SCENARIO = """
+name: dnp3-badtype
+protocol: dnp3
+label: benign
+actors:
+  - {id: m, role: master, host: 10.0.1.10}
+  - {id: r, role: outstation, host: 10.0.1.50, port: 20000}
+exchanges:
+  - source: m
+    target: r
+    function: Read
+    params: {object_type: Frobnicator, range_low: 0, range_high: 0, object_count: 1}
+"""
+
+_OUT_OF_ORDER_SCENARIO = """
+name: dnp3-ooo
+protocol: dnp3
+label: benign
+actors:
+  - {id: m, role: master, host: 10.0.1.10}
+  - {id: r, role: outstation, host: 10.0.1.50, port: 20000}
+exchanges:
+  - source: m
+    target: r
+    function: Read
+    offset: 0.0
+    params: {object_type: Binary Input With Status, range_low: 0, range_high: 1, object_count: 2}
+  - {source: m, target: r, function: ColdRestart, offset: 6.0}
+  - {source: m, target: r, function: DisableUnsolicited, offset: 2.0}
 """

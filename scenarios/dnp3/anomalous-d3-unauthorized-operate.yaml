@@ -46,7 +46,7 @@ exchanges:
     target: rtu-1
     function: Read
     offset: 0.0
-    params: { object_type: Binary Input, range_low: 0, range_high: 9, object_count: 10 }
+    params: { object_type: Binary Input With Status, range_low: 0, range_high: 9, object_count: 10 }
   - source: master-1
     target: rtu-1
     function: Operate                  # legitimate control from the allow-listed master.

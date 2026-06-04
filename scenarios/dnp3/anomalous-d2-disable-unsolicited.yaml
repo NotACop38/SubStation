@@ -46,12 +46,12 @@ exchanges:
     target: rtu-1
     function: Read
     offset: 0.0
-    params: { object_type: Binary Input, range_low: 0, range_high: 9, object_count: 10 }
+    params: { object_type: Binary Input With Status, range_low: 0, range_high: 9, object_count: 10 }
   - source: rtu-1
     target: master-1
     function: UnsolicitedResponse
     offset: 1.0
-    params: { object_type: Binary Input, range_low: 3, range_high: 3, object_count: 1 }
+    params: { object_type: Binary Input With Status, range_low: 3, range_high: 3, object_count: 1 }
 
   # --- the blinding command (D2) --------------------------------------------
   # A compliant outstation stops sending unsolicited event data after this.

@@ -36,6 +36,7 @@ __all__ = [
     "resolve_function",
     "FUNCTION_NAMES",
     "ACTION_CLASS",
+    "OBJECT_TYPES",
     "DEFAULT_DNP3_PORT",
     "RESPONSE_DELAY",
     "dnp3_crc",
@@ -163,6 +164,22 @@ _TRIP_CODES = {  # trip_control_code string -> top two bits of control_code.
 # the canonical form so JSON detail matches dnp3_control.log exactly.
 _OPERATION_LABEL = {0: "Nul", 1: "Pulse_On", 2: "Pulse_Off", 3: "Latch_On", 4: "Latch_Off"}
 _TRIP_LABEL = {0: "Nul", 1: "Close", 2: "Trip"}
+
+# DNP3 object groups/variations for the object types our scenarios use. Keyed by the
+# **exact ICSNPP `dnp3_objects` device-type name** (consts.zeek, keyed by
+# group*256+variation — spike 04), so the JSON `object_type` string and the PCAP
+# group/variation are derived from one source and a Zeek decode of the PCAP resolves
+# the same name (no drift, PRD §6.1). `point_size` is the per-point response data
+# width in bytes for that variation, so the PCAP emits a well-formed object body.
+# name -> (group, variation, point_size)
+OBJECT_TYPES: dict[str, tuple[int, int, int]] = {
+    "Binary Input With Status": (0x01, 0x02, 1),  # 0x0102
+    "Binary Output": (0x0A, 0x01, 1),  # 0x0A01
+    "16-Bit Binary Counter": (0x14, 0x02, 2),  # 0x1402
+    "32-Bit Analog Input": (0x1E, 0x01, 4),  # 0x1E01
+    "16-Bit Analog Input": (0x1E, 0x02, 2),  # 0x1E02
+}
+_DEFAULT_OBJECT_TYPE = "Binary Input With Status"
 
 _U16 = 0xFFFF
 _U8 = 0xFF
@@ -344,15 +361,39 @@ def _objects_detail(
 
     On a READ request only ``function_code`` + ``object_type`` are populated; the
     range/count are populated on the RESPONSE — exactly as ICSNPP logs them.
+
+    ``object_type`` must be a known DNP3 object type (``OBJECT_TYPES``) so the PCAP
+    encoder can emit the matching group/variation and the JSON string and PCAP bytes
+    cannot drift (PR #9 review). On a response ``object_count`` is the range span
+    (``range_high - range_low + 1``); an explicit ``object_count`` that disagrees is
+    rejected rather than silently emitted, so the JSON count and the PCAP object body
+    always agree.
     """
-    obj: dict[str, Any] = {
-        "function_code": func_name,
-        "object_type": _opt_str(params, "object_type", where, "Binary Input"),
-    }
+    object_type = _opt_str(params, "object_type", where, _DEFAULT_OBJECT_TYPE)
+    if object_type not in OBJECT_TYPES:
+        raise Dnp3Error(
+            f"{where}.object_type: unknown DNP3 object type {object_type!r}; "
+            f"supported: {', '.join(sorted(OBJECT_TYPES))}"
+        )
+    obj: dict[str, Any] = {"function_code": func_name, "object_type": object_type}
     if is_response:
-        obj["object_count"] = _opt_int(params, "object_count", where, 0, _U16, 1)
-        obj["range_low"] = _opt_int(params, "range_low", where, 0, _U16, 0)
-        obj["range_high"] = _opt_int(params, "range_high", where, 0, _U16, 0)
+        range_low = _opt_int(params, "range_low", where, 0, _U16, 0)
+        range_high = _opt_int(params, "range_high", where, 0, _U16, 0)
+        if range_high < range_low:
+            raise Dnp3Error(
+                f"{where}: range_high ({range_high}) must be >= range_low ({range_low})"
+            )
+        span = range_high - range_low + 1
+        object_count = _opt_int(params, "object_count", where, 0, _U16, span)
+        if object_count != span:
+            raise Dnp3Error(
+                f"{where}.object_count ({object_count}) must equal the range span "
+                f"range_high - range_low + 1 = {span}; the PCAP object body is derived "
+                "from the range, so an inconsistent count cannot be emitted"
+            )
+        obj["object_count"] = object_count
+        obj["range_low"] = range_low
+        obj["range_high"] = range_high
     return obj
 
 

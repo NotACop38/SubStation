@@ -28,6 +28,7 @@ from scapy.packet import Raw
 from scapy.utils import PcapWriter
 
 from substation.protocols.dnp3 import (
+    OBJECT_TYPES,
     READ,
     RESPONSE,
     UNSOLICITED_RESPONSE,
@@ -46,6 +47,17 @@ _TEARDOWN_GAP = 0.003
 # control_code byte from the schema-clean detail.control labels.
 _OP_CODE = {"Nul": 0, "Pulse_On": 1, "Pulse_Off": 2, "Latch_On": 3, "Latch_Off": 4}
 _TRIP_CODE = {"Nul": 0, "Close": 1, "Trip": 2}
+
+
+def _object_group_var(event: Dnp3Event) -> tuple[int, int, int]:
+    """Resolve (group, variation, point_size) for this event's object type.
+
+    Derived from the **same** ``detail.objects.object_type`` string the JSON carries
+    (validated against OBJECT_TYPES at build time), so the PCAP group/variation and
+    the JSON object_type cannot drift (PR #9 review).
+    """
+    object_type = str((event.objects or {}).get("object_type", ""))
+    return OBJECT_TYPES[object_type]  # build_events guarantees membership.
 
 
 def _link_frame(*, from_master: bool, src_addr: int, dst_addr: int, user: bytes) -> bytes:
@@ -69,29 +81,41 @@ def _link_frame(*, from_master: bool, src_addr: int, dst_addr: int, user: bytes)
     return header + body
 
 
-def _read_request_objects() -> bytes:
-    """A 'read all of group 1 var 0' object header (qualifier 0x06, no range)."""
-    return bytes([0x01, 0x00, 0x06])
+def _read_request_objects(event: Dnp3Event) -> bytes:
+    """A 'read all' object header for the event's object type (qualifier 0x06)."""
+    group, var, _ = _object_group_var(event)
+    return bytes([group, var, 0x06])
 
 
-def _range_objects(event: Dnp3Event, *, group: int, var: int) -> bytes:
-    """An 8-bit start/stop range object header for a READ response (qualifier 0x00)."""
+def _range_objects(event: Dnp3Event) -> bytes:
+    """A 2-byte start/stop range object header (qualifier 0x01) for a response.
+
+    Uses a **2-byte** range so addresses/counts up to 65535 round-trip (PR #9
+    review). The point count and data width come from the event's object type, so the
+    emitted object body matches the JSON object_count exactly.
+    """
+    group, var, point_size = _object_group_var(event)
     objs = event.objects or {}
-    low = int(objs.get("range_low", 0)) & 0xFF
-    high = int(objs.get("range_high", 0)) & 0xFF
+    low = int(objs.get("range_low", 0)) & 0xFFFF
+    high = int(objs.get("range_high", 0)) & 0xFFFF
     count = max(0, high - low + 1)
-    # header + one status/value byte per index (deterministic 0x00 fill).
-    return bytes([group, var, 0x00, low, high]) + bytes(count)
+    header = bytes([group, var, 0x01]) + low.to_bytes(2, "little") + high.to_bytes(2, "little")
+    # One deterministic zero-filled point per index, at the variation's data width.
+    return header + bytes(count * point_size)
 
 
 def _crob_objects(event: Dnp3Event) -> bytes:
-    """A Control-Relay-Output-Block object (group 12 var 1, qualifier 0x17)."""
+    """A Control-Relay-Output-Block object (group 12 var 1, qualifier 0x28).
+
+    Qualifier 0x28 carries a **2-byte** object count and a **2-byte** index prefix, so
+    control indices up to 65535 round-trip (PR #9 review).
+    """
     ctl = event.control or {}
     op = _OP_CODE.get(str(ctl.get("operation_type", "Nul")), 0)
     trip = _TRIP_CODE.get(str(ctl.get("trip_control_code", "Nul")), 0)
     clear = 0x20 if ctl.get("clear_bit") else 0x00
     control_code = (trip << 6) | clear | op
-    index = int(ctl.get("index_number", 0)) & 0xFF
+    index = int(ctl.get("index_number", 0)) & 0xFFFF
     count = int(ctl.get("execute_count", 1)) & 0xFF
     on_time = int(ctl.get("on_time", 0)) & 0xFFFFFFFF
     off_time = int(ctl.get("off_time", 0)) & 0xFFFFFFFF
@@ -101,8 +125,10 @@ def _crob_objects(event: Dnp3Event) -> bytes:
         + off_time.to_bytes(4, "little")
         + bytes([0x00])  # status (commanded request)
     )
-    # qualifier 0x17: 1-byte object count, each prefixed by a 1-byte index.
-    return bytes([0x0C, 0x01, 0x17, 0x01, index]) + crob
+    # qualifier 0x28: 2-byte object count, each prefixed by a 2-byte index.
+    return (
+        bytes([0x0C, 0x01, 0x28]) + (1).to_bytes(2, "little") + index.to_bytes(2, "little") + crob
+    )
 
 
 def _app_bytes(event: Dnp3Event) -> bytes:
@@ -114,9 +140,9 @@ def _app_bytes(event: Dnp3Event) -> bytes:
     if not event.is_orig:  # responses (RESPONSE / UNSOLICITED_RESPONSE) carry IIN.
         out += int(event.iin or 0).to_bytes(2, "little")
     if event.is_orig and event.func_code == READ:
-        out += _read_request_objects()
+        out += _read_request_objects(event)
     elif event.func_code in (RESPONSE, UNSOLICITED_RESPONSE) and event.objects:
-        out += _range_objects(event, group=0x01, var=0x02)
+        out += _range_objects(event)
     elif event.is_orig and event.control is not None:
         out += _crob_objects(event)
     return out

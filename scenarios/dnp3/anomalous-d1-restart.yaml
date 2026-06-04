@@ -45,17 +45,17 @@ exchanges:
     target: rtu-1
     function: Read
     offset: 0.0
-    params: { object_type: Binary Input, range_low: 0, range_high: 9, object_count: 10 }
+    params: { object_type: Binary Input With Status, range_low: 0, range_high: 9, object_count: 10 }
   - source: rtu-1
     target: master-1
     function: UnsolicitedResponse
     offset: 1.0
-    params: { object_type: Binary Input, range_low: 3, range_high: 3, object_count: 1 }
+    params: { object_type: Binary Input With Status, range_low: 3, range_high: 3, object_count: 1 }
   - source: master-1
     target: rtu-1
     function: Read
     offset: 2.0
-    params: { object_type: Analog Input, range_low: 0, range_high: 7, object_count: 8 }
+    params: { object_type: 16-Bit Analog Input, range_low: 0, range_high: 7, object_count: 8 }
 
   # --- the restart from the unexpected source (D1) --------------------------
   - source: rogue-1

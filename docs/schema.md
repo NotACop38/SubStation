@@ -213,10 +213,22 @@ per the parser):
 | Field           | Type            |
 | --------------- | --------------- |
 | `function_code` | string (`READ` / `RESPONSE`) |
-| `object_type`   | string (device/object type, e.g. `Binary Input`) |
+| `object_type`   | string (device/object type, e.g. `Binary Input With Status`) |
 | `object_count`  | integer 0–65535 |
 | `range_low`     | integer 0–65535 |
 | `range_high`    | integer 0–65535 |
+
+> **Single-source / no-drift (PR #9 review).** `object_type` must be one of the
+> verified ICSNPP `dnp3_objects` device-type names the simulator supports
+> (`substation.protocols.dnp3.OBJECT_TYPES`: `Binary Input With Status`,
+> `Binary Output`, `16-Bit Binary Counter`, `32-Bit Analog Input`,
+> `16-Bit Analog Input`). The simulator derives the DNP3 object **group/variation**
+> for the PCAP from that same string, so a Zeek decode of the PCAP resolves the
+> identical `object_type` — the JSON and PCAP cannot drift (PRD §6.1). On a response
+> `object_count` **must equal** the range span (`range_high − range_low + 1`); an
+> inconsistent count is rejected at build time rather than emitted. Ranges and
+> control `index_number` are carried on the wire as 2-byte fields, so values up to
+> 65535 round-trip.
 
 We do **not** duplicate ICSNPP's `id` / `source_*` / `destination_*` into `detail`
 — the envelope `conn` + `is_orig` carry them (same choice as Modbus, spike 04). A
