@@ -61,7 +61,8 @@ actors:
 # Ordered list of protocol exchanges. Order is significant. Each exchange:
 #   source/target -> actor ids declared above (validated by the loader).
 #   function      -> protocol function name (free-form in Phase 0).
-#   offset        -> seconds from `timing.start` (optional, default 0.0).
+#   offset        -> seconds from `timing.start` (optional; if omitted, spaced
+#                    `timing.default_interval` after the previous exchange).
 #   params        -> opaque per-protocol payload bag (frozen per protocol later).
 exchanges:
   - source: hmi-1

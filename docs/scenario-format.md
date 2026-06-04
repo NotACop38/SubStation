@@ -60,7 +60,7 @@ An ordered list; order is significant. Each exchange is a mapping.
 | `source`   | yes      | string  | Must be a declared actor `id`.                              |
 | `target`   | yes      | string  | Must be a declared actor `id`.                              |
 | `function` | yes      | string  | Protocol function name (free-form in Phase 0).              |
-| `offset`   | no       | number  | Seconds from `timing.start` (default `0.0`).                |
+| `offset`   | no       | number  | Seconds from `timing.start`. If omitted, the exchange is auto-spaced `timing.default_interval` after the previous one (an explicit value, including `0.0`, always wins). |
 | `params`   | no       | mapping | Opaque per-protocol payload bag (frozen per protocol later).|
 
 Exchanges referencing an undeclared actor id are rejected.
@@ -70,7 +70,7 @@ Exchanges referencing an undeclared actor id are rejected.
 | Key                | Required | Type   | Default | Notes                                  |
 |--------------------|----------|--------|---------|----------------------------------------|
 | `start`            | no       | number | `0.0`   | Offset of the first exchange (seconds).|
-| `default_interval` | no       | number | `1.0`   | Default spacing between exchanges.     |
+| `default_interval` | no       | number | `1.0`   | Spacing applied to exchanges that omit `offset`.|
 
 ### `exercises`
 

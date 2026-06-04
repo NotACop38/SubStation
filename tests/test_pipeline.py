@@ -15,17 +15,19 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _EXAMPLE = _REPO_ROOT / "scenarios" / "modbus" / "benign-poll.yaml"
 
 
-def test_emit_writes_empty_artifacts(tmp_path: Path) -> None:
+def test_emit_writes_modbus_artifacts(tmp_path: Path) -> None:
     scenario = load_scenario(_EXAMPLE)
     result = write_artifacts(scenario, tmp_path)
     assert result.pcap.exists() and result.jsonl.exists()
-    assert result.pcap.read_bytes() == b""
-    assert result.jsonl.read_text(encoding="utf-8") == ""
-    assert result.event_count == 0
+    assert result.pcap.read_bytes()  # a real Modbus/TCP capture, not an empty file
+    assert result.event_count > 0
+    assert len(result.jsonl.read_text(encoding="utf-8").splitlines()) == result.event_count
     assert result.pcap.name == "benign-poll.pcap"
 
 
-def test_detect_returns_no_hits_on_empty_log(tmp_path: Path) -> None:
+def test_detect_returns_no_hits_without_rules(tmp_path: Path) -> None:
+    # The detector ships no rules yet (Phase-1 detections land separately), so it
+    # stays quiet even though the JSON log now carries real Modbus events.
     scenario = load_scenario(_EXAMPLE)
     result = write_artifacts(scenario, tmp_path)
     assert run_detections(result.jsonl) == []

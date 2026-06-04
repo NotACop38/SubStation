@@ -84,16 +84,18 @@ class Actor:
 class Exchange:
     """One ordered protocol exchange between two actors.
 
-    ``offset`` is seconds from the scenario start (``Timing.start``). ``params``
-    is an opaque per-protocol payload bag — its shape is frozen per protocol when
-    the encoders land; Phase 0 treats it as free-form. It is an immutable mapping
-    so no pipeline stage can mutate the shared scenario (single source of truth).
+    ``offset`` is seconds from the scenario start (``Timing.start``). When it is
+    ``None`` (omitted in the scenario) the exchange is auto-spaced
+    ``Timing.default_interval`` after the previous one — an explicit ``offset``
+    always wins. ``params`` is an opaque per-protocol payload bag — its shape is
+    frozen per protocol when the encoders land. It is an immutable mapping so no
+    pipeline stage can mutate the shared scenario (single source of truth).
     """
 
     source: str
     target: str
     function: str
-    offset: float = 0.0
+    offset: float | None = None
     params: Mapping[str, object] = field(default_factory=_empty_params)
 
 
