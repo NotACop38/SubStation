@@ -1,9 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="180" viewBox="0 0 760 180" role="img" aria-label="Substation demo placeholder">
-  <rect width="760" height="180" rx="8" fill="#0d1117"/>
-  <circle cx="22" cy="22" r="6" fill="#ff5f56"/>
-  <circle cx="42" cy="22" r="6" fill="#ffbd2e"/>
-  <circle cx="62" cy="22" r="6" fill="#27c93f"/>
-  <text x="24" y="78" font-family="SFMono-Regular,Consolas,Liberation Mono,monospace" font-size="15" fill="#8b949e">$ make demo</text>
-  <text x="24" y="104" font-family="SFMono-Regular,Consolas,Liberation Mono,monospace" font-size="15" fill="#c9d1d9">[detect]   2 hit(s) — <tspan fill="#f97583">M1 FIRED</tspan> (Impair Process Control · T1692.001)</text>
-  <text x="24" y="150" font-family="SFMono-Regular,Consolas,Liberation Mono,monospace" font-size="13" fill="#6e7681">placeholder — run `make demo-cast` locally to record the real animated cast</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="827" height="658" viewBox="0 0 827 658" role="img" aria-label="Verbatim output of make demo: quiet on the benign baseline, fired M1 and M2 on the anomalous scenarios, and the ATT&amp;CK-for-ICS coverage map.">
+  <title>make demo — verbatim output</title>
+  <defs>
+    <linearGradient id="win" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#11161d"/>
+      <stop offset="1" stop-color="#0c1015"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.5" y="0.5" width="826" height="657" rx="12" fill="url(#win)" stroke="#2b3440"/>
+  <path d="M0 12 a12 12 0 0 1 12 -12 H815 a12 12 0 0 1 12 12 V42 H0 Z" fill="#161c24"/>
+  <line x1="0" y1="42" x2="827" y2="42" stroke="#2b3440"/>
+  <circle cx="24" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="44" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="64" cy="21" r="6" fill="#27c93f"/>
+  <text x="413" y="26" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="13" fill="#7d8893">make demo — substation</text>
+  <g font-family="ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="15" fill="#c4cdd6">
+    <text xml:space="preserve" x="26" y="60.0"><tspan fill="#56d364" font-weight="700">$</tspan><tspan fill="#eef3f7" font-weight="700"> make demo</tspan></text>
+    <text xml:space="preserve" x="26" y="103.0"><tspan fill="#56d4dd" font-weight="700">substation</tspan><tspan fill="#8b95a1"> demo — Tier-1 loop: generate -&gt; detect -&gt; report (pure Python)</tspan></text>
+    <text xml:space="preserve" x="26" y="146.0"><tspan fill="#56d4dd" font-weight="700">[benign   ]</tspan><tspan fill="#c4cdd6"> benign-baseline                    18 events -&gt; </tspan><tspan fill="#56d364">quiet (no hits)</tspan></text>
+    <text xml:space="preserve" x="26" y="167.5"><tspan fill="#e3b341" font-weight="700">[anomalous]</tspan><tspan fill="#c4cdd6"> anomalous-m1-unauthorized-write    10 events -&gt; </tspan><tspan fill="#ff7b72" font-weight="700">FIRED</tspan><tspan fill="#c4cdd6"> 2 hit(s) </tspan><tspan fill="#55606c">-&gt; </tspan><tspan fill="#e3b341" font-weight="700">M1</tspan></text>
+    <text xml:space="preserve" x="26" y="189.0"><tspan fill="#e3b341" font-weight="700">[anomalous]</tspan><tspan fill="#c4cdd6"> anomalous-m2-illegal-function       4 events -&gt; </tspan><tspan fill="#ff7b72" font-weight="700">FIRED</tspan><tspan fill="#c4cdd6"> 2 hit(s) </tspan><tspan fill="#55606c">-&gt; </tspan><tspan fill="#e3b341" font-weight="700">M2</tspan></text>
+    <text xml:space="preserve" x="26" y="232.0"><tspan fill="#eef3f7" font-weight="700">ATT&amp;CK-for-ICS coverage map</tspan></text>
+    <text xml:space="preserve" x="26" y="253.5"><tspan fill="#55606c">============================================================</tspan></text>
+    <text xml:space="preserve" x="26" y="275.0"><tspan fill="#8b95a1">  ID   Technique   Tactic                     This run</tspan></text>
+    <text xml:space="preserve" x="26" y="296.5"><tspan fill="#55606c">  ----------------------------------------------------------</tspan></text>
+    <text xml:space="preserve" x="26" y="318.0"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">M1</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T1692.001</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#8b95a1">Impair Process Control</tspan><tspan fill="#c4cdd6">     </tspan><tspan fill="#ff7b72" font-weight="700">● FIRED</tspan></text>
+    <text xml:space="preserve" x="26" y="339.5"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">M2</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T0888</tspan><tspan fill="#c4cdd6">       </tspan><tspan fill="#8b95a1">Discovery</tspan><tspan fill="#c4cdd6">                  </tspan><tspan fill="#ff7b72" font-weight="700">● FIRED</tspan></text>
+    <text xml:space="preserve" x="26" y="361.0"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">M3</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T0846</tspan><tspan fill="#c4cdd6">       </tspan><tspan fill="#8b95a1">Discovery</tspan><tspan fill="#c4cdd6">                  </tspan><tspan fill="#56d364" font-weight="700">○ quiet</tspan></text>
+    <text xml:space="preserve" x="26" y="382.5"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">D1</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T0816</tspan><tspan fill="#c4cdd6">       </tspan><tspan fill="#8b95a1">Inhibit Response Function</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#55606c">·</tspan></text>
+    <text xml:space="preserve" x="26" y="404.0"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">D2</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T1691.002</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#8b95a1">Inhibit Response Function</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#55606c">·</tspan></text>
+    <text xml:space="preserve" x="26" y="425.5"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">D3</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T1692.001</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#8b95a1">Impair Process Control</tspan><tspan fill="#c4cdd6">      </tspan><tspan fill="#55606c">·</tspan></text>
+    <text xml:space="preserve" x="26" y="447.0"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">D4</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T0888</tspan><tspan fill="#c4cdd6">       </tspan><tspan fill="#8b95a1">Discovery</tspan><tspan fill="#c4cdd6">                   </tspan><tspan fill="#55606c">·</tspan></text>
+    <text xml:space="preserve" x="26" y="468.5"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">S1</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T0858</tspan><tspan fill="#c4cdd6">       </tspan><tspan fill="#8b95a1">Execution</tspan><tspan fill="#c4cdd6">                   </tspan><tspan fill="#55606c">·</tspan></text>
+    <text xml:space="preserve" x="26" y="490.0"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">S2</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T0843</tspan><tspan fill="#c4cdd6">       </tspan><tspan fill="#8b95a1">Lateral Movement</tspan><tspan fill="#c4cdd6">            </tspan><tspan fill="#55606c">·</tspan></text>
+    <text xml:space="preserve" x="26" y="511.5"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">S3</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T0888</tspan><tspan fill="#c4cdd6">       </tspan><tspan fill="#8b95a1">Discovery</tspan><tspan fill="#c4cdd6">                   </tspan><tspan fill="#55606c">·</tspan></text>
+    <text xml:space="preserve" x="26" y="533.0"><tspan fill="#c4cdd6">  </tspan><tspan fill="#eef3f7" font-weight="700">X1</tspan><tspan fill="#c4cdd6">   </tspan><tspan fill="#56d4dd">T0846</tspan><tspan fill="#c4cdd6">       </tspan><tspan fill="#8b95a1">Discovery</tspan><tspan fill="#c4cdd6">                  </tspan><tspan fill="#56d364" font-weight="700">○ quiet</tspan></text>
+    <text xml:space="preserve" x="26" y="554.5"><tspan fill="#55606c">============================================================</tspan></text>
+    <text xml:space="preserve" x="26" y="576.0"><tspan fill="#eef3f7" font-weight="700">11</tspan><tspan fill="#8b95a1"> detections </tspan><tspan fill="#55606c">·</tspan><tspan fill="#8b95a1"> </tspan><tspan fill="#eef3f7" font-weight="700">10</tspan><tspan fill="#8b95a1"> ATT&amp;CK techniques </tspan><tspan fill="#55606c">·</tspan><tspan fill="#8b95a1"> </tspan><tspan fill="#eef3f7" font-weight="700">5</tspan><tspan fill="#8b95a1"> tactics </tspan><tspan fill="#55606c">·</tspan><tspan fill="#8b95a1"> </tspan><tspan fill="#eef3f7" font-weight="700">2</tspan><tspan fill="#8b95a1"> fired this run</tspan></text>
+    <text xml:space="preserve" x="26" y="619.0"><tspan fill="#8b95a1" font-weight="700">Result:</tspan><tspan fill="#8b95a1"> </tspan><tspan fill="#56d364">quiet</tspan><tspan fill="#8b95a1"> on the benign baseline; </tspan><tspan fill="#ff7b72">fired 2 detection(s)</tspan><tspan fill="#8b95a1"> on the anomalies </tspan><tspan fill="#e3b341" font-weight="700">(M1, M2)</tspan><tspan fill="#8b95a1">.</tspan></text>
+    <rect x="795.0" y="606.0" width="9" height="16" fill="#56d364">
+      <animate attributeName="opacity" values="1;1;0;0" dur="1.1s" repeatCount="indefinite"/>
+    </rect>
+  </g>
 </svg>
