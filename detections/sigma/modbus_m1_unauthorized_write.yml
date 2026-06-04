@@ -1,0 +1,61 @@
+# =============================================================================
+# Substation detection M1 — Unauthorized Modbus register/coil write
+# =============================================================================
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Rationale, data source and the full false-positive profile live in
+# detections/docs/M1-unauthorized-write.md (the Detection Contract doc, §6.6).
+#
+# Allow-list-by-SOURCE, not "any write": engineers legitimately write setpoints,
+# so a write-only rule is pure false positives (PRD.md §8). The benign baseline
+# models the legitimate writers this rule must stay quiet on.
+# -----------------------------------------------------------------------------
+title: Modbus Write From Unauthorized Source
+id: ecee7c3a-9d40-4ca2-92c1-7df770ed84d7
+status: experimental
+description: |
+  A Modbus write-class function (write single/multiple coils or registers,
+  mask-write, read/write-multiple) issued from a source host that is NOT on the
+  allow-list of permitted writers (HMI/EWS). Substation detection M1
+  (PRD.md §5.1): an unauthorized command message that can change PLC state. The
+  rule allow-lists by source — not "any write" — so legitimate engineering writes
+  stay quiet (the OT-realism guardrail, PRD.md §8).
+references:
+  - https://attack.mitre.org/techniques/T1692/001/
+  - https://attack.mitre.org/techniques/T0836/
+  - PRD.md §5.1 (M1); detections/docs/M1-unauthorized-write.md
+author: Substation
+date: 2026-06-04
+logsource:
+  product: ot
+  service: modbus
+detection:
+  # A write-class command on the request side. action_class normalizes every
+  # Modbus write function to `write` (docs/schema.md), so the rule covers single
+  # and multiple coil/register writes, mask-write and read/write-multiple without
+  # enumerating codes. direction: request keys on the command itself (one hit per
+  # write) — conn.orig_h is the writer on the request.
+  modbus_write_request:
+    proto: modbus
+    direction: request
+    action_class: write
+  # Permitted writers (the allow-list the benign baseline establishes).
+  allowlisted_writers:
+    conn.orig_h:
+      - '10.0.0.10' # hmi-1 — operator HMI (reads + sanctioned setpoint writes)
+      - '10.0.0.11' # ews-1 — engineering workstation (setpoint writes)
+  condition: modbus_write_request and not allowlisted_writers
+fields:
+  - conn.orig_h
+  - func_name
+  - detail.unit
+  - detail.address
+falsepositives:
+  - A new or relocated HMI/EWS whose address is not yet in the writer allow-list
+    — keep the allow-list current as assets change.
+  - A maintenance laptop performing sanctioned writes from an unlisted address —
+    pre-authorize it (add it to the allow-list for the maintenance window).
+level: high
+tags:
+  - attack.impair-process-control
+  - attack.t1692.001
+  - attack.t0836

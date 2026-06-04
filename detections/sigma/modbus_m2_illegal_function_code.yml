@@ -1,0 +1,66 @@
+# =============================================================================
+# Substation detection M2 — Illegal / abnormal Modbus function code
+# =============================================================================
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Rationale, data source and the full false-positive profile live in
+# detections/docs/M2-illegal-function-code.md (the Detection Contract doc, §6.6).
+#
+# Keys on the function code / exception itself, NOT on source or request volume:
+# reserved/undefined codes surface as action_class `other` (docs/schema.md), and
+# a compliant outstation answers an unsupported function or bad address with an
+# exception whose name the envelope carries in `error`.
+# -----------------------------------------------------------------------------
+title: Modbus Illegal Or Abnormal Function Code
+id: 54731414-74bd-4d44-b00d-691c754150cf
+status: experimental
+description: |
+  A Modbus request carrying a reserved/undefined function code, or an exception
+  response indicating illegal-function / illegal-data-address probing. Substation
+  detection M2 (PRD.md §5.1): function-code probing / enumeration of which
+  functions and addresses a device supports. Keys on the code/exception itself,
+  not on source allow-listing or request volume.
+references:
+  - https://attack.mitre.org/techniques/T0888/
+  - PRD.md §5.1 (M2); detections/docs/M2-illegal-function-code.md
+author: Substation
+date: 2026-06-04
+logsource:
+  product: ot
+  service: modbus
+detection:
+  # A request whose function code is reserved/undefined: no standard
+  # read/write/diagnostic class, so docs/schema.md maps it to action_class
+  # `other`. Every supported standard code maps to read/write/diagnostic, so
+  # `other` on a request is the abnormal-code signal.
+  abnormal_function_code:
+    proto: modbus
+    direction: request
+    action_class: other
+  # A compliant outstation answers an unsupported function or an out-of-range
+  # address with one of these exceptions. The envelope `error` mirrors ICSNPP
+  # modbus_detailed.exception_code (docs/schema.md), required non-null on a
+  # Modbus exception event.
+  illegal_function_exception:
+    proto: modbus
+    is_exception: true
+    error:
+      - 'ILLEGAL_FUNCTION'
+      - 'ILLEGAL_DATA_ADDRESS'
+  condition: abnormal_function_code or illegal_function_exception
+fields:
+  - conn.orig_h
+  - func_code
+  - func_name
+  - error
+falsepositives:
+  - A benign but misconfigured client reading a slightly-too-large register range
+    draws a single ILLEGAL_DATA_ADDRESS — a low-rate, self-correcting event. In
+    environments with chatty off-by-one clients, drop the ILLEGAL_DATA_ADDRESS
+    value; the ILLEGAL_FUNCTION and abnormal-code arms still fire.
+  - A master speaking a vendor-specific function extension the field-map does not
+    classify can surface as action_class `other` — confirm the code's meaning
+    before treating it as recon.
+level: medium
+tags:
+  - attack.discovery
+  - attack.t0888
