@@ -1,0 +1,91 @@
+# =============================================================================
+# Substation detection registry — the machine-readable detection metadata index
+# =============================================================================
+# This file is the single, authoritative metadata source for every shipped
+# detection (the Detection Contract's "coverage-map entry", PRD.md §6.6). The
+# pytest harness (tests/test_detection_contract.py) and the coverage generator
+# (substation/coverage) both read it — so the coverage map and Navigator layer are
+# GENERATED from this metadata and can never drift from the detections
+# (PRD.md §6.7). Authored here; never hand-edit the generated coverage/ outputs.
+#
+# Each entry links a detection ID (e.g. M1 — the ID scenarios reference in their
+# `exercises:` blocks) to its authored rule, engine/tier, protocol, lifecycle
+# status, owning doc, and its VERIFIED ATT&CK-for-ICS mapping.
+#
+# VERIFY gate (CLAUDE.md): every `attack` mapping below was confirmed against the
+# live ATT&CK-for-ICS matrix on 2026-06-04 and is recorded per-detection in
+# detections/docs/. Never invent technique IDs from memory.
+#
+# Fields (all required unless noted):
+#   id          detection ID, matches scenario `exercises:` entries.
+#   title       short human title.
+#   protocol    modbus | dnp3 | s7comm  (the closed v1 set, PRD.md §5).
+#   engine      sigma | zeek | suricata  (the authored rule's engine, PRD.md §6.5).
+#   tier        1 = Tier-1 Sigma-over-JSON (the harness evaluates it directly);
+#               2 = Tier-2 (Zeek/Suricata over PCAP; validated by the Tier-2 runner).
+#   status      validated  — Tier-1 fire AND quiet both proven by the harness.
+#               partial    — quiet proven; fire awaits an emitter/harness extension.
+#               tier2      — executes in Tier 2; fire/quiet proven by the Tier-2 runner.
+#   rule        repo-relative path to the authored rule.
+#   doc         repo-relative path to the Detection Contract doc (engine rationale +
+#               data source + false-positive profile).
+#   attack      tactic (name) + tactic_id (TAxxxx) + techniques [{id, name}];
+#               the first technique is the primary mapping.
+# -----------------------------------------------------------------------------
+
+detections:
+  - id: M1
+    title: Unauthorized register/coil write
+    protocol: modbus
+    engine: sigma
+    tier: 1
+    status: validated
+    rule: detections/sigma/modbus_m1_unauthorized_write.yml
+    doc: detections/docs/M1-unauthorized-write.md
+    attack:
+      tactic: Impair Process Control
+      tactic_id: TA0106
+      techniques:
+        - id: T1692.001
+          name: "Unauthorized Message: Command Message"
+        - id: T0836
+          name: Modify Parameter
+
+  - id: M2
+    title: Illegal / abnormal function code
+    protocol: modbus
+    engine: sigma
+    tier: 1
+    # quiet-on-benign is proven today; the fire-on-anomaly scenario uses an
+    # undefined function code (0x09) the current emitter does not yet encode, so
+    # the harness skips that one assertion until the emitter extension lands
+    # (see scenarios/modbus/anomalous-m2-illegal-function.yaml + the M2 doc).
+    status: partial
+    rule: detections/sigma/modbus_m2_illegal_function_code.yml
+    doc: detections/docs/M2-illegal-function-code.md
+    attack:
+      tactic: Discovery
+      tactic_id: TA0102
+      techniques:
+        - id: T0888
+          name: Remote System Information Discovery
+
+  - id: M3
+    title: Function-code / unit-ID sweep
+    protocol: modbus
+    engine: zeek
+    tier: 2
+    # The Modbus slice's mandated Zeek rail (PRD.md §6.5). The Tier-1 Sigma harness
+    # cannot execute Zeek, so its fire/quiet runs in the Tier-2 runner (Phase 2);
+    # the harness still enforces M3's contract linkage (rule + fire/quiet scenarios).
+    status: tier2
+    rule: detections/zeek/modbus_m3_unit_function_sweep.zeek
+    doc: detections/docs/M3-unit-function-sweep.md
+    attack:
+      tactic: Discovery
+      tactic_id: TA0102
+      techniques:
+        - id: T0846
+          name: Remote System Discovery
+        - id: T0888
+          name: Remote System Information Discovery

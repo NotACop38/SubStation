@@ -10,8 +10,8 @@ SRC := substation tests
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev ci format format-check lint type test schema security \
-        demo verify release hooks clean
+.PHONY: help dev ci format format-check lint type test schema coverage-build \
+        coverage-check security demo verify release hooks clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -24,10 +24,9 @@ dev: ## Install the package with dev tooling (pinned)
 ## ---------------------------------------------------------------------------
 ## CI — the local gate. Run this after any change; it must pass before "done".
 ## ---------------------------------------------------------------------------
-ci: format-check lint type test schema ## Run the full local CI gate
-	@echo "--- [placeholder] detection harness (Tier 1 generate->detect->report) — Phase 1"
+ci: format-check lint type test schema coverage-build ## Run the full local CI gate
+	@echo "--- detection harness (Tier 1 generate->detect->report) runs under 'test'"
 	@echo "--- [placeholder] security (bandit + pip-audit) — wire via 'make security' in Phase 2"
-	@echo "--- [placeholder] coverage-build (ATT&CK-for-ICS coverage map) — Phase 1/2"
 	@echo "ci: OK"
 
 format: ## Auto-format the codebase (ruff)
@@ -47,6 +46,12 @@ test: ## Run unit tests (pytest)
 
 schema: ## Validate emitted .jsonl events against the frozen event-log JSON Schema
 	$(PY) -m substation.schema
+
+coverage-build: ## Generate the ATT&CK-for-ICS coverage map + Navigator layer (from the registry)
+	$(PY) -m substation.coverage
+
+coverage-check: ## Verify a committed coverage snapshot matches the registry (drift gate)
+	$(PY) -m substation.coverage --check
 
 security: ## Security audit: bandit (code) + pip-audit (deps)
 	bandit -q -r $(PKG)
