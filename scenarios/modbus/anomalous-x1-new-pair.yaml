@@ -1,0 +1,87 @@
+# =============================================================================
+# Anomalous (X1) — cross-protocol baseline deviation: NEW ASSET PAIR
+# =============================================================================
+# X1 (PRD.md §5.4): a source/destination/function combination not in the learned
+# baseline. This scenario exercises the middle deviation class — a NEW ASSET PAIR
+# for a KNOWN talker (lateral movement to an asset that talker never legitimately
+# spoke to). It is distinct from anomalous-x1-new-talker.yaml: there the source
+# itself is unbaselined (and `observe()` reports `new_talker`, which takes
+# precedence over `new_pair`); HERE the source is a baselined, legitimate talker
+# (hmi-1) that reaches a PLC it has never talked to (plc-2), so the
+# highest-precedence novelty is `new asset pair`, not `new talker`. Without this
+# scenario the new-pair branch has no fire coverage.
+#
+# The talker only READS the new PLC (no writes, all legal codes), so it stays
+# quiet on M1 and M2: the signal is purely "this known host reached an asset it
+# never legitimately reached", not any malicious function.
+#
+# Learned baseline (derived from scenarios/*/benign-baseline.yaml and injected
+# into the X1 Zeek script by the Tier-2 runner):
+#   * Known Modbus talkers: hmi-1 10.0.0.10, ews-1 10.0.0.11
+#   * Known pairs:          hmi-1 -> plc-1 (10.0.0.50), ews-1 -> plc-1
+# hmi-1 IS a known talker, but the pair (hmi-1 -> plc-2 10.0.0.51) is NOT in
+# known_pairs -> X1 fires (new asset pair) while NOT firing the new-talker branch.
+# -----------------------------------------------------------------------------
+
+name: anomalous-x1-new-pair
+description: >-
+  A baselined, legitimate talker (hmi-1 10.0.0.10) reaches a PLC it has never
+  talked to in the learned baseline (plc-2 10.0.0.51) amid its normal polling of
+  plc-1 — the lateral-movement signature of a known host reaching a new asset.
+  Fires X1 (cross-protocol baseline deviation — new asset pair, NOT new talker,
+  since hmi-1 is baselined); stays quiet on M1 (no writes) and M2 (legal codes).
+
+protocol: modbus
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: hmi-1            # baselined, allow-listed talker (known to plc-1).
+    role: hmi
+    host: 10.0.0.10
+  - id: plc-1           # the baselined PLC hmi-1 normally polls.
+    role: plc
+    host: 10.0.0.50
+    port: 502
+  - id: plc-2           # NOT in the learned baseline — the new asset (X1).
+    role: plc
+    host: 10.0.0.51
+    port: 502
+
+exchanges:
+  # --- baselined background traffic the detection must NOT flag --------------
+  # hmi-1 -> plc-1 is a known pair with known functions: stays quiet.
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 0.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadInputRegisters
+    offset: 2.0
+    params: { unit_id: 1, address: 0, quantity: 8 }
+
+  # --- the new asset pair (X1): a known talker reaches an unbaselined PLC -----
+  # Reads only — deliberately benign-looking — so the signal is purely
+  # "hmi-1 -> plc-2 is a pair never seen in the baseline" (new asset pair).
+  - source: hmi-1
+    target: plc-2
+    function: ReadHoldingRegisters
+    offset: 4.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+  - source: hmi-1
+    target: plc-2
+    function: ReadCoils
+    offset: 6.0
+    params: { unit_id: 1, address: 0, quantity: 16 }
+
+exercises:
+  fires:
+    - X1   # hmi-1 is a known talker, but hmi-1 -> plc-2 is a new asset pair.
+  quiet:
+    - M1   # only reads — no write functions at all.
+    - M2   # every function code is legal/standard Modbus.

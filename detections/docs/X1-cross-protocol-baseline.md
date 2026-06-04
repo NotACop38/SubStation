@@ -121,13 +121,21 @@ baseline):
 - [`dnp3/benign-baseline.yaml`](../../scenarios/dnp3/benign-baseline.yaml)
 - [`s7/benign-baseline.yaml`](../../scenarios/s7/benign-baseline.yaml)
 
-Fires, across **two** protocols and covering **all three** deviation classes:
+Fires, across **two** protocols, with **one scenario per deviation class** (each
+isolates its class — recall the precedence talker > pair > function, so the class
+under test must be the *highest*-precedence novelty in its scenario):
 
-- [`modbus/anomalous-x1-new-talker.yaml`](../../scenarios/modbus/anomalous-x1-new-talker.yaml)
-  — an unbaselined host (`10.0.0.123`) originates Modbus reads to the PLC: a **new
-  talker** (and therefore a new pair) alongside the baselined HMI/EWS polling.
-- [`dnp3/anomalous-x1-new-function.yaml`](../../scenarios/dnp3/anomalous-x1-new-function.yaml)
-  — the **baselined** master/outstation pair, which has only ever read, issues a
+- **New talker** — [`modbus/anomalous-x1-new-talker.yaml`](../../scenarios/modbus/anomalous-x1-new-talker.yaml):
+  an unbaselined host (`10.0.0.123`) originates Modbus reads to the PLC alongside
+  the baselined HMI/EWS polling. The source is not in `known_talkers`, so it
+  reports as a **new talker**.
+- **New asset pair** — [`modbus/anomalous-x1-new-pair.yaml`](../../scenarios/modbus/anomalous-x1-new-pair.yaml):
+  a **baselined** talker (`hmi-1`) reaches a PLC it has never talked to (`plc-2`).
+  Because `hmi-1` *is* in `known_talkers`, the new-talker branch does not fire and
+  the highest-precedence novelty is the **new asset pair** — the branch the
+  new-talker scenario cannot reach.
+- **New function for a known pair** — [`dnp3/anomalous-x1-new-function.yaml`](../../scenarios/dnp3/anomalous-x1-new-function.yaml):
+  the **baselined** master/outstation pair, which has only ever read, issues a
   function never seen for that pair: a **new function for a known pair**.
 
 The baseline for the anomalous runs is the union of the benign baselines; the

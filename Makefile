@@ -24,7 +24,7 @@ dev: ## Install the package with dev tooling (pinned)
 ## ---------------------------------------------------------------------------
 ## CI — the local gate. Run this after any change; it must pass before "done".
 ## ---------------------------------------------------------------------------
-ci: format-check lint type test schema coverage-build ## Run the full local CI gate
+ci: format-check lint type test schema coverage-check ## Run the full local CI gate
 	@echo "--- detection harness (Tier 1 generate->detect->report) runs under 'test'"
 	@echo "--- [placeholder] security (bandit + pip-audit) — wire via 'make security' in Phase 2"
 	@echo "ci: OK"
