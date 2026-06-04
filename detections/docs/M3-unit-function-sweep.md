@@ -53,10 +53,14 @@ Zeek's **base** Modbus analyzer (no ICSNPP dependency required):
 
 ## Detection logic
 
-Per `(source, PLC)` pair, within a sliding `sweep_window` (default 60 s):
-accumulate the set of distinct function codes and the set of distinct unit IDs
-seen on **request** messages, then raise the `ModbusSweep::Sweep` notice (once
-per pair per window) when either crosses its threshold.
+Per `(source, PLC)` pair, within a `sweep_window` (default 60 s, measured from
+first contact): accumulate the set of distinct function codes and the set of
+distinct unit IDs seen on **request** messages, then raise the
+`ModbusSweep::Sweep` notice when either crosses its threshold. Alert suppression
+("once per sweep episode") lives in the **same** per-pair state record as the
+diversity sets and expires with it, so when the window resets the suppression
+resets too — a genuinely new sweep after the reset re-alerts rather than being
+masked by a timer started at the previous alert.
 
 | Knob (`&redef`) | Default | Meaning |
 |---|---|---|

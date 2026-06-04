@@ -51,16 +51,26 @@ export {
 	const unit_id_threshold = 3 &redef;
 }
 
-# Distinct function codes seen per (source, PLC), expired `sweep_window` after the
-# pair is first seen so the detector measures diversity within a window.
-global funcs_seen: table[addr, addr] of set[count] &create_expire = sweep_window;
+# Per (source, PLC) state for one diversity window: the distinct function codes
+# and unit IDs seen, plus whether we have already alerted this window.
+#
+# The `alerted` flag lives in the SAME record as the diversity sets, and the
+# whole entry expires `sweep_window` after first contact (&create_expire below),
+# so alert suppression is tied to the diversity window: when the window resets,
+# the flag resets with it. A genuinely new sweep that starts after the reset
+# re-alerts — it is not masked by a suppression timer that began at the previous
+# alert (which could sit late in the window and outlive the diversity reset).
+type SweepState: record {
+	funcs: set[count];
+	units: set[count];
+	alerted: bool &default = F;
+};
 
-# Distinct unit IDs seen per (source, PLC); same window semantics.
-global units_seen: table[addr, addr] of set[count] &create_expire = sweep_window;
-
-# (source, PLC) pairs already alerted this window — one notice per sweep, so a
-# continuing sweep does not spam and a benign pair is never revisited.
-global reported: set[addr, addr] &create_expire = sweep_window;
+# Keyed per (source, PLC); the entry — and with it the `alerted` flag — expires
+# `sweep_window` after the pair is first seen. &create_expire counts from
+# creation only: the per-request `add`s below do not extend it, which is exactly
+# the "diversity within a window from first contact" semantics we want.
+global sweeps: table[addr, addr] of SweepState &create_expire = sweep_window;
 
 event modbus_message(c: connection, headers: ModbusHeaders, is_orig: bool)
 	{
@@ -72,33 +82,31 @@ event modbus_message(c: connection, headers: ModbusHeaders, is_orig: bool)
 	local src = c$id$orig_h;
 	local plc = c$id$resp_h;
 
-	# Aggregates are reference types in Zeek, so the locals below alias the sets
-	# stored in the tables; `add` through them mutates the stored diversity sets.
-	if ( [src, plc] !in funcs_seen )
-		funcs_seen[src, plc] = set();
-	if ( [src, plc] !in units_seen )
-		units_seen[src, plc] = set();
+	if ( [src, plc] !in sweeps )
+		sweeps[src, plc] = SweepState($funcs = set(), $units = set());
 
-	local fcodes = funcs_seen[src, plc];
-	local funits = units_seen[src, plc];
-	add fcodes[headers$function_code];
-	add funits[headers$uid];
+	# Records are reference types, so mutating `st` updates the stored entry.
+	local st = sweeps[src, plc];
+	add st$funcs[headers$function_code];
+	add st$units[headers$uid];
 
-	# Already alerted on this pair within the window — stay quiet.
-	if ( [src, plc] in reported )
+	# Already alerted this window — one notice per sweep episode.
+	if ( st$alerted )
 		return;
 
-	local n_funcs = |fcodes|;
-	local n_units = |funits|;
+	local n_funcs = |st$funcs|;
+	local n_units = |st$units|;
 
 	if ( n_funcs >= func_code_threshold || n_units >= unit_id_threshold )
 		{
-		add reported[src, plc];
+		st$alerted = T;
+		# No $identifier: the Notice framework's default suppression interval
+		# (≈1h) would outlive sweep_window and re-introduce exactly the gap we
+		# avoid above. The window-aligned `alerted` flag is the sole dedup.
 		NOTICE([$note = Sweep,
 		        $conn = c,
 		        $msg = fmt("Modbus function-code/unit-ID sweep: source %s touched %d distinct function codes and %d distinct unit IDs on %s",
 		                   src, n_funcs, n_units, plc),
-		        $sub = fmt("func_codes=%d unit_ids=%d", n_funcs, n_units),
-		        $identifier = fmt("%s-%s", src, plc)]);
+		        $sub = fmt("func_codes=%d unit_ids=%d", n_funcs, n_units)]);
 		}
 	}
