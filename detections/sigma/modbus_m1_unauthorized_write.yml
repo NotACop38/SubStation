@@ -5,20 +5,26 @@
 # Rationale, data source and the full false-positive profile live in
 # detections/docs/M1-unauthorized-write.md (the Detection Contract doc, §6.6).
 #
-# Allow-list-by-SOURCE, not "any write": engineers legitimately write setpoints,
-# so a write-only rule is pure false positives (PRD.md §8). The benign baseline
-# models the legitimate writers this rule must stay quiet on.
+# Allow-list by SOURCE + UNIT + REGISTER, not "any write": engineers legitimately
+# write setpoints, so a write-only rule is pure false positives (PRD.md §8). A
+# write is in-policy only when it comes from an allow-listed writer (HMI/EWS) AND
+# targets the permitted unit AND a writable setpoint register; a write that fails
+# any of these — a non-allow-listed source, OR an allow-listed source straying to
+# an out-of-policy unit/register — is unauthorized and fires (PRD.md §5.1).
 # -----------------------------------------------------------------------------
 title: Modbus Write From Unauthorized Source
 id: ecee7c3a-9d40-4ca2-92c1-7df770ed84d7
 status: experimental
 description: |
   A Modbus write-class function (write single/multiple coils or registers,
-  mask-write, read/write-multiple) issued from a source host that is NOT on the
-  allow-list of permitted writers (HMI/EWS). Substation detection M1
-  (PRD.md §5.1): an unauthorized command message that can change PLC state. The
-  rule allow-lists by source — not "any write" — so legitimate engineering writes
-  stay quiet (the OT-realism guardrail, PRD.md §8).
+  mask-write, read/write-multiple) that is not an in-policy setpoint write.
+  Substation detection M1 (PRD.md §5.1): an unauthorized command message that can
+  change PLC state. A write is in-policy only when it comes from an allow-listed
+  writer (HMI/EWS) to the permitted unit and a writable setpoint register; a write
+  failing any of those — a non-allow-listed source, OR an allow-listed source
+  straying to an out-of-policy unit/register — fires. Allow-listing by
+  source/unit/register, not "any write", keeps legitimate engineering writes quiet
+  (the OT-realism guardrail, PRD.md §8).
 references:
   - https://attack.mitre.org/techniques/T1692/001/
   - https://attack.mitre.org/techniques/T0836/
@@ -30,20 +36,38 @@ logsource:
   service: modbus
 detection:
   # A write-class command on the request side. action_class normalizes every
-  # Modbus write function to `write` (docs/schema.md), so the rule covers single
-  # and multiple coil/register writes, mask-write and read/write-multiple without
+  # Modbus write function to `write` (docs/schema.md), so this covers single and
+  # multiple coil/register writes, mask-write and read/write-multiple without
   # enumerating codes. direction: request keys on the command itself (one hit per
   # write) — conn.orig_h is the writer on the request.
   modbus_write_request:
     proto: modbus
     direction: request
     action_class: write
-  # Permitted writers (the allow-list the benign baseline establishes).
-  allowlisted_writers:
+  # An in-policy setpoint write: allow-listed writer AND permitted unit AND a
+  # writable setpoint register (all three must hold). A write that fails ANY of
+  # these is unauthorized — including an allow-listed source straying off-policy
+  # (PRD.md §5.1: "or to a register/unit outside policy").
+  in_policy_write:
     conn.orig_h:
-      - '10.0.0.10' # hmi-1 — operator HMI (reads + sanctioned setpoint writes)
-      - '10.0.0.11' # ews-1 — engineering workstation (setpoint writes)
-  condition: modbus_write_request and not allowlisted_writers
+      - '10.0.0.10' # hmi-1 — operator HMI
+      - '10.0.0.11' # ews-1 — engineering workstation
+    detail.unit: 1 # plc-1's permitted unit id
+    # Writable setpoint registers 40–49 (holding-register space). Enumerated as
+    # values, not a range modifier, so the Tier-1 offline evaluator (spike 03)
+    # matches it today; identical semantics for this contiguous range.
+    detail.address:
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 45
+      - 46
+      - 47
+      - 48
+      - 49
+  condition: modbus_write_request and not in_policy_write
 fields:
   - conn.orig_h
   - func_name
@@ -52,8 +76,11 @@ fields:
 falsepositives:
   - A new or relocated HMI/EWS whose address is not yet in the writer allow-list
     — keep the allow-list current as assets change.
+  - A newly commissioned setpoint register outside 40–49, or a second legitimate
+    unit, not yet reflected in policy — update the in-policy unit/register set
+    when the process design changes.
   - A maintenance laptop performing sanctioned writes from an unlisted address —
-    pre-authorize it (add it to the allow-list for the maintenance window).
+    pre-authorize it (add it for the maintenance window).
 level: high
 tags:
   - attack.impair-process-control

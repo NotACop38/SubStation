@@ -1,0 +1,74 @@
+# =============================================================================
+# Anomalous (M1) — in-policy SOURCE, OUT-OF-POLICY unit / register
+# =============================================================================
+# Companion to anomalous-m1-unauthorized-write.yaml. That scenario covers the
+# SOURCE dimension of M1 (a non-allow-listed writer). This one covers the other
+# half of M1 (PRD.md §5.1: "or to a register/unit outside policy"): an
+# ALLOW-LISTED writer (ews-1, 10.0.0.11) straying outside the permitted
+# unit/register. The source is sanctioned, but the target is not — so M1 must
+# still fire. This is the case the Codex review on PR #7 flagged.
+#
+# Policy recap (benign-baseline.yaml): permitted writers hmi-1 / ews-1; PLC plc-1
+# unit 1; writable setpoint registers 40–49. Here ews-1 writes (a) the wrong unit
+# (2) and (b) an out-of-range register (5) — each an out-of-policy write that the
+# in-policy allow-list (source AND unit AND register) does not cover.
+# -----------------------------------------------------------------------------
+
+name: anomalous-m1-out-of-policy-write
+description: >-
+  An allow-listed engineering workstation (ews-1, 10.0.0.11) issues writes
+  outside policy — to a non-permitted unit (2) and to an out-of-range register
+  (5) — amid normal polling and one legitimate in-policy setpoint write. Fires
+  M1 (unauthorized by target, despite an allow-listed source); stays quiet on M2
+  (legal codes) and M3 (not a sweep).
+
+protocol: modbus
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: hmi-1            # legitimate background polling.
+    role: hmi
+    host: 10.0.0.10
+  - id: ews-1            # allow-listed writer — but straying off-policy here.
+    role: ews
+    host: 10.0.0.11
+  - id: plc-1
+    role: plc
+    host: 10.0.0.50
+    port: 502
+
+exchanges:
+  # --- normal background traffic + one legitimate in-policy write -----------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 0.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+  - source: ews-1
+    target: plc-1
+    function: WriteSingleRegister     # in-policy: unit 1, setpoint register 40.
+    offset: 2.0
+    params: { unit_id: 1, address: 40, value: 1500 }
+
+  # --- out-of-policy writes from the allow-listed EWS (M1) ------------------
+  - source: ews-1
+    target: plc-1
+    function: WriteSingleRegister     # wrong UNIT (2) — outside policy.
+    offset: 4.0
+    params: { unit_id: 2, address: 40, value: 1600 }
+  - source: ews-1
+    target: plc-1
+    function: WriteSingleRegister     # out-of-range REGISTER (5) — outside policy.
+    offset: 6.0
+    params: { unit_id: 1, address: 5, value: 1 }
+
+exercises:
+  fires:
+    - M1   # allow-listed source, but writing an out-of-policy unit/register.
+  quiet:
+    - M2   # every function code is a legal Modbus write.
+    - M3   # two off-policy writes across two units is not a function/unit sweep.
