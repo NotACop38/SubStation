@@ -1,0 +1,57 @@
+# =============================================================================
+# Anomalous (S1) — PLC CPU stop from an unexpected source
+# =============================================================================
+# S1 (PRD.md §5.3): an S7 run-state change (PLC Stop / PLC Control) from a source
+# that is NOT the allow-listed engineering workstation — halting a PLC's CPU
+# changes its operating mode and stops the control program. Allow-list by source
+# (not "any stop"): a sanctioned stop/start from the real EWS is benign, so the
+# scenario keeps a legitimate EWS run-state change alongside the rogue stop to
+# prove the detection discriminates (PRD.md §8).
+#
+# Allow-list recap (see s7-benign-baseline.yaml): permitted EWS is ews-1
+# 10.0.4.10; PLC plc-1 10.0.4.50:102. rogue-1 (10.0.4.66) is NOT allow-listed.
+# -----------------------------------------------------------------------------
+
+name: s7-anomalous-s1-cpu-stop
+description: >-
+  An unexpected source (10.0.4.66, not the allow-listed EWS) issues an S7 PLC Stop
+  to the PLC amid normal HMI polling and a legitimate EWS run-state change. Fires
+  S1 (CPU stop/start from an unexpected source) on exactly the rogue stop; stays
+  quiet on S2 (no program download) and S3 (no enumeration).
+
+protocol: s7comm
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: ews-1          # legitimate, allow-listed engineering workstation.
+    role: ews
+    host: 10.0.4.10
+  - id: rogue-1        # NOT allow-listed — the unexpected stop source (S1).
+    role: master
+    host: 10.0.4.66
+  - id: plc-1
+    role: plc
+    host: 10.0.4.50
+    port: 102
+
+exchanges:
+  # --- normal background traffic the detection must NOT confuse for S1 -------
+  - { source: ews-1, target: plc-1, function: SetupCommunication, offset: 0.0 }
+  - { source: ews-1, target: plc-1, function: ReadSZL, offset: 1.0, params: { szl_id: 0x0011 } }
+  # A legitimate run-state change from the allow-listed EWS: S1 must stay quiet on it.
+  - { source: ews-1, target: plc-1, function: PlcControl, offset: 3.0, params: { service: P_PROGRAM } }
+
+  # --- the CPU stop from the unexpected source (S1) --------------------------
+  - { source: rogue-1, target: plc-1, function: SetupCommunication, offset: 5.0 }
+  - { source: rogue-1, target: plc-1, function: PlcStop, offset: 7.0 }
+
+exercises:
+  fires:
+    - S1   # PLC Stop originates from a non-allow-listed source (10.0.4.66).
+  quiet:
+    - S2   # no program/data-block write or download is issued.
+    - S3   # no module-info/block enumeration sweep.

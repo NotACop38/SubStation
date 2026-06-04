@@ -1,0 +1,67 @@
+# =============================================================================
+# Substation detection S2 — Unauthorized S7 program / data-block write or download
+# =============================================================================
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Rationale, data source and the full false-positive profile live in
+# detections/docs/S2-program-write-download.md (the Detection Contract doc, §6.6).
+#
+# Keys on the program/block-transfer commands + an allow-list of permitted
+# engineering sources, NOT "any write". Plain Write Variable (operator setpoint
+# writes) is deliberately EXCLUDED so routine HMI tag writes never fire this — the
+# OT-realism guardrail (PRD.md §8). A block download (Request/Download Block/Download
+# Ended) or an S7comm-plus object create/set/delete from a source that is not the
+# allow-listed EWS fires.
+# -----------------------------------------------------------------------------
+title: S7 Program / Data-Block Download From Unauthorized Source
+id: 9d8c2f47-1b6e-4a30-8c5d-7e2a9f1b04c6
+status: experimental
+description: |
+  An S7comm program/data-block transfer (Request Download / Download Block / Download
+  Ended) or an S7comm-plus object write (Create Object / Set Variable / Delete Object)
+  from a source that is not the allow-listed engineering workstation. Substation
+  detection S2 (PRD.md §5.3): downloading or modifying program/data blocks replaces the
+  control logic running on the PLC (Program Download). Keyed by transfer command AND
+  source allow-list — and excluding plain operator tag writes — so legitimate
+  engineering downloads and routine HMI writes stay quiet (PRD.md §8).
+references:
+  - https://attack.mitre.org/techniques/T0843/
+  - PRD.md §5.3 (S2); detections/docs/S2-program-write-download.md
+author: Substation
+date: 2026-06-04
+logsource:
+  product: ot
+  service: s7comm
+detection:
+  # An S7 program/block-transfer or S7comm-plus object-write request. func_name
+  # carries the ICSNPP function_name (s7comm.log) / s7comm_plus.log function_name
+  # (docs/schema.md). conn.orig_h is the issuing source on a request.
+  program_transfer:
+    proto: s7comm
+    direction: request
+    func_name:
+      - Request Download
+      - Download Block
+      - Download Ended
+      - Create Object
+      - Set Variable
+      - Delete Object
+  # The permitted engineering source (allow-listed EWS). A program transfer from any
+  # other source is unauthorized (source derived through is_orig, docs/schema.md -> conn).
+  authorized_source:
+    conn.orig_h: '10.0.4.10' # ews-1 — the allow-listed engineering workstation
+  condition: program_transfer and not authorized_source
+fields:
+  - conn.orig_h
+  - func_name
+falsepositives:
+  - A sanctioned engineering download from the allow-listed EWS is handled by the
+    allow-list — the EWS address is listed, so its downloads stay quiet. The benign
+    baseline exercises exactly this and produces 0 hits. Keep the allow-list current.
+  - A new or relocated engineering station whose address is not yet allow-listed will
+    fire on its legitimate downloads — pre-authorize it for the maintenance window.
+  - Plain operator setpoint writes (Write Variable) are intentionally not matched, so
+    routine HMI tag writes never trip this detection.
+level: high
+tags:
+  - attack.lateral-movement
+  - attack.t0843

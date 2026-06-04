@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/notacop38/substation/blob/main/substation/schema/event-log.schema.json",
   "title": "Substation event-log event",
-  "description": "One newline-delimited JSON (.jsonl) protocol event: the normalized envelope (PRD.md §6.3) plus a per-protocol `detail` object modeled on ICSNPP fields. One event per line; this schema validates a single line/object. Modbus `detail` is FROZEN against ICSNPP modbus_detailed.log (docs/spikes/01-icsnpp-modbus-fields.md); DNP3 `detail` is FROZEN against Zeek dnp3.log + ICSNPP dnp3_control.log/dnp3_objects.log (docs/spikes/04-icsnpp-dnp3-fields.md). S7 `detail` stays unconstrained until Phase 4.",
+  "description": "One newline-delimited JSON (.jsonl) protocol event: the normalized envelope (PRD.md §6.3) plus a per-protocol `detail` object modeled on ICSNPP fields. One event per line; this schema validates a single line/object. Modbus `detail` is FROZEN against ICSNPP modbus_detailed.log (docs/spikes/01-icsnpp-modbus-fields.md); DNP3 `detail` is FROZEN against Zeek dnp3.log + ICSNPP dnp3_control.log/dnp3_objects.log (docs/spikes/04-icsnpp-dnp3-fields.md); S7 `detail` is FROZEN against ICSNPP s7comm.log + cotp.log/s7comm_read_szl.log/s7comm_upload_download.log/s7comm_plus.log (docs/spikes/06-icsnpp-s7comm-fields.md).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -103,6 +103,15 @@
       },
       "then": {
         "properties": { "detail": { "$ref": "#/$defs/dnp3_detail" } }
+      }
+    },
+    {
+      "if": {
+        "required": ["proto"],
+        "properties": { "proto": { "const": "s7comm" } }
+      },
+      "then": {
+        "properties": { "detail": { "$ref": "#/$defs/s7comm_detail" } }
       }
     },
     {
@@ -234,6 +243,76 @@
         "object_id_code": { "type": "integer", "minimum": 0, "description": "Object id code (`object_id_code`)." },
         "object_id": { "type": "string", "description": "Object id string (`object_id`)." },
         "object_value": { "type": "string", "description": "Object value (`object_value`)." }
+      }
+    },
+    "s7comm_detail": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "S7 detail modeled on ICSNPP s7comm.log (S7COMM record in icsnpp-s7comm scripts/icsnpp/s7comm/main.zeek; docs/spikes/06-icsnpp-s7comm-fields.md). All fields optional, mirroring the parser's optional record fields. The cotp / read_szl / upload_download / plus sub-objects mirror cotp.log / s7comm_read_szl.log / s7comm_upload_download.log / s7comm_plus.log and are pulled in for the matching message type. function_code/subfunction_code/error_code are logged by ICSNPP as hex strings; counts are integers.",
+      "properties": {
+        "rosctr_code": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Remote Operating Service Control code (s7comm.log rosctr_code)." },
+        "rosctr_name": { "type": "string", "description": "ROSCTR name (rosctr_types): Job-Request / ACK / ACK-Data / User-Data." },
+        "pdu_reference": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Reference linking requests to responses (pdu_reference)." },
+        "function_code": { "type": "string", "minLength": 1, "description": "Parameter function code, hex string (function_code, e.g. 0x05)." },
+        "function_name": { "type": "string", "minLength": 1, "description": "Parameter function name (s7comm_functions[fc] / 'Request:|Response: '+userdata function)." },
+        "subfunction_code": { "type": "string", "description": "User-Data subfunction code (hex string) or PLC-control service string (subfunction_code)." },
+        "subfunction_name": { "type": "string", "description": "User-Data subfunction name or PLC-control service name (subfunction_name)." },
+        "error_class": { "type": "string", "description": "Error class name (s7comm_error_class[error_class]); present on ACK/ACK-Data with an error." },
+        "error_code": { "type": "string", "description": "Error code within the error class, hex string (error_code)." },
+        "cotp": { "$ref": "#/$defs/s7comm_cotp" },
+        "read_szl": { "$ref": "#/$defs/s7comm_read_szl" },
+        "upload_download": { "$ref": "#/$defs/s7comm_upload_download" },
+        "plus": { "$ref": "#/$defs/s7comm_plus" }
+      }
+    },
+    "s7comm_cotp": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ICSNPP cotp.log fields (COTP record) for a COTP PDU. pdu_code is the PDU-type high nibble as a hex string; pdu_name is cotp_pdu_types[pdu].",
+      "properties": {
+        "pdu_code": { "type": "string", "minLength": 1, "description": "COTP PDU type code, hex string (pdu_code, e.g. 0x0e)." },
+        "pdu_name": { "type": "string", "minLength": 1, "description": "COTP PDU type name (pdu_name, e.g. 'CR Connection Request')." }
+      }
+    },
+    "s7comm_read_szl": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ICSNPP s7comm_read_szl.log fields (S7COMM_READ_SZL record) for the Read-SZL function. szl_id/szl_index/return_code are hex strings; szl_id_name = s7comm_szl_id[szl_id & 0xff].",
+      "properties": {
+        "method": { "type": "string", "description": "Request or Response (s7comm_userdata_method[method])." },
+        "szl_id": { "type": "string", "description": "SZL ID, hex string (szl_id, e.g. 0x0011)." },
+        "szl_id_name": { "type": "string", "description": "Meaning of the SZL ID (szl_id_name, e.g. 'Module identification')." },
+        "szl_index": { "type": "string", "description": "SZL index, hex string (szl_index)." },
+        "return_code": { "type": "string", "description": "Return code, hex string (return_code)." },
+        "return_code_name": { "type": "string", "description": "Meaning of the return code (return_code_name, e.g. 'Success')." }
+      }
+    },
+    "s7comm_upload_download": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ICSNPP s7comm_upload_download.log fields (S7COMM_UPLOAD_DOWNLOAD record) for the six program/block transfer functions. NB the README lists function_code/function_status as count, but the record logs function_name/function_status as strings — code wins (spike 06).",
+      "properties": {
+        "rosctr": { "type": "string", "description": "ROSCTR name (rosctr_types[rosctr])." },
+        "function_name": { "type": "string", "description": "Upload/Download function name (s7comm_functions[function_code])." },
+        "function_status": { "type": "string", "description": "Function return status, hex string (function_status)." },
+        "session_id": { "type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Session ID (session_id)." },
+        "blocklength": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Length of the block to upload/download (blocklength)." },
+        "filename": { "type": "string", "description": "Filename of the block to upload/download (filename)." },
+        "block_type": { "type": "string", "description": "Block type (s7comm_block_types, e.g. 'Data Block')." },
+        "block_number": { "type": "string", "description": "Block number (block_number)." },
+        "destination_filesystem": { "type": "string", "description": "Destination filesystem (s7comm_destination_filesystem, e.g. 'Passive')." }
+      }
+    },
+    "s7comm_plus": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ICSNPP s7comm_plus.log fields (S7COMM_PLUS record) for an S7comm-plus PDU. opcode/function_code are hex strings; opcode_name = s7comm_plus_opcodes[opcode]; function_name = s7comm_plus_functions[function_code].",
+      "properties": {
+        "version": { "type": "integer", "minimum": 0, "maximum": 255, "description": "S7comm-plus version (version)." },
+        "opcode": { "type": "string", "minLength": 1, "description": "Opcode code, hex string (opcode, e.g. 0x31)." },
+        "opcode_name": { "type": "string", "description": "Opcode name (opcode_name, e.g. 'Request')." },
+        "function_code": { "type": "string", "description": "Opcode function code, hex string (function_code, e.g. 0x04bb)." },
+        "function_name": { "type": "string", "description": "Opcode function name (function_name, e.g. 'Explore')." }
       }
     }
   }

@@ -1,0 +1,60 @@
+# =============================================================================
+# Anomalous (S3) — module-info / block enumeration (recon)
+# =============================================================================
+# S3 (PRD.md §5.3): reading PLC identity/module info and enumerating blocks
+# (reconnaissance). The signal is DIVERSITY, deliberately NOT request volume:
+# engineering tools legitimately read module identity, so a single Read SZL is
+# benign (the baseline does exactly that). One source sweeping MANY distinct
+# SZL-IDs (module identification, component identification, CPU characteristics,
+# memory/areas, block types, …) plus block listings and an S7comm-plus Explore is
+# the enumeration signature (PRD.md §8 — diversity, not volume).
+#
+# S3 is the S7 slice's Zeek rail (PRD.md §6.5; mirrors Modbus M3 / DNP3 D4): a
+# per-source SZL-ID / recon-function diversity count needs durable state a stateless
+# Sigma field-match cannot express. Its fire/quiet runs in the Tier-2 runner.
+# -----------------------------------------------------------------------------
+
+name: s7-anomalous-s3-enumeration
+description: >-
+  An unexpected source (10.0.4.66) sweeps many distinct module-info SZLs, lists
+  blocks, and runs an S7comm-plus Explore against the PLC — reconnaissance mapping
+  the device's identity and configuration. Fires S3 (enumeration / module-info
+  reads); stays quiet on S1 (no run-state change) and S2 (no program/data-block
+  write or download).
+
+protocol: s7comm
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 1.0
+
+actors:
+  - id: rogue-1        # the enumerating source (S3).
+    role: master
+    host: 10.0.4.66
+  - id: plc-1
+    role: plc
+    host: 10.0.4.50
+    port: 102
+
+exchanges:
+  - { source: rogue-1, target: plc-1, function: SetupCommunication, offset: 0.0 }
+  # A diverse sweep of module-info SZLs (six distinct SZL-IDs) ...
+  - { source: rogue-1, target: plc-1, function: ReadSZL, offset: 1.0, params: { szl_id: 0x0011 } }  # Module identification
+  - { source: rogue-1, target: plc-1, function: ReadSZL, offset: 2.0, params: { szl_id: 0x001c } }  # Component Identification
+  - { source: rogue-1, target: plc-1, function: ReadSZL, offset: 3.0, params: { szl_id: 0x0012 } }  # CPU characteristics
+  - { source: rogue-1, target: plc-1, function: ReadSZL, offset: 4.0, params: { szl_id: 0x0013 } }  # User memory areas
+  - { source: rogue-1, target: plc-1, function: ReadSZL, offset: 5.0, params: { szl_id: 0x0014 } }  # System areas
+  - { source: rogue-1, target: plc-1, function: ReadSZL, offset: 6.0, params: { szl_id: 0x0015 } }  # Block types
+  # ... plus block listings and an S7comm-plus Explore.
+  - { source: rogue-1, target: plc-1, function: ListBlocks, offset: 7.0 }
+  - { source: rogue-1, target: plc-1, function: GetBlockInfo, offset: 8.0 }
+  - { source: rogue-1, target: plc-1, function: Explore, offset: 9.0 }
+
+exercises:
+  fires:
+    - S3   # one source sweeps many distinct module-info SZLs / blocks (diversity).
+  quiet:
+    - S1   # no PLC Stop / PLC Control (run-state change).
+    - S2   # no program/data-block write or download.

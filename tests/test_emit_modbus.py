@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from scapy.layers.inet import TCP
 from scapy.utils import rdpcap
-from substation.emit import EmitError, write_artifacts
+from substation.emit import write_artifacts
 from substation.protocols.modbus import ModbusError
 from substation.scenarios import load_scenario
 from substation.schema import iter_jsonl_errors
@@ -266,11 +266,13 @@ def test_missing_required_param_raises(tmp_path: Path) -> None:
         write_artifacts(scenario, tmp_path)
 
 
-def test_unsupported_protocol_raises(tmp_path: Path) -> None:
-    # DNP3 emits (Phase 3); S7 has no emitter until Phase 4, so it fails clearly.
+def test_all_v1_protocols_are_wired(tmp_path: Path) -> None:
+    # Every v1 protocol now has an emitter (Modbus/DNP3 Phase 1/3, S7 Phase 4); a
+    # valid (empty) S7 scenario emits cleanly rather than hitting the EmitError guard.
     scenario = load_scenario(_write_scenario(tmp_path, _S7_SCENARIO))
-    with pytest.raises(EmitError, match="not yet implemented for s7comm"):
-        write_artifacts(scenario, tmp_path)
+    result = write_artifacts(scenario, tmp_path)
+    assert result.event_count == 0
+    assert result.pcap.exists() and result.jsonl.exists()
 
 
 def test_span_past_address_space_raises(tmp_path: Path) -> None:

@@ -166,3 +166,61 @@ detections:
           name: Remote System Information Discovery
         - id: T0846
           name: Remote System Discovery
+
+  # ---------------------------------------------------------------------------
+  # Siemens S7 (Phase 4). S7comm / S7comm-plus over COTP/TPKT. ATT&CK mappings
+  # verified against the live ATT&CK-for-ICS matrix on 2026-06-04 and recorded
+  # per-detection in detections/docs/. S7comm/-plus have no open spec (PRD.md §9),
+  # so the protocol semantics are grounded in the ICSNPP parser + Wireshark
+  # dissector (docs/spikes/06, /07).
+  # ---------------------------------------------------------------------------
+  - id: S1
+    title: CPU stop/start from unexpected source
+    protocol: s7comm
+    engine: sigma
+    tier: 1
+    status: validated
+    rule: detections/sigma/s7comm_s1_cpu_stop_start.yml
+    doc: detections/docs/S1-cpu-stop-start.md
+    attack:
+      tactic: Execution
+      tactic_id: TA0104
+      techniques:
+        - id: T0858
+          name: Change Operating Mode
+
+  - id: S2
+    title: Program / data-block write or download
+    protocol: s7comm
+    engine: sigma
+    tier: 1
+    status: validated
+    rule: detections/sigma/s7comm_s2_program_write_download.yml
+    doc: detections/docs/S2-program-write-download.md
+    attack:
+      tactic: Lateral Movement
+      tactic_id: TA0109
+      techniques:
+        - id: T0843
+          name: Program Download
+
+  - id: S3
+    title: Enumeration / module-info reads
+    protocol: s7comm
+    engine: zeek
+    tier: 2
+    # The S7 slice's Zeek rail (PRD.md §6.5), mirroring Modbus M3 / DNP3 D4. The
+    # Tier-1 Sigma harness cannot execute Zeek, so its fire/quiet runs in the
+    # Tier-2 runner over PCAP (Phase 2); the harness still enforces S3's contract
+    # linkage (rule + fire/quiet scenarios).
+    status: tier2
+    rule: detections/zeek/s7comm_s3_enumeration.zeek
+    doc: detections/docs/S3-enumeration.md
+    attack:
+      tactic: Discovery
+      tactic_id: TA0102
+      techniques:
+        - id: T0888
+          name: Remote System Information Discovery
+        - id: T0846
+          name: Remote System Discovery

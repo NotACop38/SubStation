@@ -17,13 +17,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from substation.protocols import dnp3, modbus
+from substation.protocols import dnp3, modbus, s7comm
 from substation.scenarios import Protocol, Scenario
 
 from .dnp3_pcap import write_pcap as write_dnp3_pcap
 from .guard import files_only_guard
 from .json_emitter import write_jsonl
 from .pcap_emitter import write_pcap as write_modbus_pcap
+from .s7comm_pcap import write_pcap as write_s7comm_pcap
 
 __all__ = ["EmitError", "EmitResult", "write_artifacts"]
 
@@ -35,8 +36,7 @@ class EmitError(RuntimeError):
 # Per-protocol emission triple: build the shared event list, render an envelope dict
 # per event, and write the protocol-specific PCAP. The event types differ per
 # protocol, so the triple is typed structurally (each protocol's build/render/pcap
-# agree on their own event type). The JSON path is shared (write_jsonl). S7 lands in
-# Phase 4 and is absent here by design.
+# agree on their own event type). The JSON path is shared (write_jsonl).
 _Emitter = tuple[
     Callable[[Scenario], list[Any]],
     Callable[[Any], dict[str, Any]],
@@ -45,6 +45,7 @@ _Emitter = tuple[
 _EMITTERS: dict[Protocol, _Emitter] = {
     Protocol.MODBUS: (modbus.build_events, modbus.event_to_dict, write_modbus_pcap),
     Protocol.DNP3: (dnp3.build_events, dnp3.event_to_dict, write_dnp3_pcap),
+    Protocol.S7COMM: (s7comm.build_events, s7comm.event_to_dict, write_s7comm_pcap),
 }
 
 
@@ -71,7 +72,7 @@ def write_artifacts(scenario: Scenario, out_dir: str | Path) -> EmitResult:
 
     emitter = _EMITTERS.get(scenario.protocol)
     if emitter is None:
-        # The S7 emitter arrives in Phase 4; fail clearly until then.
+        # All v1 protocols are wired; an unknown protocol fails clearly.
         raise EmitError(
             f"emission is not yet implemented for {scenario.protocol.value}; "
             f"scenario {scenario.name!r} (supported: "

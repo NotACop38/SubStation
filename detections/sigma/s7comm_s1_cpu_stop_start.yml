@@ -1,0 +1,59 @@
+# =============================================================================
+# Substation detection S1 — Unauthorized S7 CPU stop / start (run-state change)
+# =============================================================================
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Rationale, data source and the full false-positive profile live in
+# detections/docs/S1-cpu-stop-start.md (the Detection Contract doc, §6.6).
+#
+# Keys on the run-state command + an allow-list of permitted engineering sources,
+# NOT "any stop/start": a sanctioned stop/start from the real EWS is benign, so a
+# command-only rule would be false positives (PRD.md §8). An S7 PLC Stop or PLC
+# Control (P_PROGRAM = PLC Start/Stop) request from a source that is not the
+# allow-listed EWS fires.
+# -----------------------------------------------------------------------------
+title: S7 PLC Run-State Change From Unauthorized Source
+id: 4c5b9e21-7a3d-4e8f-9b1c-2d6f0a8e5c14
+status: experimental
+description: |
+  An S7comm run-state change (PLC Stop, or PLC Control / P_PROGRAM = PLC Start/Stop)
+  issued by a source that is not the allow-listed engineering workstation.
+  Substation detection S1 (PRD.md §5.3): halting or restarting a PLC CPU changes its
+  operating mode and stops the control program. Keyed by run-state command AND source
+  allow-list, not "any stop", so a sanctioned stop/start from the real EWS stays quiet
+  (the OT-realism guardrail, PRD.md §8).
+references:
+  - https://attack.mitre.org/techniques/T0858/
+  - PRD.md §5.3 (S1); detections/docs/S1-cpu-stop-start.md
+author: Substation
+date: 2026-06-04
+logsource:
+  product: ot
+  service: s7comm
+detection:
+  # An S7 run-state command on the request side. func_name carries the ICSNPP
+  # s7comm.log function_name (docs/schema.md); PLC Stop (0x29) and PLC Control (0x28)
+  # are the run-state operations. conn.orig_h is the issuing source on a request.
+  run_state_command:
+    proto: s7comm
+    direction: request
+    func_name:
+      - PLC Stop
+      - PLC Control
+  # The permitted engineering source (allow-listed EWS). A run-state change from any
+  # other source is unauthorized (source derived through is_orig, docs/schema.md -> conn).
+  authorized_source:
+    conn.orig_h: '10.0.4.10' # ews-1 — the allow-listed engineering workstation
+  condition: run_state_command and not authorized_source
+fields:
+  - conn.orig_h
+  - func_name
+falsepositives:
+  - A sanctioned maintenance stop/start issued from the allow-listed EWS is handled by
+    the allow-list — the EWS address is listed, so its run-state changes stay quiet.
+    Keep the allow-list current as engineering stations are added/relocated.
+  - A redundant/standby engineering station performing a failover restart from an
+    unlisted address — pre-authorize it (add it to the control-source allow-list).
+level: high
+tags:
+  - attack.execution
+  - attack.t0858

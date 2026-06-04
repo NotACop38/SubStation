@@ -1,0 +1,62 @@
+# =============================================================================
+# Anomalous (S2) — program / data-block download from an unexpected source
+# =============================================================================
+# S2 (PRD.md §5.3): writing data blocks / downloading program logic to the PLC
+# from a source that is NOT the allow-listed engineering workstation. Downloading
+# a block (Request Download -> Download Block -> Download Ended) or creating/setting
+# an S7comm-plus object replaces or modifies the control program — Program Download
+# (T0843). Allow-list by source (not "any download"): a sanctioned engineering
+# download from the real EWS is benign (it is exercised in the benign baseline), so
+# this scenario keeps legitimate EWS reads alongside the rogue download to prove the
+# detection discriminates (PRD.md §8).
+#
+# Allow-list recap (see s7-benign-baseline.yaml): permitted EWS is ews-1
+# 10.0.4.10; PLC plc-1 10.0.4.50:102. rogue-1 (10.0.4.66) is NOT allow-listed.
+# -----------------------------------------------------------------------------
+
+name: s7-anomalous-s2-program-download
+description: >-
+  An unexpected source (10.0.4.66, not the allow-listed EWS) downloads a program
+  block (Request Download / Download Block / Download Ended) and creates an
+  S7comm-plus object on the PLC amid normal EWS reads. Fires S2 (program/data-block
+  write or download from an unexpected source); stays quiet on S1 (no run-state
+  change) and S3 (no enumeration sweep).
+
+protocol: s7comm
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: ews-1          # legitimate, allow-listed engineering workstation.
+    role: ews
+    host: 10.0.4.10
+  - id: rogue-1        # NOT allow-listed — the unexpected download source (S2).
+    role: master
+    host: 10.0.4.66
+  - id: plc-1
+    role: plc
+    host: 10.0.4.50
+    port: 102
+
+exchanges:
+  # --- normal background traffic the detection must NOT confuse for S2 -------
+  - { source: ews-1, target: plc-1, function: SetupCommunication, offset: 0.0 }
+  - { source: ews-1, target: plc-1, function: ReadVariable, offset: 1.0 }
+
+  # --- the rogue program/data-block download (S2) ----------------------------
+  - { source: rogue-1, target: plc-1, function: SetupCommunication, offset: 3.0 }
+  - { source: rogue-1, target: plc-1, function: RequestDownload, offset: 5.0, params: { block_type: "0A", block_number: "00002" } }
+  - { source: rogue-1, target: plc-1, function: DownloadBlock, offset: 7.0, params: { block_type: "0A", block_number: "00002" } }
+  - { source: rogue-1, target: plc-1, function: DownloadEnded, offset: 9.0 }
+  # S7comm-plus object write (S7-1200/1500-style program/data modification).
+  - { source: rogue-1, target: plc-1, function: CreateObject, offset: 11.0 }
+
+exercises:
+  fires:
+    - S2   # program download + object create from a non-allow-listed source (10.0.4.66).
+  quiet:
+    - S1   # no PLC Stop / PLC Control (run-state change) is issued.
+    - S3   # no module-info/block enumeration sweep.
