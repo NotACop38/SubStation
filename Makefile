@@ -11,7 +11,7 @@ SRC := substation tests
 .DEFAULT_GOAL := help
 
 .PHONY: help dev ci format format-check lint type test schema coverage-build \
-        coverage-check security demo verify release hooks clean
+        coverage-check security demo demo-cast verify release hooks clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -63,6 +63,9 @@ security: ## Security audit: bandit (code) + pip-audit (deps)
 ## ---------------------------------------------------------------------------
 demo: ## Tier-1 one-command demo: generate -> detect -> report (Phase 0 no-op)
 	$(PY) -m substation.cli demo
+
+demo-cast: ## Record `make demo` to an animated SVG/GIF (asciinema + agg; needs a TTY)
+	scripts/record-demo.sh
 
 verify: ## Tier-2 fidelity validation: Zeek/ICSNPP + Suricata (stub)
 	@echo "make verify: Tier-2 validation not yet implemented (Phase 0 stub)."
