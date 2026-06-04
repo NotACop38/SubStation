@@ -9,6 +9,8 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-04
+
 ### Added
 
 - **Modbus vertical slice** — scenario model + strict YAML loader, dual PCAP/JSON

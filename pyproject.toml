@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "substation"
-version = "0.0.0"
+version = "0.1.0"
 description = "Defensive ICS detection-content pack (Modbus/DNP3/S7) with a files-only protocol traffic simulator."
 readme = "README.md"
 requires-python = ">=3.11"
