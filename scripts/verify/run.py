@@ -116,18 +116,42 @@ def _image_present() -> bool:
     return subprocess.run(["docker", "pull", ZEEK_IMAGE]).returncode == 0
 
 
+def _at_commit(dest: Path, commit: str) -> bool:
+    head = subprocess.run(
+        ["git", "-C", str(dest), "rev-parse", "HEAD"], capture_output=True, text=True
+    )
+    return head.returncode == 0 and head.stdout.strip() == commit
+
+
+def _checkout(dest: Path, commit: str) -> bool:
+    if subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode == 0:
+        return True
+    # The pinned commit may not be in a shallow/older cache — fetch it, then retry.
+    subprocess.run(["git", "-C", str(dest), "fetch", "--all", "--tags"], capture_output=True)
+    return subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode == 0
+
+
 def ensure_icsnpp(name: str) -> Path | None:
-    """Return the local ICSNPP scripts dir for ``name`` (clone+pin if absent)."""
+    """Return the local ICSNPP scripts dir for ``name`` at the **pinned** commit.
+
+    On a cache hit the clone is re-verified against the pin and re-checked-out if it
+    drifted (an older/partially-updated cache must not silently run the fidelity
+    golden tests against different analyzer scripts than the commit claims).
+    """
     url, commit = _ICSNPP[name]
     dest = _CACHE / f"icsnpp-{name}"
     scripts = dest / "scripts"
-    if scripts.is_dir():
-        return scripts
+    if (dest / ".git").is_dir():
+        if not _at_commit(dest, commit):
+            print(f"verify: re-pinning cached icsnpp-{name} -> {commit[:10]} ...")
+            if not _checkout(dest, commit):
+                return None
+        return scripts if scripts.is_dir() else None
     _CACHE.mkdir(exist_ok=True)
     print(f"verify: fetching icsnpp-{name} @ {commit[:10]} ...")
     if subprocess.run(["git", "clone", url, str(dest)], capture_output=True).returncode != 0:
         return None
-    if subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode != 0:
+    if not _checkout(dest, commit):
         return None
     return scripts if scripts.is_dir() else None
 
@@ -221,6 +245,12 @@ def _dnp3_log_tuples(logdir: Path) -> Counter[tuple[str, str, str]]:
 
 def fidelity_check(proto: str, results: Results) -> None:
     """Diff emitted JSON vs real Zeek/ICSNPP logs for every scenario of a protocol."""
+    if proto not in _ICSNPP:
+        # Only Modbus/DNP3 have vendored ICSNPP *script* packages; S7comm fidelity
+        # would need the compiled icsnpp-s7comm plugin AND a fidelity mapping that is
+        # not yet wired, so skip explicitly rather than KeyError on _ICSNPP[proto].
+        results.skip(f"fidelity[{proto}]: no vendored ICSNPP scripts / fidelity mapping (not wired)")
+        return
     scripts = ensure_icsnpp(proto)
     if scripts is None:
         results.fail(f"fidelity[{proto}]: could not obtain icsnpp-{proto} scripts")
@@ -243,20 +273,23 @@ def fidelity_check(proto: str, results: Results) -> None:
                 continue
             got = log_tuples(logs)
             shutil.rmtree(logs, ignore_errors=True)
-            # Distinct (src,dst,func) request tuples must match between our JSON and
-            # what real ICSNPP/Zeek decoded from our PCAP.
-            if set(want) == set(got):
+            # Per-message fidelity: the (src,dst,func) request *counts* must match
+            # between our JSON and what real ICSNPP/Zeek decoded from our PCAP, so a
+            # dropped or duplicated repeated message is caught (Counter, not set).
+            if want == got:
                 results.ok(
                     f"fidelity[{proto}] {scenario_file.name}: "
-                    f"{len(set(want))} distinct request tuple(s) match real Zeek"
+                    f"{sum(want.values())} request message(s) match real Zeek "
+                    f"({len(want)} distinct tuple(s))"
                 )
             else:
-                missing = set(want) - set(got)
-                extra = set(got) - set(want)
-                results.fail(
-                    f"fidelity[{proto}] {scenario_file.name}: "
-                    f"JSON-only={sorted(missing)} Zeek-only={sorted(extra)}"
+                deltas = sorted(
+                    (t, want.get(t, 0), got.get(t, 0))
+                    for t in set(want) | set(got)
+                    if want.get(t, 0) != got.get(t, 0)
                 )
+                detail = ", ".join(f"{t}: json={w} zeek={g}" for t, w, g in deltas)
+                results.fail(f"fidelity[{proto}] {scenario_file.name}: count mismatch — {detail}")
 
 
 # --- detection checks --------------------------------------------------------

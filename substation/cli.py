@@ -115,11 +115,20 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     print()
     print(render_coverage_map(all_scenarios, all_hits))
     fired = sorted({h.detection_id for h in all_hits})
-    if fired:
+    is_default_set = args.scenario is None
+    if is_default_set and fired:
+        # The bundled set always pairs the benign baseline with the anomalies.
         print(
             f"\nResult: quiet on the benign baseline; fired {len(fired)} detection(s) on "
             f"the anomalies ({', '.join(fired)})."
         )
+    else:
+        # An explicit --scenario run: summarize only what was actually measured.
+        labels = ", ".join(f"{s.name} ({s.label.value})" for s in all_scenarios)
+        if fired:
+            print(f"\nResult: ran {labels}; fired {len(fired)} detection(s) ({', '.join(fired)}).")
+        else:
+            print(f"\nResult: ran {labels}; no detections fired (quiet).")
     return 0
 
 

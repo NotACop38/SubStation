@@ -74,12 +74,15 @@ def _abnormal_request_pdu(event: ModbusEvent) -> Any:
 
     The PDU is the function-code byte followed by the optional address/quantity
     span; scapy decodes it as a User-Defined Function Code Request and the MBAP
-    length is computed automatically.
+    length is computed automatically. The shared model keeps address+quantity as a
+    pair (see ``modbus._abnormal_payload``), so the PCAP body matches the JSON
+    exactly — no silent quantity default here (PRD §6.1).
     """
     body = bytes([event.func_code])
     if event.address is not None:
         body += int(event.address).to_bytes(2, "big")
-        body += int(event.quantity if event.quantity is not None else 1).to_bytes(2, "big")
+        # address present => quantity populated in the shared model.
+        body += int(event.quantity or 0).to_bytes(2, "big")
     return Raw(load=body)
 
 

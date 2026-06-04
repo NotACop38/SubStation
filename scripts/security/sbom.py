@@ -75,7 +75,9 @@ def build_sbom() -> dict[str, Any]:
         "serialNumber": f"urn:uuid:{serial[:8]}-{serial[8:12]}-{serial[12:16]}-{serial[16:20]}-{serial[20:32]}",
         "version": 1,
         "metadata": {
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
             "tools": [{"vendor": "Substation", "name": "sbom.py", "version": "1.0"}],
             "component": {
                 "type": "application",
@@ -91,14 +93,23 @@ def build_sbom() -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, default=_DEFAULT_OUT, help="output path (CycloneDX JSON)")
+    parser.add_argument(
+        "--out", type=Path, default=_DEFAULT_OUT, help="output path (CycloneDX JSON)"
+    )
     args = parser.parse_args()
 
     sbom = build_sbom()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     # timestamp varies run-to-run; everything else is deterministic.
     args.out.write_text(json.dumps(sbom, indent=2) + "\n", encoding="utf-8")
-    print(f"sbom: wrote {args.out.relative_to(_REPO_ROOT)} ({len(sbom['components'])} components, CycloneDX 1.5)")
+    # Show a repo-relative path when the output lives in the checkout, else the
+    # absolute path — an --out outside the repo must not raise after a good write.
+    out = args.out.resolve()
+    try:
+        shown = out.relative_to(_REPO_ROOT)
+    except ValueError:
+        shown = out
+    print(f"sbom: wrote {shown} ({len(sbom['components'])} components, CycloneDX 1.5)")
     return 0
 
 
