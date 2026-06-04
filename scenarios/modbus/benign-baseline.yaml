@@ -46,6 +46,10 @@ actors:
     port: 502
 
 exchanges:
+  # Exchanges are listed in chronological (monotonic-offset) order: write_jsonl
+  # emits in file order while write_pcap sorts packets by timestamp, so keeping
+  # offsets monotonic keeps the JSON log and the PCAP in lockstep (PRD.md §6.1).
+
   # --- continuous HMI polling: the steady SCADA read cadence ----------------
   - source: hmi-1
     target: plc-1
@@ -62,6 +66,15 @@ exchanges:
     function: ReadHoldingRegisters
     offset: 4.0
     params: { unit_id: 1, address: 0, quantity: 10 }
+
+  # --- EWS periodic supervisory poll (interleaved into the HMI cadence) ------
+  - source: ews-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 5.0
+    params: { unit_id: 1, address: 40, quantity: 10 }
+
+  # --- HMI polling continues ------------------------------------------------
   - source: hmi-1
     target: plc-1
     function: ReadCoils
@@ -72,13 +85,6 @@ exchanges:
     function: ReadHoldingRegisters
     offset: 8.0
     params: { unit_id: 1, address: 0, quantity: 10 }
-
-  # --- EWS periodic supervisory poll ----------------------------------------
-  - source: ews-1
-    target: plc-1
-    function: ReadHoldingRegisters
-    offset: 5.0
-    params: { unit_id: 1, address: 40, quantity: 10 }
 
   # --- legitimate setpoint writes from the allow-listed EWS -----------------
   # In-policy: allow-listed source, unit 1, writable setpoint registers 40–49.

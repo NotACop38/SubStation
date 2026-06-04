@@ -18,7 +18,11 @@
 # Protocol spec (v1.1b3, PRD.md §9). The current emitter encodes only the eight
 # standard read/write codes; emitting undefined codes + their ILLEGAL_FUNCTION
 # exception responses is the emitter extension that lands with the M2 detection
-# (ENGINEERING_CHECKLIST.md Phase 1). This file declares the scenario intent.
+# (ENGINEERING_CHECKLIST.md Phase 1 — still a VERIFY gate: how ICSNPP/Zeek name
+# undefined codes must be confirmed, not invented). This file therefore declares
+# the M2 fire/quiet CONTRACT; it is a forward-looking fixture and is NOT yet part
+# of the emitted set — running the generator over it raises ModbusError by design
+# until that encoder lands. Benign, M1 and M3 scenarios already generate today.
 # -----------------------------------------------------------------------------
 
 name: anomalous-m2-illegal-function
