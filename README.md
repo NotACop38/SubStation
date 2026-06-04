@@ -131,9 +131,11 @@ See [Architecture](#architecture) for the full diagram, and
 ## Coverage
 
 Every detection maps to a **verified** ATT&CK-for-ICS technique ID (confirmed
-against the live matrix, never from memory). The map below is **generated** from
-[`detections/registry.yaml`](detections/registry.yaml) by `make coverage-build` and
-drift-checked by `make ci`, so it can't diverge from the detections:
+against the live matrix, never from memory). The authoritative coverage map —
+[`docs/coverage/`](docs/coverage/) (table, JSON, and Navigator layer) — is
+**generated** from [`detections/registry.yaml`](detections/registry.yaml) by
+`make coverage-build` and drift-checked by `make ci`, so it can't diverge from the
+detections. The graphic and catalogue below are visual snapshots of that generated map:
 
 <div align="center">
   <img src="docs/assets/coverage-matrix.svg" alt="ATT&amp;CK-for-ICS coverage matrix: 5 of 12 tactics covered by 11 detections across 10 techniques — Execution (S1), Discovery (M2, M3, D4, S3, X1), Lateral Movement (S2), Inhibit Response Function (D1, D2), and Impair Process Control (M1, D3)" width="100%">
@@ -278,8 +280,13 @@ that script's header for the one-time install steps.
 
 ## Docs and status
 
-Substation reached its **v0.1.0** release with all five build phases complete
-(`Modbus → DNP3 → S7 → cross-protocol + polish`). The source of truth lives in:
+Substation reached its **v0.1.0** release across all five build phases
+(`Modbus → DNP3 → S7 → cross-protocol + polish`). Every Tier-1 detection is validated
+fire-**and**-quiet, and the Modbus/DNP3 Zeek rails plus X1 are validated in real Zeek
+by `make verify`; the **S7 Zeek rail (S3) and X1's S7 path** are contract-complete, but
+their real-engine fire/quiet is gated on the compiled `icsnpp-s7comm` plugin — an honest
+remaining gap tracked in [`docs/launch-readiness.md`](docs/launch-readiness.md). The
+source of truth lives in:
 
 - [`PRD.md`](PRD.md) — product requirements and locked decisions.
 - [`ENGINEERING_CHECKLIST.md`](ENGINEERING_CHECKLIST.md) — phased build plan.
