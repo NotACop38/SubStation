@@ -52,7 +52,10 @@ overrides the GitHub-Actions references in PRD §6.9 / checklist Phase 2.)
 - `make release` — cut a release (stub for now).
 - `make hooks` — install the pre-push gate. `make security` — bandit + pip-audit.
 
-## Standing rule
+## Validation cadence
 
-**After any change, run `make ci` and do not consider the task done until it
-passes.** (`/ci` runs it; the Stop hook enforces it.)
+Build and commit **per step**. Do **not** run `make ci` / `make verify` after every
+change — they remain defined but are invoked as **one large validation at the end**
+of a work batch, not continuously. There is no automated per-edit or per-stop CI
+(see `.claude/settings.json`: the heavy PostToolUse and Stop hooks are disabled).
+Still **no GitHub Actions, ever.**

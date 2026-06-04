@@ -1,0 +1,71 @@
+# =============================================================================
+# Anomalous (M2) — illegal / abnormal function code
+# =============================================================================
+# M2 (PRD.md §5.1): use of a reserved/undefined Modbus function code, or the
+# exception responses (ILLEGAL_FUNCTION / illegal-address) that such probing
+# provokes. This keys on the function code / exception itself (docs/schema.md:
+# detail.exception_code and the `other` action_class for undefined codes), NOT
+# on source allow-listing or request volume.
+#
+# This must fire M2 only:
+#   * M1 stays quiet — an undefined function code is not a recognized WRITE, so
+#     the allow-list write rule does not engage (even from a non-allow-listed
+#     host).
+#   * M3 stays quiet — a single abnormal code is not a function-code/unit-id
+#     SWEEP (one code, one unit; diversity ≈ 1).
+#
+# NOTE: function code 0x09 is reserved/undefined in the Modbus Application
+# Protocol spec (v1.1b3, PRD.md §9). The current emitter encodes only the eight
+# standard read/write codes; emitting undefined codes + their ILLEGAL_FUNCTION
+# exception responses is the emitter extension that lands with the M2 detection
+# (ENGINEERING_CHECKLIST.md Phase 1). This file declares the scenario intent.
+# -----------------------------------------------------------------------------
+
+name: anomalous-m2-illegal-function
+description: >-
+  A host probes the PLC with a reserved/undefined Modbus function code (0x09),
+  the kind of traffic that draws an ILLEGAL_FUNCTION exception. Fires M2
+  (illegal/abnormal function code); stays quiet on M1 (not a write) and M3 (a
+  single abnormal code is not a sweep).
+
+protocol: modbus
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: hmi-1            # legitimate background polling.
+    role: hmi
+    host: 10.0.0.10
+  - id: probe-1         # issues the illegal function code.
+    role: master
+    host: 10.0.0.88
+  - id: plc-1
+    role: plc
+    host: 10.0.0.50
+    port: 502
+
+exchanges:
+  # --- normal background traffic --------------------------------------------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 0.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+
+  # --- the illegal / abnormal function code (M2) ----------------------------
+  # 0x09 is undefined in the Modbus spec; a compliant PLC answers ILLEGAL_FUNCTION.
+  - source: probe-1
+    target: plc-1
+    function: "0x09"
+    offset: 2.0
+    params: { unit_id: 1, address: 0, quantity: 1 }
+
+exercises:
+  fires:
+    - M2   # reserved/undefined function code (and its ILLEGAL_FUNCTION exception).
+  quiet:
+    - M1   # an undefined code is not a recognized write; allow-list rule idle.
+    - M3   # one abnormal code to one unit is not a function/unit sweep.
