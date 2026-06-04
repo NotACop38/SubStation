@@ -14,20 +14,20 @@
 #   * M3 stays quiet — a single abnormal code is not a function-code/unit-id
 #     SWEEP (one code, one unit; diversity ≈ 1).
 #
-# NOTE: function code 0x09 is reserved/undefined in the Modbus Application
-# Protocol spec (v1.1b3, PRD.md §9). The current emitter encodes only the eight
-# standard read/write codes; emitting undefined codes + their ILLEGAL_FUNCTION
-# exception responses is the emitter extension that lands with the M2 detection
-# (ENGINEERING_CHECKLIST.md Phase 1 — still a VERIFY gate: how ICSNPP/Zeek name
-# undefined codes must be confirmed, not invented). This file therefore declares
-# the M2 fire/quiet CONTRACT; it is a forward-looking fixture and is NOT yet part
-# of the emitted set — running the generator over it raises ModbusError by design
-# until that encoder lands. Benign, M1 and M3 scenarios already generate today.
+# VERIFY (closed 2026-06-04): the original draft used function code 0x09, but
+# base Zeek's `Modbus::function_codes` table names 0x09 the legacy "PROGRAM_484"
+# (verified against base/protocols/modbus/consts.zeek) — i.e. 0x09 is a *defined*
+# Modicon function, NOT undefined. A genuinely undefined request code is one
+# absent from that table; this scenario uses 0x42 (66), which Zeek renders
+# `unknown-66` via the table's `&default = fmt("unknown-%d", i)`. The emitter now
+# encodes such undefined codes (action_class `other`) and the ILLEGAL_FUNCTION
+# exception a compliant outstation returns (Modbus Application Protocol spec
+# v1.1b3, PRD.md §9), so this scenario now GENERATES and fires M2 in Tier 1.
 # -----------------------------------------------------------------------------
 
 name: anomalous-m2-illegal-function
 description: >-
-  A host probes the PLC with a reserved/undefined Modbus function code (0x09),
+  A host probes the PLC with a reserved/undefined Modbus function code (0x42),
   the kind of traffic that draws an ILLEGAL_FUNCTION exception. Fires M2
   (illegal/abnormal function code); stays quiet on M1 (not a write) and M3 (a
   single abnormal code is not a sweep).
@@ -60,10 +60,11 @@ exchanges:
     params: { unit_id: 1, address: 0, quantity: 10 }
 
   # --- the illegal / abnormal function code (M2) ----------------------------
-  # 0x09 is undefined in the Modbus spec; a compliant PLC answers ILLEGAL_FUNCTION.
+  # 0x42 (66) is absent from Zeek's Modbus::function_codes table (renders
+  # `unknown-66`); a compliant PLC answers ILLEGAL_FUNCTION.
   - source: probe-1
     target: plc-1
-    function: "0x09"
+    function: "0x42"
     offset: 2.0
     params: { unit_id: 1, address: 0, quantity: 1 }
 

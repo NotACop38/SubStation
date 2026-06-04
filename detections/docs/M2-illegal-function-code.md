@@ -58,20 +58,21 @@ fire when:                   abnormal_function_code OR illegal_function_exceptio
 ## Scenarios
 
 - **Fires:** [`anomalous-m2-illegal-function.yaml`](../../scenarios/modbus/anomalous-m2-illegal-function.yaml)
-  — a host probes the PLC with reserved function code `0x09`, drawing an
-  `ILLEGAL_FUNCTION` exception.
+  — a host probes the PLC with an undefined function code `0x42` (Zeek renders it
+  `unknown-66`), drawing an `ILLEGAL_FUNCTION` exception. Both rule arms fire: the
+  request matches `abnormal_function_code` (`action_class: other`) and the
+  exception response matches `illegal_function_exception`.
 - **Quiet:** [`benign-baseline.yaml`](../../scenarios/modbus/benign-baseline.yaml)
   — only standard read/write codes, no exceptions.
 
-> **Status note.** The M2 scenario is a forward-looking fixture: the current
-> emitter encodes only the eight standard read/write codes, so emitting an
-> undefined code **and** its `ILLEGAL_FUNCTION` exception is the emitter
-> extension that lands alongside M2 (see the header of
-> `anomalous-m2-illegal-function.yaml`). The rule is authored against the frozen
-> schema's `action_class: other` + `error` contract; its fire/quiet test runs
-> once that emitter extension and the harness land (separate
-> `ENGINEERING_CHECKLIST.md` Phase-1 items). The rule itself parses cleanly under
-> the pinned pySigma.
+> **VERIFY note (closed 2026-06-04).** The draft scenario used `0x09`, but base
+> Zeek's `Modbus::function_codes` names `0x09` the legacy **PROGRAM_484** — a
+> *defined* Modicon function, not undefined. A genuinely undefined request code is
+> one absent from that table; the scenario therefore uses `0x42`, which the table's
+> `&default = fmt("unknown-%d", i)` renders `unknown-66`. The emitter now encodes
+> undefined request codes (`action_class: other`) and the `ILLEGAL_FUNCTION`
+> exception a compliant outstation returns, so M2's fire **and** quiet are proven
+> over real emitted telemetry by the Tier-1 harness (registry status `validated`).
 
 ## ATT&CK-for-ICS mapping
 

@@ -1,4 +1,4 @@
-"""Tests for the Phase-0 end-to-end no-op pipeline (generate -> detect -> report)."""
+"""Tests for the end-to-end Tier-1 pipeline (generate -> detect -> report)."""
 
 from __future__ import annotations
 
@@ -25,9 +25,10 @@ def test_emit_writes_modbus_artifacts(tmp_path: Path) -> None:
     assert result.pcap.name == "benign-poll.pcap"
 
 
-def test_detect_returns_no_hits_without_rules(tmp_path: Path) -> None:
-    # The detector ships no rules yet (Phase-1 detections land separately), so it
-    # stays quiet even though the JSON log now carries real Modbus events.
+def test_detect_stays_quiet_on_benign(tmp_path: Path) -> None:
+    # The bundled poll is benign, so the shipped Sigma detections must stay quiet
+    # on it (the low-false-positive baseline) even though the JSON log carries real
+    # Modbus events.
     scenario = load_scenario(_EXAMPLE)
     result = write_artifacts(scenario, tmp_path)
     assert run_detections(result.jsonl) == []
@@ -38,11 +39,16 @@ def test_detect_raises_on_missing_log(tmp_path: Path) -> None:
         run_detections(tmp_path / "nope.jsonl")
 
 
-def test_coverage_map_lists_exercised_detections() -> None:
+def test_coverage_map_lists_registry_detections() -> None:
+    # The coverage map is registry-driven: it shows every shipped detection (not
+    # just the loaded scenario's), with a summary and no "FIRED" markers when no
+    # hits are passed.
     scenario = load_scenario(_EXAMPLE)
     out = render_coverage_map([scenario], [])
-    assert "M1" in out and "M2" in out and "M3" in out
-    assert "no hits" in out
+    assert "ATT&CK-for-ICS coverage map" in out
+    assert "M1" in out and "M2" in out and "M3" in out and "X1" in out
+    assert "0 fired this run" in out
+    assert "● FIRED" not in out
 
 
 def test_coverage_map_marks_fired() -> None:
@@ -52,13 +58,25 @@ def test_coverage_map_marks_fired() -> None:
     assert "FIRED" in fired_line
 
 
-def test_demo_exercises_every_stage(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+def test_demo_single_scenario_runs_end_to_end(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     rc = cli.main(["demo", "--scenario", str(_EXAMPLE), "--artifacts", str(tmp_path)])
     assert rc == 0
     out = capsys.readouterr().out
-    for stage in ("[load]", "[generate]", "[detect]", "[report]"):
-        assert stage in out
+    assert "generate -> detect -> report" in out
+    assert "ATT&CK-for-ICS coverage map" in out
+    assert "benign-poll" in out
     assert (tmp_path / "benign-poll.jsonl").exists()
+
+
+def test_demo_default_set_shows_quiet_and_fire(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    # The bundled demo set (no --scenario) must stay quiet on the benign baseline
+    # AND fire real detections on the anomalies — the headline "hits + coverage map".
+    rc = cli.main(["demo", "--artifacts", str(tmp_path)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "quiet (no hits)" in out  # benign baseline stays quiet
+    assert "● FIRED" in out  # at least one detection fired this run
+    assert "fired 2 detection(s)" in out
 
 
 def test_demo_bad_scenario_returns_error(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]

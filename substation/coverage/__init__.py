@@ -13,6 +13,7 @@ Two surfaces live here:
 from __future__ import annotations
 
 from substation.detect import Hit
+from substation.detect.registry import load_registry
 from substation.scenarios import Scenario
 
 from .builder import (
@@ -32,24 +33,43 @@ __all__ = [
 
 
 def render_coverage_map(scenarios: list[Scenario], hits: list[Hit]) -> str:
-    """Render a human-readable placeholder coverage map as text.
+    """Render the demo's live ATT&CK-for-ICS coverage map as text.
 
-    Lists each detection ID the loaded scenarios claim to exercise and whether a
-    hit was observed for it. Phase 0 always shows "no hits" — the point is to
-    prove the report stage consumes the detect stage's output.
+    Driven by the authoritative ``detections/registry.yaml`` (the same metadata the
+    generated coverage table is built from), so the demo shows the *real* shipped
+    coverage — every detection, its verified ATT&CK technique + tactic, and whether
+    it FIRED in this run (from ``hits``) or stayed quiet on the loaded scenarios.
     """
+    registry = load_registry()
     fired = {h.detection_id for h in hits}
-    claimed: set[str] = set()
+    exercised: set[str] = set()
     for s in scenarios:
-        claimed.update(s.exercises.fires)
-        claimed.update(s.exercises.quiet)
+        exercised.update(s.exercises.fires)
+        exercised.update(s.exercises.quiet)
 
-    lines = ["ATT&CK-for-ICS coverage map (Phase 0 placeholder)", "=" * 50]
-    if not claimed:
-        lines.append("  (no detections exercised by the loaded scenarios yet)")
-    for det in sorted(claimed):
-        status = "FIRED" if det in fired else "no hits"
-        lines.append(f"  {det:<8} {status}")
-    lines.append("=" * 50)
-    lines.append(f"scenarios loaded: {len(scenarios)} · detections tracked: {len(claimed)}")
+    rows: list[str] = []
+    techniques: set[str] = set()
+    tactics: set[str] = set()
+    for det in registry:
+        techniques.update(t.id for t in det.attack.techniques)
+        tactics.add(det.attack.tactic_id)
+        if det.id in fired:
+            run = "● FIRED"
+        elif det.id in exercised:
+            run = "○ quiet"
+        else:
+            run = " ·"
+        tech = det.attack.primary.id
+        rows.append(f"  {det.id:<4} {tech:<11} {det.attack.tactic:<26} {run}")
+
+    width = 60
+    lines = ["ATT&CK-for-ICS coverage map", "=" * width]
+    lines.append(f"  {'ID':<4} {'Technique':<11} {'Tactic':<26} This run")
+    lines.append("  " + "-" * (width - 2))
+    lines.extend(rows)
+    lines.append("=" * width)
+    lines.append(
+        f"{len(registry)} detections · {len(techniques)} ATT&CK techniques · "
+        f"{len(tactics)} tactics · {len(fired)} fired this run"
+    )
     return "\n".join(lines)

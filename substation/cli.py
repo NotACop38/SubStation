@@ -1,9 +1,12 @@
 """Substation command-line entrypoint.
 
 The Tier-1 loop is **generate telemetry -> run detections -> render coverage
-map** (`PRD.md` §6.8). The `demo` command runs the full path end to end: the
-generate stage now emits live Modbus PCAP + JSON from the scenario model (Phase
-1), while detect and report remain placeholders until their Phase-1 content lands.
+map** (`PRD.md` §6.8). The `demo` command runs the full path end to end: it
+emits live Modbus PCAP + JSON from the scenario model, runs the Sigma detections
+over the JSON event log, and prints the hits plus the real ATT&CK-for-ICS
+coverage map (registry-driven). The bundled demo runs a benign baseline (which
+stays quiet) and anomalous scenarios (which fire), so one command shows both the
+low-false-positive baseline and real detections.
 
 Safety invariant (PRD.md §6.4): nothing here ever opens a sending socket or
 transmits on a live interface. The simulator is files-only, always.
@@ -24,10 +27,16 @@ from substation.scenarios import Scenario, ScenarioError, load_scenario
 
 __all__ = ["main"]
 
-# Repo-root-relative defaults for the Phase-0 demo.
+# Repo-root-relative defaults for the demo.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_DEMO_SCENARIO = _REPO_ROOT / "scenarios" / "modbus" / "benign-poll.yaml"
 _ARTIFACTS_DIR = _REPO_ROOT / "artifacts"
+# The bundled demo tells the whole story in one command: a benign baseline that
+# stays QUIET (low false positives), then anomalies that FIRE real detections.
+_DEMO_SCENARIOS = [
+    _REPO_ROOT / "scenarios" / "modbus" / "benign-baseline.yaml",
+    _REPO_ROOT / "scenarios" / "modbus" / "anomalous-m1-unauthorized-write.yaml",
+    _REPO_ROOT / "scenarios" / "modbus" / "anomalous-m2-illegal-function.yaml",
+]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -41,8 +50,8 @@ def _build_parser() -> argparse.ArgumentParser:
     demo.add_argument(
         "--scenario",
         type=Path,
-        default=_DEMO_SCENARIO,
-        help="Scenario YAML to run (default: the bundled benign Modbus poll).",
+        default=None,
+        help="Scenario YAML to run (default: the bundled benign + anomalous demo set).",
     )
     demo.add_argument(
         "--artifacts",
@@ -52,69 +61,79 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     demo.set_defaults(func=_cmd_demo)
 
-    verify = sub.add_parser("verify", help="Run Tier-2 fidelity validation (stub).")
+    verify = sub.add_parser("verify", help="How to run Tier-2 (Docker) validation.")
     verify.set_defaults(func=_cmd_verify)
 
     return parser
 
 
 def _cmd_demo(args: argparse.Namespace) -> int:
-    scenario_path: Path = args.scenario
     artifacts_dir: Path = args.artifacts
+    # An explicit --scenario runs just that file; otherwise run the bundled
+    # benign+anomalous set so one command shows quiet-on-benign AND fire-on-anomaly.
+    scenario_paths: list[Path] = [args.scenario] if args.scenario is not None else _DEMO_SCENARIOS
 
-    print(
-        "substation demo — generate emits live Modbus PCAP + JSON; "
-        "detect/report remain Phase-1 placeholders\n"
-    )
+    print("substation demo — Tier-1 loop: generate -> detect -> report (pure Python)\n")
 
-    # The bundled demo scenario lives in the repo tree (PRD.md §6.9 keeps
-    # scenarios/ outside the package), so it is only present for an in-tree
-    # checkout. If it is missing — e.g. running the installed console script
-    # without the repo — fail with an actionable hint rather than a cryptic load
-    # error.
-    if scenario_path == _DEMO_SCENARIO and not scenario_path.exists():
+    all_scenarios: list[Scenario] = []
+    all_hits: list[Hit] = []
+    for scenario_path in scenario_paths:
+        # Scenarios live in the repo tree (PRD.md §6.9 keeps scenarios/ outside the
+        # package), so they are only present for an in-tree checkout. Fail with an
+        # actionable hint rather than a cryptic load error.
+        if not scenario_path.exists():
+            print(
+                f"error: scenario not found at {scenario_path}.\n"
+                "Run `make demo` from a repo checkout, or pass --scenario PATH.",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            scenario: Scenario = load_scenario(scenario_path)
+        except ScenarioError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        try:
+            emitted = write_artifacts(scenario, artifacts_dir)
+        except (EmitError, ModbusError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+
+        hits: list[Hit] = run_detections(emitted.jsonl)
+        if hits:
+            ids = ", ".join(sorted({h.detection_id for h in hits}))
+            verdict = f"FIRED {len(hits)} hit(s) -> {ids}"
+        else:
+            verdict = "quiet (no hits)"
         print(
-            f"error: bundled demo scenario not found at {scenario_path}.\n"
-            "Run `make demo` from a repo checkout, or pass --scenario PATH.",
-            file=sys.stderr,
+            f"[{scenario.label.value:9}] {scenario.name:<34} "
+            f"{emitted.event_count:>2} events -> {verdict}"
         )
-        return 1
+        all_scenarios.append(scenario)
+        all_hits.extend(hits)
 
-    # --- load ---------------------------------------------------------------
-    try:
-        scenario: Scenario = load_scenario(scenario_path)
-    except ScenarioError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    print(
-        f"[load]     {scenario.name} "
-        f"({scenario.protocol.value}, {scenario.label.value}): "
-        f"{len(scenario.actors)} actors, {len(scenario.exchanges)} exchanges"
-    )
-
-    # --- generate -----------------------------------------------------------
-    try:
-        emitted = write_artifacts(scenario, artifacts_dir)
-    except (EmitError, ModbusError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    print(
-        f"[generate] wrote {emitted.event_count} events -> "
-        f"{emitted.pcap.name}, {emitted.jsonl.name}"
-    )
-
-    # --- detect -------------------------------------------------------------
-    hits: list[Hit] = run_detections(emitted.jsonl)
-    print(f"[detect]   {len(hits)} hit(s) from the JSON event log")
-
-    # --- report -------------------------------------------------------------
-    print("[report]   rendering coverage map\n")
-    print(render_coverage_map([scenario], hits))
+    print()
+    print(render_coverage_map(all_scenarios, all_hits))
+    fired = sorted({h.detection_id for h in all_hits})
+    if fired:
+        print(
+            f"\nResult: quiet on the benign baseline; fired {len(fired)} detection(s) on "
+            f"the anomalies ({', '.join(fired)})."
+        )
     return 0
 
 
 def _cmd_verify(_args: argparse.Namespace) -> int:
-    print("substation verify: Tier-2 validation not yet implemented (Phase 0 stub).")
+    # Tier 2 is a local, Docker-orchestrated gate (real Zeek/ICSNPP + Suricata),
+    # deliberately kept out of the pure-Python installed path so the Tier-1
+    # headline promise ("only Python 3.11+") holds. It is driven by the Makefile.
+    print(
+        "Tier-2 validation runs real Zeek/ICSNPP + Suricata over the emitted PCAPs\n"
+        "(fidelity golden test + Zeek/Suricata detections). It needs Docker and is\n"
+        "driven from a repo checkout:\n\n"
+        "    make verify\n\n"
+        "Tier 1 (this CLI's `demo`) stays pure-Python and needs no Docker."
+    )
     return 0
 
 

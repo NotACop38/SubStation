@@ -25,9 +25,11 @@ from typing import Any
 from scapy.contrib import modbus as mb
 from scapy.layers.inet import IP, TCP
 from scapy.layers.l2 import Ether
+from scapy.packet import Raw
 from scapy.utils import PcapWriter
 
 from substation.protocols.modbus import (
+    EXCEPTION_CODE_BYTES,
     READ_COILS,
     READ_DISCRETE_INPUTS,
     READ_HOLDING_REGISTERS,
@@ -38,7 +40,12 @@ from substation.protocols.modbus import (
     WRITE_SINGLE_REGISTER,
     ModbusError,
     ModbusEvent,
+    is_standard_function,
 )
+
+# Modbus sets the high bit of the function code in an exception reply (e.g. an
+# undefined request 0x42 draws a 0xC2 exception PDU carrying the exception byte).
+_EXCEPTION_FUNCTION_BIT = 0x80
 
 __all__ = ["write_pcap"]
 
@@ -62,8 +69,33 @@ def _pack_bits(bits: tuple[int, ...]) -> list[int]:
     return packed
 
 
+def _abnormal_request_pdu(event: ModbusEvent) -> Any:
+    """Raw PDU for an undefined request function code (scapy has no class for it).
+
+    The PDU is the function-code byte followed by the optional address/quantity
+    span; scapy decodes it as a User-Defined Function Code Request and the MBAP
+    length is computed automatically.
+    """
+    body = bytes([event.func_code])
+    if event.address is not None:
+        body += int(event.address).to_bytes(2, "big")
+        body += int(event.quantity if event.quantity is not None else 1).to_bytes(2, "big")
+    return Raw(load=body)
+
+
+def _exception_response_pdu(event: ModbusEvent) -> Any:
+    """Raw exception PDU: (func_code | 0x80) then the exception code byte."""
+    name = event.exception_code or event.error or ""
+    exc_byte = EXCEPTION_CODE_BYTES.get(name)
+    if exc_byte is None:
+        raise ModbusError(f"no on-the-wire exception byte for {name!r}")
+    return Raw(load=bytes([event.func_code | _EXCEPTION_FUNCTION_BIT, exc_byte]))
+
+
 def _request_pdu(event: ModbusEvent) -> Any:
     code = event.func_code
+    if not is_standard_function(code):
+        return _abnormal_request_pdu(event)
     if code in (READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS):
         return _READ_REQUEST[code](startAddr=event.address, quantity=event.quantity)
     if code == WRITE_SINGLE_REGISTER:
@@ -96,6 +128,8 @@ def _request_pdu(event: ModbusEvent) -> Any:
 
 def _response_pdu(event: ModbusEvent) -> Any:
     code = event.func_code
+    if event.is_exception:
+        return _exception_response_pdu(event)
     if code in (READ_COILS, READ_DISCRETE_INPUTS):
         packed = _pack_bits(event.response_values)
         cls, status_field = _READ_BIT_RESPONSE[code]

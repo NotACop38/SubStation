@@ -56,7 +56,7 @@ class ScenarioError(ValueError):
     """Raised when a scenario file is malformed or internally inconsistent."""
 
 
-class _StrictLoader(yaml.SafeLoader):  # type: ignore[misc]  # yaml is untyped (Any base)
+class _StrictLoader(yaml.SafeLoader):
     """A safe YAML loader that rejects duplicate mapping keys.
 
     PyYAML's default safe loader silently keeps the *last* value when a key is
