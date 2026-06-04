@@ -32,68 +32,58 @@ behavior is proven before it ever reaches a live environment.
 
 ## Quick start
 
-Everything below the headline path needs **only Python 3.11+** — no Zeek, no
-Suricata, no hardware, no network.
+The headline path is **Python-only**: a one-line `pip install` of pure-Python
+wheels (scapy, pySigma, PyYAML) — **no Zeek, no Suricata, no Docker, no hardware,
+no network**. (Tier 2 below adds Docker for full-fidelity validation.)
 
 ```sh
 git clone https://github.com/notacop38/substation.git
 cd substation
-make dev      # editable install + pinned dev tooling
+make dev      # editable install of the pinned, pure-Python deps + dev tooling
 make demo     # generate → detect → report (Tier 1, pure Python)
 ```
 
-`make demo` builds synthetic Modbus telemetry from a scenario, runs the Sigma
-detections over the JSON event log, and prints the hits plus an ATT&CK-for-ICS
-coverage map. The bundled default scenario is a **benign** poll, so it stays
-**quiet** (low false positives) — exactly what you want from a detection pack.
-Below is the verbatim current output:
+`make demo` builds synthetic Modbus telemetry from scenarios, runs the Sigma
+detections over the JSON event log, and prints the hits plus the real
+ATT&CK-for-ICS coverage map. It runs a **benign** baseline (which stays **quiet** —
+low false positives) and **anomalous** scenarios (which **fire** real detections),
+so one command shows both halves. Verbatim output:
 
 ```text
 $ make demo
-substation demo — generate emits live Modbus PCAP + JSON; detect/report remain Phase-1 placeholders
+substation demo — Tier-1 loop: generate -> detect -> report (pure Python)
 
-[load]     benign-poll (modbus, benign): 3 actors, 3 exchanges
-[generate] wrote 6 events -> benign-poll.pcap, benign-poll.jsonl
-[detect]   0 hit(s) from the JSON event log
-[report]   rendering coverage map
+[benign   ] benign-baseline                    18 events -> quiet (no hits)
+[anomalous] anomalous-m1-unauthorized-write    10 events -> FIRED 2 hit(s) -> M1
+[anomalous] anomalous-m2-illegal-function       4 events -> FIRED 2 hit(s) -> M2
 
-ATT&CK-for-ICS coverage map (Phase 0 placeholder)
-==================================================
-  M1       no hits
-  M2       no hits
-  M3       no hits
-==================================================
-scenarios loaded: 1 · detections tracked: 3
-```
+ATT&CK-for-ICS coverage map
+============================================================
+  ID   Technique   Tactic                     This run
+  ----------------------------------------------------------
+  M1   T1692.001   Impair Process Control     ● FIRED
+  M2   T0888       Discovery                  ● FIRED
+  M3   T0846       Discovery                  ○ quiet
+  D1   T0816       Inhibit Response Function   ·
+  D2   T1691.002   Inhibit Response Function   ·
+  D3   T1692.001   Impair Process Control      ·
+  D4   T0888       Discovery                   ·
+  S1   T0858       Execution                   ·
+  S2   T0843       Lateral Movement            ·
+  S3   T0888       Discovery                   ·
+  X1   T0846       Discovery                  ○ quiet
+============================================================
+11 detections · 10 ATT&CK techniques · 5 tactics · 2 fired this run
 
-Point the same loop at an **attack** scenario and the matching detection
-**fires** (M1 → Impair Process Control, ATT&CK `T1692.001`):
-
-```text
-$ substation demo --scenario scenarios/modbus/anomalous-m1-unauthorized-write.yaml
-substation demo — generate emits live Modbus PCAP + JSON; detect/report remain Phase-1 placeholders
-
-[load]     anomalous-m1-unauthorized-write (modbus, anomalous): 4 actors, 5 exchanges
-[generate] wrote 10 events -> anomalous-m1-unauthorized-write.pcap, anomalous-m1-unauthorized-write.jsonl
-[detect]   2 hit(s) from the JSON event log
-[report]   rendering coverage map
-
-ATT&CK-for-ICS coverage map (Phase 0 placeholder)
-==================================================
-  M1       FIRED
-  M2       no hits
-  M3       no hits
-==================================================
-scenarios loaded: 1 · detections tracked: 3
+Result: quiet on the benign baseline; fired 2 detection(s) on the anomalies (M1, M2).
 ```
 
 ![Substation demo](docs/assets/demo.svg)
 
-> The two blocks above are the tool's **verbatim current output**. The
-> report/coverage rendering is still the Phase-0 placeholder box; it is being
-> polished into its launch form (checklist Phase 2). The full ATT&CK-for-ICS
-> coverage map is generated separately by `make coverage-build` (see
-> [Coverage](#coverage)). The image above is a styled placeholder — record the
+> The block above is the tool's **verbatim output**. The in-terminal coverage map
+> is registry-driven (the same metadata behind the full generated table); the
+> downloadable ATT&CK Navigator layer + full table come from `make coverage-build`
+> (see [Coverage](#coverage)). The image above is a styled placeholder — record the
 > real animated cast with [`make demo-cast`](#recording-the-demo).
 
 ## Architecture
@@ -177,10 +167,10 @@ The single most important UX/credibility decision: the headline path has **zero
 external dependencies**, while the harder, stateful detections are still genuinely
 proven.
 
-- **Tier 1 — zero-dep, the headline path.** Generate telemetry (pure Python) → run
-  **Sigma** detections over the **JSON** event log → print hits + coverage map.
-  Requires only **Python 3.11+**. This is what `make demo` runs. Users who only
-  want detections + telemetry never need to install Zeek or Suricata.
+- **Tier 1 — Python-only, the headline path.** Generate telemetry (pure Python) →
+  run **Sigma** detections over the **JSON** event log → print hits + coverage map.
+  Needs **Python 3.11+** and a one-line `pip install` of pure-Python wheels — no
+  Zeek, Suricata, Docker, or hardware. This is what `make demo` runs.
 - **Tier 2 — full-fidelity validation (CI / contributors).** Run the generated
   **PCAPs** through real **Zeek + ICSNPP** and/or **Suricata** (containerized) to
   (a) prove our synthetic JSON matches real Zeek output and (b) execute the

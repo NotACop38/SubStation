@@ -39,6 +39,11 @@ __all__ = [
     "ACTION_CLASS",
     "DEFAULT_MODBUS_PORT",
     "RESPONSE_DELAY",
+    "ILLEGAL_FUNCTION",
+    "ILLEGAL_DATA_ADDRESS",
+    "EXCEPTION_CODE_BYTES",
+    "is_standard_function",
+    "abnormal_function_name",
 ]
 
 DEFAULT_MODBUS_PORT = 502
@@ -81,6 +86,51 @@ ACTION_CLASS: dict[int, str] = {
     WRITE_MULTIPLE_REGISTERS: "write",
 }
 
+# The FULL set of function codes base Zeek's ``Modbus::function_codes`` table NAMES
+# (verified against base/protocols/modbus/consts.zeek, 2026-06-04). A code in this
+# table is a *defined* Modbus function; a code ABSENT from it is what Zeek renders
+# ``unknown-N`` and is the only thing we treat as an abnormal/undefined M2 probe. We
+# encode only the eight standard read/write codes above, so a code that is defined
+# here but not in FUNCTION_NAMES (e.g. 0x09 PROGRAM_484, 0x08 DIAGNOSTICS) is a real
+# legacy/diagnostic function we cannot faithfully emit — that raises, rather than
+# being mis-encoded as an undefined probe.
+_ZEEK_DEFINED_FUNCTION_CODES: frozenset[int] = frozenset(
+    {
+        0x01,
+        0x02,
+        0x03,
+        0x04,
+        0x05,
+        0x06,
+        0x07,
+        0x08,
+        0x09,
+        0x0A,
+        0x0B,
+        0x0C,
+        0x0D,
+        0x0E,
+        0x0F,
+        0x10,
+        0x11,
+        0x12,
+        0x13,
+        0x14,
+        0x15,
+        0x16,
+        0x17,
+        0x18,
+        0x28,
+        0x29,
+        0x2B,
+        0x5A,
+        0x5B,
+        0x7D,
+        0x7E,
+        0x7F,
+    }
+)
+
 # Quantity limits from the Modbus spec; reject impossible scenarios up front so an
 # author sees a clear error instead of a malformed PDU.
 _MAX_READ_REGISTERS = 125
@@ -89,6 +139,25 @@ _MAX_WRITE_REGISTERS = 123
 _MAX_WRITE_BITS = 1968
 
 _U16 = 0xFFFF
+
+# A request may carry a reserved/undefined (non-standard) function code — the M2
+# "illegal/abnormal function code" recon signal (PRD §5.1). Zeek's
+# ``Modbus::function_codes`` table renders any code *absent* from it as
+# ``unknown-<decimal>`` (verified against base/protocols/modbus/consts.zeek on
+# 2026-06-04 — NB 0x09 is *not* undefined there, it is the legacy PROGRAM_484, so
+# the emitter only treats codes genuinely absent from that table as abnormal). A
+# spec-compliant outstation answers an unsupported function with an
+# ILLEGAL_FUNCTION exception (Modbus Application Protocol spec v1.1b3, PRD §9).
+_MAX_REQUEST_FUNCTION = 0x7F  # 0x80+ is the exception-response bit; never a request code.
+EXCEPTION_FLAG = 0x80  # set on the function code in an exception response (code | 0x80).
+ILLEGAL_FUNCTION = "ILLEGAL_FUNCTION"
+ILLEGAL_DATA_ADDRESS = "ILLEGAL_DATA_ADDRESS"
+# Exception name -> on-the-wire Modbus exception code byte (base Zeek
+# ``Modbus::exception_codes``, verified 2026-06-04).
+EXCEPTION_CODE_BYTES: dict[str, int] = {
+    ILLEGAL_FUNCTION: 0x01,
+    ILLEGAL_DATA_ADDRESS: 0x02,
+}
 
 
 class ModbusError(ValueError):
@@ -145,12 +214,32 @@ _FUNCTION_BY_TOKEN: dict[str, int] = {
 }
 
 
+def is_standard_function(code: int) -> bool:
+    """True when ``code`` is one of the eight encoded standard read/write codes."""
+    return code in FUNCTION_NAMES
+
+
+def abnormal_function_name(code: int) -> str:
+    """Zeek ``Modbus::function_codes`` rendering of a code absent from the table.
+
+    Base Zeek's table has ``&default = fmt("unknown-%d", i)`` (verified against
+    base/protocols/modbus/consts.zeek), so an undefined code N logs as
+    ``unknown-N``; the emitter mirrors that spelling for fidelity.
+    """
+    return f"unknown-{code}"
+
+
 def resolve_function(function: str) -> int:
-    """Resolve a scenario ``function`` string to a supported Modbus code.
+    """Resolve a scenario ``function`` string to a Modbus function code.
 
     Accepts the Zeek name (``READ_HOLDING_REGISTERS``), the common CamelCase
     spelling used in scenarios (``ReadHoldingRegisters``), or a numeric code
-    (``6`` / ``0x06``). Raises :class:`ModbusError` for anything unsupported.
+    (``6`` / ``0x06``). A numeric code in the valid request range (1..0x7F) that
+    is *not* one of the eight standard codes resolves as an abnormal/undefined
+    function (the M2 recon signal) rather than raising — the emitter renders it
+    ``unknown-N`` and draws an ILLEGAL_FUNCTION exception. A non-numeric label
+    that names no known function, or a code outside the request range, raises
+    :class:`ModbusError`.
     """
     token = _normalize_function(function)
     if token in _FUNCTION_BY_TOKEN:
@@ -162,8 +251,25 @@ def resolve_function(function: str) -> int:
         code = -1
     if code in FUNCTION_NAMES:
         return code
+    if 1 <= code <= _MAX_REQUEST_FUNCTION and code not in _ZEEK_DEFINED_FUNCTION_CODES:
+        # A code GENUINELY absent from Zeek's function-code table (e.g. 0x42) — the
+        # only thing we treat as an abnormal/undefined M2 probe (renders unknown-N).
+        return code
     supported = ", ".join(FUNCTION_NAMES[c] for c in sorted(FUNCTION_NAMES))
-    raise ModbusError(f"unsupported Modbus function {function!r}; supported: {supported}")
+    if code in _ZEEK_DEFINED_FUNCTION_CODES:
+        # A real, Zeek-named legacy/diagnostic function we do not encode — refuse to
+        # mis-emit it as an undefined probe (which would create false M2 hits and a
+        # JSON/Zeek fidelity mismatch). See modbus.py review (codex P2).
+        raise ModbusError(
+            f"Modbus function {function!r} (code {code:#04x}) is a defined function "
+            f"Zeek names but this emitter does not encode; supported: {supported}. "
+            "Use one of those, or a numeric code absent from the Modbus function table "
+            "for an abnormal/undefined (M2) probe."
+        )
+    raise ModbusError(
+        f"unsupported Modbus function {function!r}; supported: {supported}, "
+        f"or a numeric undefined request code in 1..{_MAX_REQUEST_FUNCTION}"
+    )
 
 
 # --- param parsing -----------------------------------------------------------
@@ -300,6 +406,25 @@ def _encode_exchange(code: int, params: Mapping[str, object], where: str) -> _Pa
     raise ModbusError(f"{where}: no encoder for function code {code:#04x}")
 
 
+def _abnormal_payload(params: Mapping[str, object], where: str) -> _Payload:
+    """Validate the (optional) span of an undefined-function probe.
+
+    An undefined function code carries no defined data model, so ``address`` and
+    ``quantity`` are optional. They are kept as a **pair** so the one shared model
+    drives both emitters identically (PRD §6.1): if either is given the other is
+    defaulted (address->0, quantity->1), so the JSON and the PCAP body never
+    disagree on which fields are present (codex P3). No response values are
+    synthesized (the outstation answers with an exception).
+    """
+    has_addr = "address" in params
+    has_qty = "quantity" in params
+    if not has_addr and not has_qty:
+        return _Payload(None, None, (), ())
+    address = _check_int(params["address"], f"{where}.address", 0, _U16) if has_addr else 0
+    quantity = _check_int(params["quantity"], f"{where}.quantity", 1, _U16) if has_qty else 1
+    return _Payload(address, quantity, (), ())
+
+
 # --- connection bookkeeping --------------------------------------------------
 
 _B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -388,13 +513,26 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
     for idx, exchange in enumerate(scenario.exchanges):
         where = f"exchanges[{idx}] ({exchange.function})"
         code = resolve_function(exchange.function)
-        func_name = FUNCTION_NAMES[code]
-        action_class = ACTION_CLASS[code]
+        # A genuinely undefined request code (the M2 abnormal-function signal) has
+        # no standard name/class/payload: render it Zeek's `unknown-N`, class it
+        # `other`, and have the outstation answer ILLEGAL_FUNCTION.
+        if is_standard_function(code):
+            func_name = FUNCTION_NAMES[code]
+            action_class = ACTION_CLASS[code]
+            exception_name: str | None = None
+        else:
+            func_name = abnormal_function_name(code)
+            action_class = "other"
+            exception_name = ILLEGAL_FUNCTION
         # The loader guarantees source/target reference declared actors.
         conn = _connection(conns, actors[exchange.source], actors[exchange.target])
         tid = conn.next_tid()
         unit = _opt_int(exchange.params, "unit_id", where, 0, 255, 1)
-        payload = _encode_exchange(code, exchange.params, where)
+        payload = (
+            _abnormal_payload(exchange.params, where)
+            if exception_name is not None
+            else _encode_exchange(code, exchange.params, where)
+        )
         # Base time: an explicit offset is seconds from timing.start and always
         # wins; an omitted offset (None) auto-spaces default_interval after the
         # previous exchange (the first such exchange starts at timing.start).
@@ -433,6 +571,17 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
                 request_values=payload.request_values,
             )
         )
+        # An exception response carries the exception function on the wire
+        # (code | 0x80) and the `<FUNCTION>_EXCEPTION` name — the established schema
+        # convention (the honeypot + the golden events render exceptions this way),
+        # so detections/baselines keying on func_code/func_name match the PCAP and
+        # honeypot telemetry alike (codex P2).
+        if exception_name is not None:
+            response_func_code = code | EXCEPTION_FLAG
+            response_func_name = f"{func_name}_EXCEPTION"
+        else:
+            response_func_code = code
+            response_func_name = func_name
         events.append(
             ModbusEvent(
                 ts=response_ts,
@@ -442,8 +591,8 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
                 resp_h=conn.resp_h,
                 resp_p=conn.resp_p,
                 is_orig=False,
-                func_code=code,
-                func_name=func_name,
+                func_code=response_func_code,
+                func_name=response_func_name,
                 action_class=action_class,
                 unit=unit,
                 tid=tid,
@@ -451,6 +600,9 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
                 quantity=payload.quantity,
                 response_values=payload.response_values,
                 matched=True,
+                is_exception=exception_name is not None,
+                error=exception_name,
+                exception_code=exception_name,
             )
         )
 

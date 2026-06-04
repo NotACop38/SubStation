@@ -27,6 +27,9 @@ artifacts/
 /coverage/*
 !/coverage/.gitkeep
 
+# Tier-2 verify cache (cloned ICSNPP script packages)
+/.verify-cache/
+
 # Editor / OS
 .idea/
 .vscode/

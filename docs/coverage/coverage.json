@@ -34,7 +34,7 @@
       "protocol": "modbus",
       "engine": "sigma",
       "tier": 1,
-      "status": "partial",
+      "status": "validated",
       "rule": "detections/sigma/modbus_m2_illegal_function_code.yml",
       "doc": "detections/docs/M2-illegal-function-code.md",
       "tactic": "Discovery",

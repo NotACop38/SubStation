@@ -171,13 +171,20 @@ _TRIP_LABEL = {0: "Nul", 1: "Close", 2: "Trip"}
 # group/variation are derived from one source and a Zeek decode of the PCAP resolves
 # the same name (no drift, PRD §6.1). `point_size` is the per-point response data
 # width in bytes for that variation, so the PCAP emits a well-formed object body.
+#
+# VERIFY (Tier-2 fidelity, 2026-06-04): the "with-flag" variations (groups 20/30
+# var 1/2) carry a LEADING 1-octet flag before the value, so their per-point width
+# is flag + value, NOT value alone. Zeek's DNP3 binpac decoder confirmed this by
+# raising `out_of_bound: AnalogInput16wFlag` when the body was one octet short per
+# point. Widths below are flag(1) + value: g30v2 16-bit = 3, g30v1 32-bit = 5,
+# g20v2 16-bit counter = 3. g01v2 binary-input-with-flags is a single packed octet.
 # name -> (group, variation, point_size)
 OBJECT_TYPES: dict[str, tuple[int, int, int]] = {
-    "Binary Input With Status": (0x01, 0x02, 1),  # 0x0102
+    "Binary Input With Status": (0x01, 0x02, 1),  # 0x0102 (flags octet)
     "Binary Output": (0x0A, 0x01, 1),  # 0x0A01
-    "16-Bit Binary Counter": (0x14, 0x02, 2),  # 0x1402
-    "32-Bit Analog Input": (0x1E, 0x01, 4),  # 0x1E01
-    "16-Bit Analog Input": (0x1E, 0x02, 2),  # 0x1E02
+    "16-Bit Binary Counter": (0x14, 0x02, 3),  # 0x1402 with flag: flag(1)+u16(2)
+    "32-Bit Analog Input": (0x1E, 0x01, 5),  # 0x1E01 with flag: flag(1)+i32(4)
+    "16-Bit Analog Input": (0x1E, 0x02, 3),  # 0x1E02 with flag: flag(1)+i16(2)
 }
 _DEFAULT_OBJECT_TYPE = "Binary Input With Status"
 

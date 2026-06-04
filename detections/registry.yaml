@@ -56,11 +56,12 @@ detections:
     protocol: modbus
     engine: sigma
     tier: 1
-    # quiet-on-benign is proven today; the fire-on-anomaly scenario uses an
-    # undefined function code (0x09) the current emitter does not yet encode, so
-    # the harness skips that one assertion until the emitter extension lands
-    # (see scenarios/modbus/anomalous-m2-illegal-function.yaml + the M2 doc).
-    status: partial
+    # Tier-1 fire AND quiet both proven over real emitted telemetry: the emitter
+    # now encodes an undefined request code (0x42 -> Zeek `unknown-66`,
+    # action_class `other`) and the ILLEGAL_FUNCTION exception a compliant
+    # outstation returns, so both M2 arms fire on the anomalous scenario and stay
+    # quiet on benign (see scenarios/modbus/anomalous-m2-illegal-function.yaml).
+    status: validated
     rule: detections/sigma/modbus_m2_illegal_function_code.yml
     doc: detections/docs/M2-illegal-function-code.md
     attack:

@@ -281,3 +281,33 @@ def test_span_past_address_space_raises(tmp_path: Path) -> None:
     scenario = load_scenario(_write_scenario(tmp_path, _SPAN_OVERFLOW_SCENARIO))
     with pytest.raises(ModbusError, match="address space"):
         write_artifacts(scenario, tmp_path)
+
+
+def test_resolve_function_scopes_abnormal_to_truly_unknown_codes() -> None:
+    from substation.protocols.modbus import resolve_function
+
+    # A code absent from Zeek's function table is an abnormal/undefined (M2) probe.
+    assert resolve_function("0x42") == 0x42
+    # A code Zeek NAMES but we do not encode (0x09 PROGRAM_484, 0x08 DIAGNOSTICS)
+    # must raise, not be mis-emitted as an undefined probe (codex P2).
+    for defined in ("0x09", "0x08", "0x2B"):
+        with pytest.raises(ModbusError, match="defined function"):
+            resolve_function(defined)
+
+
+def test_abnormal_exception_response_uses_exception_convention(tmp_path: Path) -> None:
+    # The undefined-code exception response must follow the schema convention used by
+    # the honeypot + golden events: func_code = base | 0x80 and "<BASE>_EXCEPTION"
+    # (codex P2), while the request keeps the plain unknown-N identity.
+    scenario = load_scenario(
+        _REPO_ROOT / "scenarios" / "modbus" / "anomalous-m2-illegal-function.yaml"
+    )
+    result = write_artifacts(scenario, tmp_path)
+    events = [json.loads(line) for line in result.jsonl.read_text().splitlines()]
+    req = next(e for e in events if e["func_name"] == "unknown-66" and e["is_orig"])
+    resp = next(e for e in events if e["is_exception"])
+    assert req["func_code"] == 0x42 and not req["is_exception"]
+    assert resp["func_code"] == 0x42 | 0x80
+    assert resp["func_name"] == "unknown-66_EXCEPTION"
+    assert resp["error"] == "ILLEGAL_FUNCTION"
+    assert resp["detail"]["exception_code"] == "ILLEGAL_FUNCTION"
