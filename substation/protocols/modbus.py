@@ -381,6 +381,7 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
     actors = {a.id: a for a in scenario.actors}
     conns: dict[tuple[str, str], _Conn] = {}
     events: list[ModbusEvent] = []
+    prev_base_ts: float | None = None  # start time of the previous exchange
 
     for idx, exchange in enumerate(scenario.exchanges):
         where = f"exchanges[{idx}] ({exchange.function})"
@@ -392,12 +393,22 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
         tid = conn.next_tid()
         unit = _opt_int(exchange.params, "unit_id", where, 0, 255, 1)
         payload = _encode_exchange(code, exchange.params, where)
+        # Base time: an explicit offset is seconds from timing.start and always
+        # wins; an omitted offset (None) auto-spaces default_interval after the
+        # previous exchange (the first such exchange starts at timing.start).
+        if exchange.offset is not None:
+            base_ts = scenario.timing.start + exchange.offset
+        elif prev_base_ts is None:
+            base_ts = scenario.timing.start
+        else:
+            base_ts = prev_base_ts + scenario.timing.default_interval
+        prev_base_ts = base_ts
         # Serialize transactions on a connection: a request never precedes the
         # previous response on the same flow. This keeps each flow causally
-        # ordered (and its TCP seq/ack valid) even when exchanges share an offset
-        # or sit closer than RESPONSE_DELAY, so the PCAP's global time sort cannot
-        # reorder a request ahead of an earlier response (PR #5 review).
-        request_ts = max(scenario.timing.start + exchange.offset, conn.last_response_ts)
+        # ordered (and its TCP seq/ack valid) even when exchanges share a base
+        # time or sit closer than RESPONSE_DELAY, so the PCAP's global time sort
+        # cannot reorder a request ahead of an earlier response (PR #5 review).
+        request_ts = max(base_ts, conn.last_response_ts)
         response_ts = request_ts + RESPONSE_DELAY
         conn.last_response_ts = response_ts
 

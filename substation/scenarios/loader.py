@@ -188,11 +188,14 @@ def _parse_exchange(raw: object, where: str) -> Exchange:
     # Only an absent or explicit-null params defaults to empty; any present value
     # (including falsy ones like [] or 0) must be a real mapping.
     params = {} if params_raw is None else _require_mapping(params_raw, f"{where}.params")
+    # An omitted offset is left as None so the emitter can auto-space the exchange
+    # by Timing.default_interval; an explicit value (including 0.0) is preserved.
+    offset = _opt_number(data, "offset", where, 0.0) if "offset" in data else None
     return Exchange(
         source=_require_str(data, "source", where),
         target=_require_str(data, "target", where),
         function=_require_str(data, "function", where),
-        offset=_opt_number(data, "offset", where, 0.0),
+        offset=offset,
         params=_freeze_params(params),
     )
 

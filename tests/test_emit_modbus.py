@@ -80,7 +80,7 @@ def test_pcap_and_jsonl_do_not_drift(tmp_path: Path) -> None:
 
 
 def test_lockstep_holds_for_overlapping_offsets(tmp_path: Path) -> None:
-    # Several exchanges on one connection with omitted (so equal, 0.0) offsets:
+    # Several exchanges on one connection with explicit equal offsets (0.0):
     # per-connection timestamp serialization must keep each response ahead of the
     # next request in the capture, so PCAP order still matches JSON order even
     # though a naive global time sort would interleave them (PR #5 review, P1).
@@ -88,6 +88,15 @@ def test_lockstep_holds_for_overlapping_offsets(tmp_path: Path) -> None:
     result = write_artifacts(scenario, tmp_path)
     assert result.event_count == 6
     _assert_lockstep(result.jsonl, result.pcap)
+
+
+def test_default_interval_spaces_omitted_offsets(tmp_path: Path) -> None:
+    # With offsets omitted, exchanges are auto-spaced by timing.default_interval
+    # from timing.start: requests at 10.0 and 10.0 + 5.0 = 15.0.
+    scenario = load_scenario(_write_scenario(tmp_path, _CADENCE_SCENARIO))
+    result = write_artifacts(scenario, tmp_path)
+    requests = _json_events(result.jsonl)[0::2]  # request events, in order
+    assert [e["ts"] for e in requests] == [10.0, 15.0]
 
 
 def test_request_response_pairing_and_action_class(tmp_path: Path) -> None:
@@ -187,15 +196,37 @@ exchanges:
   - source: hmi
     target: plc
     function: ReadHoldingRegisters
+    offset: 0.0
     params: {address: 0, quantity: 2}
   - source: hmi
     target: plc
     function: ReadHoldingRegisters
+    offset: 0.0
     params: {address: 2, quantity: 2}
   - source: hmi
     target: plc
     function: WriteSingleRegister
+    offset: 0.0
     params: {address: 9, value: 7}
+"""
+
+_CADENCE_SCENARIO = """
+name: cadence
+protocol: modbus
+label: benign
+timing: {start: 10.0, default_interval: 5.0}
+actors:
+  - {id: hmi, role: hmi, host: 10.0.0.10}
+  - {id: plc, role: plc, host: 10.0.0.50, port: 502}
+exchanges:
+  - source: hmi
+    target: plc
+    function: ReadHoldingRegisters
+    params: {address: 0, quantity: 1}
+  - source: hmi
+    target: plc
+    function: ReadHoldingRegisters
+    params: {address: 1, quantity: 1}
 """
 
 _SPAN_OVERFLOW_SCENARIO = """
