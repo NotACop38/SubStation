@@ -36,6 +36,26 @@ NAVIGATOR_FILENAME = "navigator-layer.json"
 
 # ATT&CK-for-ICS domain identifier used by the Navigator layer format.
 _ATTACK_DOMAIN = "ics-attack"
+
+# The complete set of ATT&CK-for-ICS tactics, in matrix (left-to-right) order.
+# Tactics are STABLE (CLAUDE.md treats tactic IDs as stable, unlike technique IDs
+# which are VERIFY-gated per detection), so this canonical list lets the coverage
+# map show covered-vs-gap at the tactic level without inventing technique IDs.
+# (id, display name)
+_ICS_TACTICS: tuple[tuple[str, str], ...] = (
+    ("TA0108", "Initial Access"),
+    ("TA0104", "Execution"),
+    ("TA0110", "Persistence"),
+    ("TA0111", "Privilege Escalation"),
+    ("TA0103", "Evasion"),
+    ("TA0102", "Discovery"),
+    ("TA0109", "Lateral Movement"),
+    ("TA0100", "Collection"),
+    ("TA0101", "Command and Control"),
+    ("TA0107", "Inhibit Response Function"),
+    ("TA0106", "Impair Process Control"),
+    ("TA0105", "Impact"),
+)
 # Navigator layer-format / app versions this layer targets (configuration, not an
 # ATT&CK content claim). Score gradient runs pale -> strong with coverage count.
 _LAYER_VERSION = "4.5"
@@ -46,6 +66,40 @@ _GRADIENT_COLORS = ["#fff7b3", "#ff6f59"]
 def _techniques_str(det: Detection) -> str:
     """Comma-joined technique IDs for a detection (primary first)."""
     return ", ".join(t.id for t in det.attack.techniques)
+
+
+def _render_tactic_coverage(detections: list[Detection]) -> list[str]:
+    """Render the covered-vs-gap view over the full ICS tactic matrix.
+
+    For every ATT&CK-for-ICS tactic, show how many detections cover it and which —
+    making both the covered tactics and the **gaps** (tactics with no detection
+    yet) plainly visible (the task's "clear covered-vs-gap view").
+    """
+    # tactic_id -> list of detection ids covering it (insertion order = registry order).
+    by_tactic: dict[str, list[str]] = {}
+    for det in detections:
+        by_tactic.setdefault(det.attack.tactic_id, []).append(det.id)
+
+    covered = sum(1 for tid, _ in _ICS_TACTICS if by_tactic.get(tid))
+    total = len(_ICS_TACTICS)
+    lines = [
+        "## Coverage by tactic (covered vs gap)",
+        "",
+        f"**{covered} of {total}** ATT&CK-for-ICS tactics have at least one detection. "
+        "Tactics are stable (`CLAUDE.md`); the gaps below are candidate areas for "
+        "new detections, not missing technique IDs.",
+        "",
+        "| Tactic | ID | Detections | Coverage |",
+        "|---|---|---|---|",
+    ]
+    for tid, name in _ICS_TACTICS:
+        ids = by_tactic.get(tid, [])
+        if ids:
+            lines.append(f"| {name} | {tid} | {', '.join(ids)} | ✅ covered |")
+        else:
+            lines.append(f"| {name} | {tid} | — | ⬜ gap |")
+    lines.append("")
+    return lines
 
 
 def render_markdown(detections: list[Detection]) -> str:
@@ -61,6 +115,12 @@ def render_markdown(detections: list[Detection]) -> str:
         "Tier 1 = Sigma-over-JSON (zero-dep headline path); "
         "Tier 2 = Zeek/Suricata over PCAP.",
         "",
+        "Download the [ATT&CK Navigator layer](./navigator-layer.json) and load it "
+        "directly into the [Navigator](https://mitre-attack.github.io/attack-navigator/) "
+        "to view this coverage on the live ICS matrix.",
+        "",
+        "## Detections",
+        "",
         "| Detection | Title | Protocol | Technique(s) | Tactic | Engine | Tier | Status |",
         "|---|---|---|---|---|---|---|---|",
     ]
@@ -71,6 +131,7 @@ def render_markdown(detections: list[Detection]) -> str:
             f"| {det.tier} | {det.status} |"
         )
     lines.append("")
+    lines.extend(_render_tactic_coverage(detections))
     return "\n".join(lines)
 
 
@@ -90,14 +151,37 @@ def _detection_record(det: Detection) -> dict[str, Any]:
     }
 
 
+def _tactic_coverage_records(detections: list[Detection]) -> list[dict[str, Any]]:
+    """Covered-vs-gap status for every ICS tactic (matrix order)."""
+    by_tactic: dict[str, list[str]] = {}
+    for det in detections:
+        by_tactic.setdefault(det.attack.tactic_id, []).append(det.id)
+    records: list[dict[str, Any]] = []
+    for tid, name in _ICS_TACTICS:
+        ids = by_tactic.get(tid, [])
+        records.append(
+            {
+                "tactic": name,
+                "tactic_id": tid,
+                "covered": bool(ids),
+                "detections": ids,
+            }
+        )
+    return records
+
+
 def render_json(detections: list[Detection]) -> str:
     """Render the coverage table as a structured JSON document."""
+    tactic_coverage = _tactic_coverage_records(detections)
     doc = {
         "schema": "substation-coverage/v1",
         "generated_by": "python -m substation.coverage",
         "domain": _ATTACK_DOMAIN,
         "detection_count": len(detections),
+        "tactics_total": len(_ICS_TACTICS),
+        "tactics_covered": sum(1 for rec in tactic_coverage if rec["covered"]),
         "detections": [_detection_record(det) for det in detections],
+        "tactic_coverage": tactic_coverage,
     }
     return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
 

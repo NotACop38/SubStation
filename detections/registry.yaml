@@ -224,3 +224,34 @@ detections:
           name: Remote System Information Discovery
         - id: T0846
           name: Remote System Discovery
+
+  # ---------------------------------------------------------------------------
+  # Cross-protocol (Phase 5). X1 is the flagship cross-protocol detection
+  # (PRD.md §5.4): one learned baseline normalized over Modbus + DNP3 + S7comm,
+  # so its `protocol` is the registry's "cross" label rather than a single
+  # protocol. ATT&CK mapping verified against the live matrix on 2026-06-04 (the
+  # same verified Discovery/T0846 mapping as M3/D4/S3). PRD.md §5.4 also relates
+  # X1 to Lateral Movement (TA0109); the data model records one verified tactic
+  # per detection, so the primary verified mapping is recorded here and the
+  # Lateral Movement relation is documented in detections/docs/X1.
+  # ---------------------------------------------------------------------------
+  - id: X1
+    title: Cross-protocol baseline deviation (new talker / asset pair / function)
+    protocol: cross
+    engine: zeek
+    tier: 2
+    # The flagship Zeek detection (PRD.md §5.4, §6.5): learned state + set
+    # membership over the normalized envelope. The Tier-1 Sigma harness cannot
+    # execute Zeek, so its fire/quiet runs in the Tier-2 runner over PCAP (the
+    # runner derives the baseline from the benign scenarios, injects it, then runs
+    # the anomalous PCAP); the harness still enforces X1's contract linkage
+    # (rule + doc + fire/quiet scenarios).
+    status: tier2
+    rule: detections/zeek/x1_cross_protocol_baseline.zeek
+    doc: detections/docs/X1-cross-protocol-baseline.md
+    attack:
+      tactic: Discovery
+      tactic_id: TA0102
+      techniques:
+        - id: T0846
+          name: Remote System Discovery

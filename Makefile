@@ -48,10 +48,11 @@ schema: ## Validate emitted .jsonl events against the frozen event-log JSON Sche
 	$(PY) -m substation.schema
 
 coverage-build: ## Generate the ATT&CK-for-ICS coverage map + Navigator layer (from the registry)
-	$(PY) -m substation.coverage
+	$(PY) -m substation.coverage --out coverage
+	$(PY) -m substation.coverage --out docs/coverage   # committed, published snapshot
 
-coverage-check: ## Verify a committed coverage snapshot matches the registry (drift gate)
-	$(PY) -m substation.coverage --check
+coverage-check: ## Verify the committed coverage snapshot (docs/coverage) matches the registry
+	$(PY) -m substation.coverage --check --out docs/coverage
 
 security: ## Security audit: bandit (code) + pip-audit (deps)
 	bandit -q -r $(PKG)

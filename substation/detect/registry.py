@@ -37,7 +37,10 @@ REGISTRY_PATH = REPO_ROOT / "detections" / "registry.yaml"
 _ENGINES = {"sigma", "zeek", "suricata"}
 _TIERS = {1, 2}
 _STATUSES = {"validated", "partial", "tier2", "experimental"}
-_PROTOCOLS = {"modbus", "dnp3", "s7comm"}
+# The closed v1 protocol set (PRD.md §5), plus "cross" for the flagship
+# cross-protocol detection (X1) whose baseline spans every protocol (PRD.md §5.4).
+# "cross" is a registry/coverage-map label only — scenarios remain single-protocol.
+_PROTOCOLS = {"modbus", "dnp3", "s7comm", "cross"}
 
 _DETECTION_KEYS = {"id", "title", "protocol", "engine", "tier", "status", "rule", "doc", "attack"}
 _ATTACK_KEYS = {"tactic", "tactic_id", "techniques"}

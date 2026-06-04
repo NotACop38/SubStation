@@ -98,3 +98,4 @@ exercises:
     - D2   # unsolicited reporting is enabled, never disabled.
     - D3   # the only control comes from the allow-listed master.
     - D4   # steady READ polling + one control is not function-code enumeration.
+    - X1   # every talker/pair/function here is part of the learned baseline.
