@@ -226,11 +226,45 @@ def test_infinity_constant_rejected_in_jsonl(tmp_path: Path) -> None:
     assert errors and "not valid JSON" in errors[0]
 
 
-def test_dnp3_and_s7_detail_unconstrained_for_now() -> None:
-    # Only Modbus detail is frozen; other protocols accept any object until their
-    # schema freeze (Phases 3/4). The envelope still applies.
+def test_s7_detail_unconstrained_for_now() -> None:
+    # S7 detail is not frozen until Phase 4, so it accepts any object; the envelope
+    # still applies. (Modbus is frozen in Phase 1, DNP3 in Phase 3 — see below.)
     schema = load_event_schema()
     event = _a_valid_read_request()
-    event["proto"] = "dnp3"
+    event["proto"] = "s7comm"
     event["detail"] = {"anything": [1, 2, 3]}
     assert list(iter_event_errors(event, schema)) == []
+
+
+def _a_valid_dnp3_request() -> dict[str, Any]:
+    event = _a_valid_read_request()
+    event["proto"] = "dnp3"
+    event["func_code"] = 1
+    event["func_name"] = "READ"
+    event["action_class"] = "read"
+    event["detail"] = {
+        "fc_request": "READ",
+        "objects": {"function_code": "READ", "object_type": "Binary Input"},
+    }
+    return event
+
+
+def test_dnp3_detail_frozen_accepts_valid() -> None:
+    # DNP3 detail is FROZEN (Phase 3): a valid envelope + DNP3 detail passes.
+    schema = load_event_schema()
+    assert list(iter_event_errors(_a_valid_dnp3_request(), schema)) == []
+
+
+def test_dnp3_detail_rejects_unknown_property() -> None:
+    schema = load_event_schema()
+    event = _a_valid_dnp3_request()
+    event["detail"]["bogus"] = 1
+    errors = list(iter_event_errors(event, schema))
+    assert errors and "bogus" in errors[0]
+
+
+def test_dnp3_detail_rejects_out_of_range_iin() -> None:
+    schema = load_event_schema()
+    event = _a_valid_dnp3_request()
+    event["detail"]["iin"] = 70000  # > 16-bit
+    assert list(iter_event_errors(event, schema)) != []

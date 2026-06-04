@@ -1,0 +1,74 @@
+# =============================================================================
+# Anomalous (D3) — unauthorized control (operate / direct-operate)
+# =============================================================================
+# D3 (PRD.md §5.2): a DNP3 output-control command (SELECT / OPERATE /
+# DIRECT_OPERATE) — typically a Control-Relay-Output-Block driving a breaker or
+# setpoint — from a master that is NOT on the allow-list (Impair Process Control).
+# Per PRD.md §8 the rule is allow-list-by-source, NOT "any operate": operators
+# legitimately issue controls, so the scenario keeps a legitimate operate from the
+# allow-listed master alongside the rogue control to prove the detection
+# discriminates.
+#
+# Allow-list recap (dnp3-benign-baseline.yaml): permitted master master-1
+# 10.0.1.10; outstation rtu-1 10.0.1.50:20000. rogue-1 (10.0.1.77) is NOT
+# allow-listed.
+# -----------------------------------------------------------------------------
+
+name: dnp3-anomalous-d3-unauthorized-operate
+description: >-
+  A non-allow-listed master (10.0.1.77) issues DNP3 OPERATE and DIRECT_OPERATE
+  control commands (CROB) to the outstation amid normal polling and a legitimate
+  operate from the allow-listed master. Fires D3 (unauthorized control); stays
+  quiet on D1 (no restart) and D2 (no disable-unsolicited).
+
+protocol: dnp3
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: master-1        # legitimate, allow-listed master (issues a valid control).
+    role: master
+    host: 10.0.1.10
+  - id: rogue-1         # NOT allow-listed — the unauthorized controller (D3).
+    role: master
+    host: 10.0.1.77
+  - id: rtu-1
+    role: outstation
+    host: 10.0.1.50
+    port: 20000
+
+exchanges:
+  # --- normal background traffic + one legitimate control -------------------
+  - source: master-1
+    target: rtu-1
+    function: Read
+    offset: 0.0
+    params: { object_type: Binary Input, range_low: 0, range_high: 9, object_count: 10 }
+  - source: master-1
+    target: rtu-1
+    function: Operate                  # legitimate control from the allow-listed master.
+    offset: 2.0
+    params: { index_number: 2, operation_type: Latch_On, trip_control_code: Close }
+
+  # --- the unauthorized controls (D3) ---------------------------------------
+  # Non-allow-listed source driving control-relay output blocks on the outstation.
+  - source: rogue-1
+    target: rtu-1
+    function: Operate
+    offset: 4.0
+    params: { index_number: 7, operation_type: Latch_Off, trip_control_code: Trip }
+  - source: rogue-1
+    target: rtu-1
+    function: DirectOperate
+    offset: 6.0
+    params: { index_number: 8, operation_type: Pulse_On, trip_control_code: Close, on_time: 100 }
+
+exercises:
+  fires:
+    - D3   # operate/direct-operate originates from a non-allow-listed source.
+  quiet:
+    - D1   # no device restart.
+    - D2   # no disable-unsolicited.

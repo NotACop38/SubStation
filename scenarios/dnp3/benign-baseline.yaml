@@ -1,0 +1,100 @@
+# =============================================================================
+# Benign DNP3 baseline — the credible "quiet" ground truth for D1–D4
+# =============================================================================
+# The realistic normal-operation scenario every DNP3 detection must stay SILENT
+# on (PRD.md §6.4, §8: without a legitimate master/control source and continuous
+# polling, the allow-list and enumeration detections are untestable and not
+# credible). It models, on one outstation/RTU:
+#   * an allow-listed SCADA master that enables unsolicited reporting at startup,
+#     polls continuously (READ), and issues a legitimate control (OPERATE), and
+#   * the outstation returning solicited RESPONSEs and spontaneous
+#     UNSOLICITED_RESPONSEs (legitimate event-driven telemetry).
+#
+# Allow-list policy this scenario establishes (the detections key off it):
+#   * Permitted master / control source:  master-1  10.0.1.10
+#   * Outstation / RTU:                    rtu-1     10.0.1.50:20000
+# A control/restart/disable-reporting command from any OTHER source — or one
+# source enumerating many DNP3 function codes — is what the anomalous-*.yaml
+# scenarios model.
+# -----------------------------------------------------------------------------
+
+name: dnp3-benign-baseline
+description: >-
+  Normal DNP3 operation on one outstation: an allow-listed master enables
+  unsolicited reporting, polls continuously and issues a legitimate operate,
+  while the outstation returns solicited responses and spontaneous unsolicited
+  responses. The canonical quiet baseline that D1 (restart), D2
+  (disable-unsolicited), D3 (unauthorized operate) and D4 (enumeration) must all
+  stay silent on (PRD.md §8).
+
+protocol: dnp3
+label: benign
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: master-1        # allow-listed SCADA master: polling + legitimate control.
+    role: master
+    host: 10.0.1.10
+  - id: rtu-1           # the outstation/RTU being polled and controlled.
+    role: outstation
+    host: 10.0.1.50
+    port: 20000
+
+exchanges:
+  # Exchanges are listed in chronological (monotonic-offset) order so the JSON log
+  # (file order) and the PCAP (timestamp-sorted) stay in lockstep (PRD.md §6.1).
+
+  # --- startup: master enables unsolicited reporting (legitimate) ------------
+  - source: master-1
+    target: rtu-1
+    function: EnableUnsolicited
+    offset: 0.0
+
+  # --- continuous integrity polling: the steady SCADA read cadence ----------
+  - source: master-1
+    target: rtu-1
+    function: Read
+    offset: 2.0
+    params: { object_type: Binary Input, range_low: 0, range_high: 9, object_count: 10 }
+  - source: master-1
+    target: rtu-1
+    function: Read
+    offset: 4.0
+    params: { object_type: Analog Input, range_low: 0, range_high: 7, object_count: 8 }
+
+  # --- outstation spontaneously reports an event (legitimate unsolicited) ----
+  - source: rtu-1
+    target: master-1
+    function: UnsolicitedResponse
+    offset: 5.0
+    params: { object_type: Binary Input, range_low: 3, range_high: 3, object_count: 1 }
+
+  # --- a legitimate operator control from the allow-listed master -----------
+  # In-policy: control from the permitted master, so D3 stays quiet.
+  - source: master-1
+    target: rtu-1
+    function: Operate
+    offset: 6.0
+    params: { index_number: 2, operation_type: Latch_On, trip_control_code: Close, execute_count: 1 }
+
+  # --- polling continues after the control: operation is continuous ---------
+  - source: master-1
+    target: rtu-1
+    function: Read
+    offset: 8.0
+    params: { object_type: Binary Input, range_low: 0, range_high: 9, object_count: 10 }
+  - source: rtu-1
+    target: master-1
+    function: UnsolicitedResponse
+    offset: 10.0
+    params: { object_type: Analog Input, range_low: 1, range_high: 1, object_count: 1 }
+
+exercises:
+  quiet:
+    - D1   # no device restart is issued.
+    - D2   # unsolicited reporting is enabled, never disabled.
+    - D3   # the only control comes from the allow-listed master.
+    - D4   # steady READ polling + one control is not function-code enumeration.

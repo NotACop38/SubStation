@@ -1,8 +1,8 @@
 # Event-log JSON schema
 
-**Status:** **FROZEN for Modbus** (Phase 1). DNP3 and S7 `detail` shapes freeze in
-Phases 3 and 4. This document is the binding contract every emitter, detection,
-and test binds to (`PRD.md` §6.3).
+**Status:** **FROZEN for Modbus** (Phase 1) **and DNP3** (Phase 3). The S7 `detail`
+shape freezes in Phase 4. This document is the binding contract every emitter,
+detection, and test binds to (`PRD.md` §6.3).
 
 The machine-readable contract is
 [`substation/schema/event-log.schema.json`](../substation/schema/event-log.schema.json)
@@ -171,6 +171,80 @@ to special-case every code:
 > against the **pinned** Zeek `base/protocols/modbus/consts.zeek` before any new
 > detection keys on a name (spike 01).
 
+## DNP3 `detail` (FROZEN)
+
+Modeled on Zeek's **base** `dnp3.log` (`DNP3::Info`) plus ICSNPP's two extended
+logs, **`dnp3_control.log`** (CROB/PCB control detail) and **`dnp3_objects.log`**
+(object-header detail). All fields are **optional** (mirroring Zeek's optional
+record fields); unknown fields are rejected.
+
+> **VERIFY provenance.** The DNP3 field names below are taken from
+> `zeek/zeek` `base/protocols/dnp3/{main,consts}.zeek` and `cisagov/icsnpp-dnp3`
+> `scripts/main.zeek`, **not** memory — recorded in
+> [`spikes/04-icsnpp-dnp3-fields.md`](spikes/04-icsnpp-dnp3-fields.md).
+
+| Field        | Type            | Zeek/ICSNPP source / meaning |
+| ------------ | --------------- | ---------------------------- |
+| `fc_request` | string          | `dnp3.log` `fc_request` — request function name (`DNP3::function_codes[fc]`); mirrors envelope `func_name` on requests. |
+| `fc_reply`   | string          | `dnp3.log` `fc_reply` — reply function name; mirrors envelope `func_name` on responses (`RESPONSE`/`UNSOLICITED_RESPONSE`). |
+| `iin`        | integer 0–65535 | `dnp3.log` `iin` — response internal-indication bits (2-byte field). |
+| `control`    | object          | `dnp3_control.log` CROB/PCB sub-shape (SELECT/OPERATE) — see below. |
+| `objects`    | object          | `dnp3_objects.log` object-header sub-shape (READ/RESPONSE) — see below. |
+
+`detail.control` (ICSNPP `dnp3_control.log`; values from the parser's
+`control_block_*` tables):
+
+| Field               | Type            |
+| ------------------- | --------------- |
+| `block_type`        | string (`Control Relay Output Block` / `Pattern Control Block`) |
+| `function_code`     | string (this row's function, e.g. `OPERATE`) |
+| `index_number`      | integer 0–65535 |
+| `trip_control_code` | string (`Nul` / `Close` / `Trip`) |
+| `operation_type`    | string (`Nul` / `Pulse_On` / `Pulse_Off` / `Latch_On` / `Latch_Off`) |
+| `clear_bit`         | boolean         |
+| `execute_count`     | integer 0–255   |
+| `on_time`           | integer 0–2³²−1 |
+| `off_time`          | integer 0–2³²−1 |
+| `status_code`       | string (RESPONSE only) |
+
+`detail.objects` (ICSNPP `dnp3_objects.log`; range/count populated on the RESPONSE,
+per the parser):
+
+| Field           | Type            |
+| --------------- | --------------- |
+| `function_code` | string (`READ` / `RESPONSE`) |
+| `object_type`   | string (device/object type, e.g. `Binary Input`) |
+| `object_count`  | integer 0–65535 |
+| `range_low`     | integer 0–65535 |
+| `range_high`    | integer 0–65535 |
+
+We do **not** duplicate ICSNPP's `id` / `source_*` / `destination_*` into `detail`
+— the envelope `conn` + `is_orig` carry them (same choice as Modbus, spike 04). A
+detection needing a stable "who is the master" identity (D1/D2/D3 allow-lists)
+derives source from `conn` **and** `is_orig`.
+
+### `action_class` mapping (DNP3)
+
+| `action_class`   | DNP3 functions |
+| ---------------- | -------------- |
+| `read`           | READ; IMMED_FREEZE, GET_FILE_INFO; UNSOLICITED_RESPONSE (data-bearing telemetry) |
+| `write`          | WRITE; FREEZE_CLEAR |
+| `control`        | SELECT, OPERATE, DIRECT_OPERATE, DIRECT_OPERATE_NR (output control); COLD_RESTART, WARM_RESTART (device control); ENABLE_UNSOLICITED, DISABLE_UNSOLICITED (reporting control); START_APPL, STOP_APPL, ASSIGN_CLASS |
+| `diagnostic`     | DELAY_MEASURE, RECORD_CURRENT_TIME |
+| `other`          | anything not classified above |
+
+A solicited **response** (`RESPONSE`, 0x81) inherits the action_class of the request
+it answers (so a response to a READ is `read`, to an OPERATE is `control`). DNP3
+lumps output, device and reporting control all under `control`; the per-command
+detections (D1/D2/D3) therefore key on the specific **`func_name`**, never on
+`action_class` alone, so the broad class never over-fires.
+
+> DNP3 carries no Modbus-style application exception: envelope `is_exception` is
+> always `false` for DNP3 and IIN error bits are surfaced via `detail.iin`. The base
+> `dnp3.log` separates request/reply function names (`fc_request`/`fc_reply`), so a
+> DNP3 exchange's request and response carry **different** `func_code`/`func_name`
+> (e.g. `READ` → `RESPONSE`), unlike Modbus where the response echoes the request.
+
 ## Example events
 
 A benign read request/response pair and an illegal-address exception (one line
@@ -183,6 +257,16 @@ each in the `.jsonl`):
 
 More live, validated examples:
 [`tests/data/events/modbus/valid.jsonl`](../tests/data/events/modbus/valid.jsonl).
+
+A DNP3 operate command and an unauthorized cold-restart (one line each):
+
+```json
+{"ts": 1717372802.0, "uid": "COt4RSFMt8R6TYXLdv", "conn": {"orig_h": "10.0.1.10", "orig_p": 49152, "resp_h": "10.0.1.50", "resp_p": 20000}, "proto": "dnp3", "is_orig": true, "direction": "request", "func_code": 4, "func_name": "OPERATE", "action_class": "control", "is_exception": false, "error": null, "detail": {"fc_request": "OPERATE", "control": {"block_type": "Control Relay Output Block", "function_code": "OPERATE", "index_number": 2, "trip_control_code": "Close", "operation_type": "Latch_On", "clear_bit": false, "execute_count": 1, "on_time": 0, "off_time": 0}}}
+{"ts": 1717372806.0, "uid": "COt4RSFMt8R6TYXLdv", "conn": {"orig_h": "10.0.1.77", "orig_p": 49153, "resp_h": "10.0.1.50", "resp_p": 20000}, "proto": "dnp3", "is_orig": true, "direction": "request", "func_code": 13, "func_name": "COLD_RESTART", "action_class": "control", "is_exception": false, "error": null, "detail": {"fc_request": "COLD_RESTART"}}
+```
+
+More live, validated DNP3 examples:
+[`tests/data/events/dnp3/valid.jsonl`](../tests/data/events/dnp3/valid.jsonl).
 
 ## Validation (the gate)
 
@@ -203,10 +287,10 @@ draft-2020-12 and also works with any external validator (e.g. `jsonschema`).
 
 ## Other protocols (not yet frozen)
 
-DNP3 (`proto: dnp3`) and S7 (`proto: s7comm`) use the **same envelope** now, but
-their `detail` objects are **unconstrained** until their schema freezes (Phases 3
-and 4), each verified against the current ICSNPP DNP3 / S7 parser fields before
-freeze.
+S7 (`proto: s7comm`) uses the **same envelope** now, but its `detail` object is
+**unconstrained** until its schema freezes (Phase 4), verified against the current
+ICSNPP S7 parser fields before freeze. Modbus (Phase 1) and DNP3 (Phase 3) `detail`
+are frozen above.
 
 ## Sigma offline evaluation (recorded)
 

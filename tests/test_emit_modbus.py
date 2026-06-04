@@ -176,9 +176,9 @@ exchanges:
     params: {address: 0}
 """
 
-_DNP3_SCENARIO = """
-name: dnp3-stub
-protocol: dnp3
+_S7_SCENARIO = """
+name: s7-stub
+protocol: s7comm
 label: benign
 actors:
   - {id: master, role: master, host: 10.0.0.10}
@@ -266,9 +266,10 @@ def test_missing_required_param_raises(tmp_path: Path) -> None:
         write_artifacts(scenario, tmp_path)
 
 
-def test_non_modbus_protocol_raises(tmp_path: Path) -> None:
-    scenario = load_scenario(_write_scenario(tmp_path, _DNP3_SCENARIO))
-    with pytest.raises(EmitError, match="Modbus only"):
+def test_unsupported_protocol_raises(tmp_path: Path) -> None:
+    # DNP3 emits (Phase 3); S7 has no emitter until Phase 4, so it fails clearly.
+    scenario = load_scenario(_write_scenario(tmp_path, _S7_SCENARIO))
+    with pytest.raises(EmitError, match="not yet implemented for s7comm"):
         write_artifacts(scenario, tmp_path)
 
 

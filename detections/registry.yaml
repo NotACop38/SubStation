@@ -89,3 +89,80 @@ detections:
           name: Remote System Discovery
         - id: T0888
           name: Remote System Information Discovery
+
+  # ---------------------------------------------------------------------------
+  # DNP3 (Phase 3). ATT&CK mappings verified against the live ATT&CK-for-ICS
+  # matrix on 2026-06-04 (docs/spikes note the restructured techniques): the
+  # former T0804 Block Reporting Message is now T1691.002; the former T0855
+  # Unauthorized Command Message is now T1692.001. Recorded per-detection in
+  # detections/docs/.
+  # ---------------------------------------------------------------------------
+  - id: D1
+    title: Cold/warm restart from unexpected source
+    protocol: dnp3
+    engine: sigma
+    tier: 1
+    status: validated
+    rule: detections/sigma/dnp3_d1_unauthorized_restart.yml
+    doc: detections/docs/D1-unauthorized-restart.md
+    attack:
+      tactic: Inhibit Response Function
+      tactic_id: TA0107
+      techniques:
+        - id: T0816
+          name: Device Restart/Shutdown
+        - id: T0814
+          name: Denial of Service
+
+  - id: D2
+    title: Disable unsolicited responses
+    protocol: dnp3
+    engine: sigma
+    tier: 1
+    status: validated
+    rule: detections/sigma/dnp3_d2_disable_unsolicited.yml
+    doc: detections/docs/D2-disable-unsolicited.md
+    attack:
+      tactic: Inhibit Response Function
+      tactic_id: TA0107
+      techniques:
+        - id: T1691.002
+          name: "Block Operational Technology Message: Reporting Message"
+        - id: T0878
+          name: Alarm Suppression
+
+  - id: D3
+    title: Unauthorized control (operate/direct-operate)
+    protocol: dnp3
+    engine: sigma
+    tier: 1
+    status: validated
+    rule: detections/sigma/dnp3_d3_unauthorized_operate.yml
+    doc: detections/docs/D3-unauthorized-operate.md
+    attack:
+      tactic: Impair Process Control
+      tactic_id: TA0106
+      techniques:
+        - id: T1692.001
+          name: "Unauthorized Message: Command Message"
+
+  - id: D4
+    title: Function-code enumeration / scanning
+    protocol: dnp3
+    engine: zeek
+    tier: 2
+    # The DNP3 slice's Zeek rail (PRD.md §6.5), mirroring Modbus M3. The Tier-1
+    # Sigma harness cannot execute Zeek, so its fire/quiet runs in the Tier-2
+    # runner over PCAP (Phase 2); the harness still enforces D4's contract linkage
+    # (rule + fire/quiet scenarios).
+    status: tier2
+    rule: detections/zeek/dnp3_d4_function_enumeration.zeek
+    doc: detections/docs/D4-function-enumeration.md
+    attack:
+      tactic: Discovery
+      tactic_id: TA0102
+      techniques:
+        - id: T0888
+          name: Remote System Information Discovery
+        - id: T0846
+          name: Remote System Discovery

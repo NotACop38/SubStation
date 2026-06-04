@@ -25,6 +25,7 @@ import ipaddress
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from substation.scenarios import Actor, Protocol, Scenario
 
@@ -32,6 +33,7 @@ __all__ = [
     "ModbusError",
     "ModbusEvent",
     "build_events",
+    "event_to_dict",
     "resolve_function",
     "FUNCTION_NAMES",
     "ACTION_CLASS",
@@ -453,3 +455,44 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
         )
 
     return events
+
+
+def event_to_dict(event: ModbusEvent) -> dict[str, Any]:
+    """Render one Modbus event as the schema's envelope + Modbus ``detail`` dict.
+
+    The JSON emitter (:mod:`substation.emit.json_emitter`) writes the returned record
+    after validating it against the frozen event-log schema (``docs/schema.md``).
+    """
+    detail: dict[str, Any] = {"tid": event.tid, "unit": event.unit, "func": event.func_name}
+    if event.address is not None:
+        detail["address"] = event.address
+    if event.quantity is not None:
+        detail["quantity"] = event.quantity
+    if event.request_values:
+        detail["request_values"] = list(event.request_values)
+    if event.response_values:
+        detail["response_values"] = list(event.response_values)
+    if event.exception_code is not None:
+        detail["exception_code"] = event.exception_code
+    if event.matched:
+        detail["matched"] = True
+
+    return {
+        "ts": event.ts,
+        "uid": event.uid,
+        "conn": {
+            "orig_h": event.orig_h,
+            "orig_p": event.orig_p,
+            "resp_h": event.resp_h,
+            "resp_p": event.resp_p,
+        },
+        "proto": "modbus",
+        "is_orig": event.is_orig,
+        "direction": event.direction,
+        "func_code": event.func_code,
+        "func_name": event.func_name,
+        "action_class": event.action_class,
+        "is_exception": event.is_exception,
+        "error": event.error,
+        "detail": detail,
+    }

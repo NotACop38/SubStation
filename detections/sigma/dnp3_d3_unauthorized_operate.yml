@@ -1,0 +1,60 @@
+# =============================================================================
+# Substation detection D3 — Unauthorized DNP3 control (operate / direct-operate)
+# =============================================================================
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Rationale, data source and the full false-positive profile live in
+# detections/docs/D3-unauthorized-operate.md (the Detection Contract doc, §6.6).
+#
+# Allow-list by SOURCE, not "any operate": operators legitimately issue controls,
+# so a control-only rule is pure false positives (PRD.md §8). A SELECT / OPERATE /
+# DIRECT_OPERATE request (a control-relay/analog output command) from a master not
+# on the allow-list fires; the same command from the allow-listed master is quiet.
+# -----------------------------------------------------------------------------
+title: DNP3 Output Control From Unauthorized Source
+id: 7f3b1d29-6a8c-4e52-b0d4-9c1e83f6a2b7
+status: experimental
+description: |
+  A DNP3 output-control request (SELECT / OPERATE / DIRECT_OPERATE) — typically a
+  Control-Relay-Output-Block driving a breaker or setpoint — from a master that is
+  not on the allow-list. Substation detection D3 (PRD.md §5.2): an unauthorized
+  command message that can move the physical process (Impair Process Control).
+  Allow-listing by source, not "any operate", keeps legitimate operator controls
+  quiet (the OT-realism guardrail, PRD.md §8).
+references:
+  - https://attack.mitre.org/techniques/T1692/001/
+  - PRD.md §5.2 (D3); detections/docs/D3-unauthorized-operate.md
+author: Substation
+date: 2026-06-04
+logsource:
+  product: ot
+  service: dnp3
+detection:
+  # A DNP3 output-control command on the request side. func_name carries the Zeek
+  # DNP3::function_codes name (docs/schema.md); these four codes are the
+  # control-relay/analog output operations. conn.orig_h is the issuing master.
+  output_control:
+    proto: dnp3
+    direction: request
+    func_name:
+      - SELECT
+      - OPERATE
+      - DIRECT_OPERATE
+      - DIRECT_OPERATE_NR
+  # The permitted control source (allow-listed master). A control from any other
+  # source is unauthorized (source derived through is_orig, docs/schema.md → conn).
+  authorized_source:
+    conn.orig_h: '10.0.1.10' # master-1 — the allow-listed SCADA master
+  condition: output_control and not authorized_source
+fields:
+  - conn.orig_h
+  - func_name
+falsepositives:
+  - A new or relocated master/HMI whose address is not yet allow-listed will fire
+    on its legitimate controls — keep the control-source allow-list current as
+    assets change.
+  - A maintenance laptop performing sanctioned controls from an unlisted address —
+    pre-authorize it (add it for the maintenance window).
+level: high
+tags:
+  - attack.impair-process-control
+  - attack.t1692.001

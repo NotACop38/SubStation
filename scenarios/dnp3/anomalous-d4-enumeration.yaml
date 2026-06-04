@@ -1,0 +1,102 @@
+# =============================================================================
+# Anomalous (D4) — function-code enumeration / scanning (diversity, NOT volume)
+# =============================================================================
+# D4 (PRD.md §5.2, §8): ONE source exercising an anomalously DIVERSE set of DNP3
+# function codes against an outstation in a short window — mapping which functions
+# the device supports (Discovery). The signal is DIVERSITY, deliberately NOT raw
+# request rate: SCADA masters poll constantly, so a volume threshold would fire on
+# normal operation (PRD.md §8). This scenario therefore uses only a handful of
+# requests, each a DIFFERENT function code, in a tight window: low volume, high
+# diversity.
+#
+# The sweep deliberately uses neutral discovery-class function codes and avoids the
+# high-impact commands the per-command detections key on, so it fires D4 ONLY:
+#   * D1 stays quiet — no COLD_RESTART / WARM_RESTART.
+#   * D2 stays quiet — no DISABLE_UNSOLICITED.
+#   * D3 stays quiet — no SELECT / OPERATE / DIRECT_OPERATE.
+# (An enumeration that also issued those would, correctly, additionally trip D1–D3.)
+# -----------------------------------------------------------------------------
+
+name: dnp3-anomalous-d4-enumeration
+description: >-
+  A single scanning host (10.0.1.66) walks nine distinct DNP3 function codes
+  against the outstation in a short window — high function-code diversity at low
+  request volume — to map supported functions. Fires D4 (function-code
+  enumeration); stays quiet on D1/D2/D3 (it touches none of the restart,
+  disable-unsolicited, or operate commands those key on).
+
+protocol: dnp3
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 0.5     # tight window — a sweep, but only a few requests.
+
+actors:
+  - id: master-1        # normal polling continues during the sweep.
+    role: master
+    host: 10.0.1.10
+  - id: scanner-1       # the single enumerating source (non-allow-listed).
+    role: master
+    host: 10.0.1.66
+  - id: rtu-1
+    role: outstation
+    host: 10.0.1.50
+    port: 20000
+
+exchanges:
+  # --- normal background polling --------------------------------------------
+  - source: master-1
+    target: rtu-1
+    function: Read
+    offset: 0.0
+    params: { object_type: Binary Input, range_low: 0, range_high: 9, object_count: 10 }
+
+  # --- the sweep: 9 distinct function codes from one source, short window ----
+  # One request each — diversity is the signal, not volume. None of these are the
+  # restart / disable-unsolicited / operate commands D1–D3 key on.
+  - source: scanner-1
+    target: rtu-1
+    function: Read
+    offset: 1.0
+    params: { object_type: Binary Input, range_low: 0, range_high: 0, object_count: 1 }
+  - source: scanner-1
+    target: rtu-1
+    function: Write
+    offset: 1.5
+  - source: scanner-1
+    target: rtu-1
+    function: ImmedFreeze
+    offset: 2.0
+  - source: scanner-1
+    target: rtu-1
+    function: FreezeClear
+    offset: 2.5
+  - source: scanner-1
+    target: rtu-1
+    function: EnableUnsolicited
+    offset: 3.0
+  - source: scanner-1
+    target: rtu-1
+    function: AssignClass
+    offset: 3.5
+  - source: scanner-1
+    target: rtu-1
+    function: DelayMeasure
+    offset: 4.0
+  - source: scanner-1
+    target: rtu-1
+    function: RecordCurrentTime
+    offset: 4.5
+  - source: scanner-1
+    target: rtu-1
+    function: GetFileInfo
+    offset: 5.0
+
+exercises:
+  fires:
+    - D4   # one source, nine distinct function codes, short window.
+  quiet:
+    - D1   # the sweep issues no device restart.
+    - D2   # the sweep issues no disable-unsolicited.
+    - D3   # the sweep issues no operate/direct-operate.
