@@ -1,0 +1,84 @@
+# =============================================================================
+# Benign S7 baseline — the credible "quiet" ground truth for S1–S3
+# =============================================================================
+# The realistic normal-operation scenario every S7 detection must stay SILENT on
+# (PRD.md §6.4, §8: without a legitimate engineering workstation and continuous
+# HMI interaction, the allow-list and enumeration detections are untestable and
+# not credible). It models, on one S7 PLC:
+#   * an allow-listed engineering workstation (EWS) that connects (COTP + S7
+#     Setup Communication), reads module identity once, performs a SANCTIONED
+#     program download (Request/Download Block/Download Ended) and a legitimate
+#     run-state change (PLC Control "P_PROGRAM" = PLC Start/Stop), and
+#   * an operator HMI that connects and continuously reads/writes process tags
+#     (Read Variable polling + a legitimate setpoint Write Variable).
+#
+# Allow-list policy this scenario establishes (the detections key off it):
+#   * Permitted engineering / control / download source:  ews-1   10.0.4.10
+#   * Operator HMI (process tags only, never controls/downloads): hmi-1 10.0.4.20
+#   * PLC:                                                 plc-1   10.0.4.50:102
+# A run-state change or program download from any OTHER source — or one source
+# enumerating many module-info SZLs / blocks — is what the anomalous-*.yaml
+# scenarios model.
+# -----------------------------------------------------------------------------
+
+name: s7-benign-baseline
+description: >-
+  Normal S7 operation on one PLC: an allow-listed engineering workstation
+  connects, reads module identity, performs a sanctioned program download and a
+  legitimate run-state change, while an operator HMI continuously reads and writes
+  process tags. The canonical quiet baseline that S1 (CPU stop/start), S2
+  (program/data-block write or download) and S3 (enumeration) must all stay silent
+  on (PRD.md §8).
+
+protocol: s7comm
+label: benign
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: ews-1          # allow-listed engineering workstation: program + control.
+    role: ews
+    host: 10.0.4.10
+  - id: hmi-1          # operator HMI: process-tag reads/writes only.
+    role: hmi
+    host: 10.0.4.20
+  - id: plc-1          # the S7 PLC being engineered and operated.
+    role: plc
+    host: 10.0.4.50
+    port: 102
+
+exchanges:
+  # Exchanges are listed in chronological (monotonic-offset) order — interleaving the
+  # HMI and EWS sessions — so the JSON log (file order) and the PCAP (timestamp-sorted)
+  # stay in lockstep (PRD.md §6.1). Each connection opens with a COTP CR/CC handshake
+  # automatically on first use.
+
+  - { source: hmi-1, target: plc-1, function: SetupCommunication, offset: 0.0 }
+  - { source: ews-1, target: plc-1, function: SetupCommunication, offset: 1.0 }
+
+  # HMI continuous process-tag polling; EWS reads module identity once on connect.
+  - { source: hmi-1, target: plc-1, function: ReadVariable, offset: 2.0 }
+  - { source: ews-1, target: plc-1, function: ReadSZL, offset: 3.0, params: { szl_id: 0x0011 } }
+  - { source: hmi-1, target: plc-1, function: ReadVariable, offset: 4.0 }
+
+  # A SANCTIONED program download from the allow-listed EWS (in-policy, so S2 stays
+  # quiet — allow-list discrimination, PRD.md §8) ...
+  - { source: ews-1, target: plc-1, function: RequestDownload, offset: 5.0, params: { block_type: "0A", block_number: "00001" } }
+  # ... alongside a legitimate operator setpoint write (NOT a data-block/program write:
+  # S2 deliberately ignores plain Write Variable so routine HMI writes never fire it).
+  - { source: hmi-1, target: plc-1, function: WriteVariable, offset: 6.0 }
+  - { source: ews-1, target: plc-1, function: DownloadBlock, offset: 7.0, params: { block_type: "0A", block_number: "00001" } }
+  - { source: hmi-1, target: plc-1, function: ReadVariable, offset: 8.0 }
+  - { source: ews-1, target: plc-1, function: DownloadEnded, offset: 9.0 }
+
+  # A legitimate run-state change (P_PROGRAM = PLC Start/Stop) from the permitted EWS,
+  # so S1 stays quiet.
+  - { source: ews-1, target: plc-1, function: PlcControl, offset: 11.0, params: { service: P_PROGRAM } }
+
+exercises:
+  quiet:
+    - S1   # the only run-state change comes from the allow-listed EWS.
+    - S2   # the only program download comes from the allow-listed EWS; HMI only writes tags.
+    - S3   # a single module-identity read is not enumeration.

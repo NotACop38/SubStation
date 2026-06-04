@@ -226,14 +226,50 @@ def test_infinity_constant_rejected_in_jsonl(tmp_path: Path) -> None:
     assert errors and "not valid JSON" in errors[0]
 
 
-def test_s7_detail_unconstrained_for_now() -> None:
-    # S7 detail is not frozen until Phase 4, so it accepts any object; the envelope
-    # still applies. (Modbus is frozen in Phase 1, DNP3 in Phase 3 — see below.)
-    schema = load_event_schema()
+def _a_valid_s7_request() -> dict[str, Any]:
     event = _a_valid_read_request()
     event["proto"] = "s7comm"
-    event["detail"] = {"anything": [1, 2, 3]}
-    assert list(iter_event_errors(event, schema)) == []
+    event["func_code"] = 0x44
+    event["func_name"] = "Request: CPU Functions"
+    event["action_class"] = "diagnostic"
+    event["detail"] = {
+        "rosctr_code": 7,
+        "rosctr_name": "User-Data",
+        "pdu_reference": 2,
+        "function_code": "0x44",
+        "function_name": "Request: CPU Functions",
+        "subfunction_code": "0x01",
+        "subfunction_name": "Read SZL",
+        "read_szl": {
+            "method": "Request",
+            "szl_id": "0x0011",
+            "szl_id_name": "Module identification",
+            "szl_index": "0x0000",
+        },
+    }
+    return event
+
+
+def test_s7_detail_frozen_accepts_valid() -> None:
+    # S7 detail is FROZEN (Phase 4): a valid envelope + S7 detail passes.
+    schema = load_event_schema()
+    assert list(iter_event_errors(_a_valid_s7_request(), schema)) == []
+
+
+def test_s7_detail_rejects_unknown_property() -> None:
+    schema = load_event_schema()
+    event = _a_valid_s7_request()
+    event["detail"]["bogus"] = 1
+    errors = list(iter_event_errors(event, schema))
+    assert errors and "bogus" in errors[0]
+
+
+def test_s7_detail_rejects_unknown_nested_property() -> None:
+    schema = load_event_schema()
+    event = _a_valid_s7_request()
+    event["detail"]["read_szl"]["bogus"] = 1
+    errors = list(iter_event_errors(event, schema))
+    assert errors and "bogus" in errors[0]
 
 
 def _a_valid_dnp3_request() -> dict[str, Any]:

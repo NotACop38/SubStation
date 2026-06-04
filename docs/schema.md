@@ -1,8 +1,8 @@
 # Event-log JSON schema
 
-**Status:** **FROZEN for Modbus** (Phase 1) **and DNP3** (Phase 3). The S7 `detail`
-shape freezes in Phase 4. This document is the binding contract every emitter,
-detection, and test binds to (`PRD.md` §6.3).
+**Status:** **FROZEN for Modbus** (Phase 1), **DNP3** (Phase 3) **and S7** (Phase 4).
+This document is the binding contract every emitter, detection, and test binds to
+(`PRD.md` §6.3).
 
 The machine-readable contract is
 [`substation/schema/event-log.schema.json`](../substation/schema/event-log.schema.json)
@@ -257,6 +257,112 @@ detections (D1/D2/D3) therefore key on the specific **`func_name`**, never on
 > DNP3 exchange's request and response carry **different** `func_code`/`func_name`
 > (e.g. `READ` → `RESPONSE`), unlike Modbus where the response echoes the request.
 
+## S7 `detail` (FROZEN)
+
+Modeled on ICSNPP-S7comm's **`s7comm.log`** (the `S7COMM` record) plus four
+sub-objects for the COTP and the per-function extended logs: **`cotp.log`**
+(`detail.cotp`), **`s7comm_read_szl.log`** (`detail.read_szl`),
+**`s7comm_upload_download.log`** (`detail.upload_download`) and **`s7comm_plus.log`**
+(`detail.plus`). S7comm/-plus have **no open specification** (`PRD.md` §9), so the
+field names come from the ICSNPP parser and the Wireshark dissector. All fields are
+**optional** (mirroring the parser's optional record fields); unknown fields are
+rejected.
+
+> **VERIFY provenance.** The S7 field names + value tables below are taken from
+> `cisagov/icsnpp-s7comm` `scripts/icsnpp/s7comm/main.zeek` and `scripts/consts.zeek`,
+> **not** memory — recorded in
+> [`spikes/06-icsnpp-s7comm-fields.md`](spikes/06-icsnpp-s7comm-fields.md). The wire
+> framing is verified against ICSNPP's example captures in
+> [`spikes/07-s7comm-pdu-capability.md`](spikes/07-s7comm-pdu-capability.md).
+
+| Field              | Type            | ICSNPP source / meaning |
+| ------------------ | --------------- | ----------------------- |
+| `rosctr_code`      | integer 0–255   | `s7comm.log` `rosctr_code` — Remote Operating Service Control code. |
+| `rosctr_name`      | string          | `rosctr_name` (`rosctr_types`): `Job-Request` / `ACK` / `ACK-Data` / `User-Data`. |
+| `pdu_reference`    | integer 0–65535 | `pdu_reference` — links requests to responses. |
+| `function_code`    | string          | `function_code` — parameter function code as a hex string (e.g. `0x05`). |
+| `function_name`    | string          | `function_name` (`s7comm_functions[fc]`, or `Request:`/`Response: ` + User-Data function); mirrors envelope `func_name`. |
+| `subfunction_code` | string          | `subfunction_code` — User-Data subfunction (hex) or the PLC-control service string. |
+| `subfunction_name` | string          | `subfunction_name` — subfunction / PLC-control service name (e.g. `Read SZL`, `PLC Start / Stop`). |
+| `error_class`      | string          | `error_class` (`s7comm_error_class`) — present on ACK/ACK-Data with an error. |
+| `error_code`       | string          | `error_code` — error code within the class (hex string). |
+| `cotp`             | object          | `cotp.log` sub-shape (COTP CR/CC) — see below. |
+| `read_szl`         | object          | `s7comm_read_szl.log` sub-shape (Read SZL) — see below. |
+| `upload_download`  | object          | `s7comm_upload_download.log` sub-shape (program/block transfer) — see below. |
+| `plus`             | object          | `s7comm_plus.log` sub-shape (S7comm-plus) — see below. |
+
+`detail.cotp` (ICSNPP `cotp.log`; `pdu_code` is the PDU-type high nibble as hex):
+
+| Field      | Type   |
+| ---------- | ------ |
+| `pdu_code` | string (e.g. `0x0e`) |
+| `pdu_name` | string (e.g. `CR Connection Request`) |
+
+`detail.read_szl` (ICSNPP `s7comm_read_szl.log`; `szl_id_name = s7comm_szl_id[szl_id & 0xff]`):
+
+| Field              | Type   |
+| ------------------ | ------ |
+| `method`           | string (`Request` / `Response`) |
+| `szl_id`           | string (hex, e.g. `0x0011`) |
+| `szl_id_name`      | string (e.g. `Module identification`) |
+| `szl_index`        | string (hex) |
+| `return_code`      | string (hex) |
+| `return_code_name` | string (e.g. `Success`) |
+
+`detail.upload_download` (ICSNPP `s7comm_upload_download.log`; NB the README lists
+`function_code`/`function_status` as `count` but the record logs string `function_name`/
+`function_status` — code wins, spike 06):
+
+| Field                    | Type            |
+| ------------------------ | --------------- |
+| `rosctr`                 | string          |
+| `function_name`          | string          |
+| `function_status`        | string (hex)    |
+| `session_id`             | integer 0–2³²−1 |
+| `blocklength`            | integer 0–65535 |
+| `filename`               | string          |
+| `block_type`             | string (`s7comm_block_types`, e.g. `Data Block`) |
+| `block_number`           | string          |
+| `destination_filesystem` | string (`Passive` / `Active`) |
+
+`detail.plus` (ICSNPP `s7comm_plus.log`):
+
+| Field           | Type          |
+| --------------- | ------------- |
+| `version`       | integer 0–255 |
+| `opcode`        | string (hex, e.g. `0x31`) |
+| `opcode_name`   | string (`Request` / `Response` / `Notification`) |
+| `function_code` | string (hex, e.g. `0x04bb`) |
+| `function_name` | string (e.g. `Explore`) |
+
+We do **not** duplicate ICSNPP's `id` / `source_*` / `destination_*` into `detail` —
+the envelope `conn` + `is_orig` carry them (same choice as Modbus/DNP3, spike 06). A
+detection needing a stable "who is the engineering source" identity (S1/S2 allow-lists)
+derives source from `conn` **and** `is_orig`.
+
+### `action_class` mapping (S7)
+
+| `action_class`   | S7 functions |
+| ---------------- | ------------ |
+| `read`           | Read Variable; Start Upload, Upload, End Upload (reading program/blocks out) |
+| `write`          | Write Variable; Request Download, Download Block, Download Ended; s7comm-plus Create Object, Set Variable, Delete Object |
+| `control`        | PLC Stop, PLC Control (run-state changes) |
+| `diagnostic`     | Setup Communication, CPU Services; User-Data CPU Functions (Read SZL), Block Functions (List Blocks / Get Block Info); s7comm-plus Explore |
+| `other`          | COTP Connection Request / Confirm (connection framing) |
+
+A matched **response** inherits the action_class of the request it answers. S7 carries
+no Modbus-style application exception: envelope `is_exception` is always `false` for S7
+v1, and an S7comm error class/code (when present) is surfaced via
+`detail.error_class` / `detail.error_code`. Per-message COTP `DT` framing is implicit
+in each S7comm/-plus event; the COTP `CR`/`CC` handshake is emitted as its own events
+(`detail.cotp`) so the connection setup is visible telemetry.
+
+> The S7comm-plus example capture is the integrity-protected S7-1500 variant, so its
+> opcode/function bytes are not in cleartext on the wire; the simulator builds the
+> documented plaintext s7comm-plus header (the JSON `detail.plus` values are
+> authoritative for Tier 1). See spike 07 for the Tier-1-authority / Tier-2-fidelity
+> boundary.
+
 ## Example events
 
 A benign read request/response pair and an illegal-address exception (one line
@@ -280,6 +386,16 @@ A DNP3 operate command and an unauthorized cold-restart (one line each):
 More live, validated DNP3 examples:
 [`tests/data/events/dnp3/valid.jsonl`](../tests/data/events/dnp3/valid.jsonl).
 
+An S7 Read-SZL request and an unauthorized PLC Stop (one line each):
+
+```json
+{"ts": 1.0, "uid": "Cs7Aq1z8pPnGoldn1", "conn": {"orig_h": "10.0.4.10", "orig_p": 49152, "resp_h": "10.0.4.50", "resp_p": 102}, "proto": "s7comm", "is_orig": true, "direction": "request", "func_code": 68, "func_name": "Request: CPU Functions", "action_class": "diagnostic", "is_exception": false, "error": null, "detail": {"rosctr_code": 7, "rosctr_name": "User-Data", "pdu_reference": 2, "function_code": "0x44", "function_name": "Request: CPU Functions", "subfunction_code": "0x01", "subfunction_name": "Read SZL", "read_szl": {"method": "Request", "szl_id": "0x0011", "szl_id_name": "Module identification", "szl_index": "0x0000"}}}
+{"ts": 4.0, "uid": "Cs7Aq1z8pPnGoldn1", "conn": {"orig_h": "10.0.4.66", "orig_p": 49153, "resp_h": "10.0.4.50", "resp_p": 102}, "proto": "s7comm", "is_orig": true, "direction": "request", "func_code": 41, "func_name": "PLC Stop", "action_class": "control", "is_exception": false, "error": null, "detail": {"rosctr_code": 1, "rosctr_name": "Job-Request", "pdu_reference": 5, "function_code": "0x29", "function_name": "PLC Stop"}}
+```
+
+More live, validated S7 examples:
+[`tests/data/events/s7/valid.jsonl`](../tests/data/events/s7/valid.jsonl).
+
 ## Validation (the gate)
 
 `make ci` runs the **`schema`** step, which validates committed golden events
@@ -297,12 +413,12 @@ a small validator for the JSON-Schema subset this contract uses, so the Tier-1
 headline path needs only Python (`PRD.md` §6.2). The schema file is standard
 draft-2020-12 and also works with any external validator (e.g. `jsonschema`).
 
-## Other protocols (not yet frozen)
+## Protocol coverage
 
-S7 (`proto: s7comm`) uses the **same envelope** now, but its `detail` object is
-**unconstrained** until its schema freezes (Phase 4), verified against the current
-ICSNPP S7 parser fields before freeze. Modbus (Phase 1) and DNP3 (Phase 3) `detail`
-are frozen above.
+All three v1 protocols are now frozen: Modbus (Phase 1), DNP3 (Phase 3) and S7
+(Phase 4) `detail` shapes are constrained per `proto` above and verified against the
+current ICSNPP parser fields (spikes 01, 04, 06). The envelope is uniform across all
+three.
 
 ## Sigma offline evaluation (recorded)
 
