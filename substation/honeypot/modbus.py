@@ -68,7 +68,17 @@ _MAX_PDU = 253  # Modbus PDU max (Modbus Application Protocol Spec v1.1b3)
 _MAX_ADU = _MBAP_LEN + _MAX_PDU  # largest legal Modbus/TCP frame
 _EXCEPTION_FLAG = 0x80
 _ON = 0xFF00  # WRITE_SINGLE_COIL "on" value
+_OFF = 0x0000  # WRITE_SINGLE_COIL "off" value (any other value is illegal)
 _U16 = 0xFFFF
+
+# Per-function quantity limits (Modbus Application Protocol Spec v1.1b3). A request
+# outside these is malformed: a compliant device answers ILLEGAL_DATA_VALUE rather
+# than emitting an over-long PDU. Enforcing them also keeps a scanner from crashing
+# the honeypot (e.g. a register read of 128 would overflow the 1-byte byte-count).
+_MAX_READ_REGISTERS = 125
+_MAX_READ_BITS = 2000
+_MAX_WRITE_REGISTERS = 123
+_MAX_WRITE_BITS = 1968
 
 # Modbus exception codes (spec v1.1b3) -> the ICSNPP/Zeek decoded names the schema
 # and M2 key on. We only ever raise these three from a stub responder.
@@ -349,7 +359,21 @@ def process_frame(
         request_event = _request_event(
             parsed, conn, uid=uid, ts=ts, address=address, quantity=quantity
         )
-        if quantity == 0 or not device.in_range(address, quantity):
+        is_coil = code in (READ_COILS, READ_DISCRETE_INPUTS)
+        # A quantity outside the spec range is malformed (ILLEGAL_DATA_VALUE) — and
+        # left unguarded a large register count would overflow the response's 1-byte
+        # byte-count field and crash the handler.
+        max_quantity = _MAX_READ_BITS if is_coil else _MAX_READ_REGISTERS
+        if not 1 <= quantity <= max_quantity:
+            return _exception_reply(
+                parsed,
+                conn,
+                uid=uid,
+                ts=ts,
+                exception_code=_ILLEGAL_DATA_VALUE,
+                request_event=request_event,
+            )
+        if not device.in_range(address, quantity):
             return _exception_reply(
                 parsed,
                 conn,
@@ -358,7 +382,6 @@ def process_frame(
                 exception_code=_ILLEGAL_DATA_ADDRESS,
                 request_event=request_event,
             )
-        is_coil = code in (READ_COILS, READ_DISCRETE_INPUTS)
         values = (
             device.read_coils(address, quantity)
             if is_coil
@@ -384,6 +407,21 @@ def process_frame(
                 parsed, conn, uid=uid, ts=ts, exception_code=_ILLEGAL_DATA_VALUE
             )
         address, value = struct.unpack(">HH", data[:4])
+        if code == WRITE_SINGLE_COIL and value not in (_OFF, _ON):
+            # The spec allows only 0x0000/0xFF00 for a single coil; any other value
+            # is ILLEGAL_DATA_VALUE and must NOT mutate the coil. Log the raw value
+            # so the malformed probe is visible rather than silently coerced.
+            request_event = _request_event(
+                parsed, conn, uid=uid, ts=ts, address=address, quantity=1, request_values=(value,)
+            )
+            return _exception_reply(
+                parsed,
+                conn,
+                uid=uid,
+                ts=ts,
+                exception_code=_ILLEGAL_DATA_VALUE,
+                request_event=request_event,
+            )
         if code == WRITE_SINGLE_COIL:
             request_values: tuple[int, ...] = (1 if value == _ON else 0,)
         else:
@@ -431,7 +469,20 @@ def process_frame(
             )
         address, quantity, byte_count = struct.unpack(">HHB", data[:5])
         body = data[5 : 5 + byte_count]
-        if len(body) < byte_count or quantity == 0:
+        is_coil = code == WRITE_MULTIPLE_COILS
+        # Validate quantity and the declared byte count against the spec BEFORE
+        # indexing/unpacking: a frame whose byte_count is too small for `quantity`
+        # (e.g. FC15 qty 9 byte_count 1, or an odd FC16 byte_count) would otherwise
+        # raise IndexError/struct.error and crash the handler. Such frames are
+        # malformed -> ILLEGAL_DATA_VALUE.
+        max_quantity = _MAX_WRITE_BITS if is_coil else _MAX_WRITE_REGISTERS
+        expected_bytes = (quantity + 7) // 8 if is_coil else quantity * 2
+        well_formed = (
+            1 <= quantity <= max_quantity
+            and byte_count == expected_bytes
+            and len(body) >= expected_bytes
+        )
+        if not well_formed:
             return _exception_reply(
                 parsed, conn, uid=uid, ts=ts, exception_code=_ILLEGAL_DATA_VALUE
             )
@@ -551,7 +602,11 @@ class ModbusHoneypot:
     def _handle_connection(self, sock: socket.socket, peer: tuple[str, int]) -> None:
         uid = self._next_uid(peer)
         sock.settimeout(self.config.recv_timeout)
-        local_host, local_port = self.config.bind_host, self.config.port
+        # The actual interface that accepted this probe — not the configured bind
+        # string — so a wildcard bind (e.g. 0.0.0.0) records the true destination in
+        # conn.resp_h instead of collapsing every local address into the wildcard.
+        sockname = sock.getsockname()
+        local_host, local_port = str(sockname[0]), int(sockname[1])
         buffer = bytearray()
         while True:
             try:
@@ -582,7 +637,10 @@ class ModbusHoneypot:
 
     def serve_forever(self) -> None:
         """Bind, listen and serve probes until interrupted (Ctrl-C)."""
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Match the socket family to the bind address so an IPv6 loopback (``::1``,
+        # which validate() accepts) actually binds instead of failing on AF_INET.
+        family = socket.AF_INET6 if ":" in self.config.bind_host else socket.AF_INET
+        listener = socket.socket(family, socket.SOCK_STREAM)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             listener.bind((self.config.bind_host, self.config.port))

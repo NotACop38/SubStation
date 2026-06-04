@@ -163,6 +163,49 @@ def test_config_allows_external_with_optin() -> None:
     HoneypotConfig(log_path=Path("x.jsonl"), bind_host="10.99.0.5", allow_external=True).validate()
 
 
+def test_oversized_read_quantity_is_rejected_not_crash() -> None:
+    # 128 registers is in-range for the stub but exceeds the spec max (125) and
+    # would overflow the response's 1-byte byte-count: must reply ILLEGAL_DATA_VALUE.
+    reply, events = _run(_mbap_frame(0x03, struct.pack(">HH", 0, 128)))
+    assert reply is not None
+    _, response = events
+    assert response["is_exception"] is True
+    assert response["error"] == "ILLEGAL_DATA_VALUE"
+    assert response["func_code"] == 0x03 | 0x80
+    _assert_schema_valid(events)
+
+
+def test_malformed_multi_write_byte_count_is_rejected_not_crash() -> None:
+    # FC15 quantity 9 needs 2 data bytes but declares byte_count 1 — would IndexError.
+    coils = _mbap_frame(0x0F, struct.pack(">HHB", 0, 9, 1) + b"\xff")
+    reply, events = _run(coils)
+    assert reply is not None
+    assert events[1]["error"] == "ILLEGAL_DATA_VALUE"
+    _assert_schema_valid(events)
+    # FC16 quantity 1 with an odd byte_count 1 — would raise struct.error.
+    regs = _mbap_frame(0x10, struct.pack(">HHB", 0, 1, 1) + b"\x00")
+    reply2, events2 = _run(regs)
+    assert reply2 is not None
+    assert events2[1]["error"] == "ILLEGAL_DATA_VALUE"
+    _assert_schema_valid(events2)
+
+
+def test_illegal_single_coil_value_is_rejected_and_does_not_mutate() -> None:
+    # FC05 permits only 0x0000/0xFF00; 0x0001 is ILLEGAL_DATA_VALUE and must not
+    # change the coil (else a scanner silently corrupts the stub state).
+    device = StubDevice()
+    reply, events = _run(_mbap_frame(0x05, struct.pack(">HH", 10, 0x0001)), device)
+    assert reply is not None
+    request, response = events
+    assert request["detail"]["request_values"] == [1]  # raw value logged, not coerced
+    assert response["is_exception"] is True
+    assert response["error"] == "ILLEGAL_DATA_VALUE"
+    _assert_schema_valid(events)
+    # The coil is untouched: a later read returns the deterministic default (10 & 1).
+    _, read_events = _run(_mbap_frame(0x01, struct.pack(">HH", 10, 1), tid=2), device)
+    assert read_events[1]["detail"]["response_values"] == [10 & 1]
+
+
 def test_processing_opens_no_socket(monkeypatch: pytest.MonkeyPatch) -> None:
     """The pure core must never construct a socket — it only parses bytes."""
 

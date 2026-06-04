@@ -69,17 +69,24 @@ Every line is a normalized-envelope event built through the **same**
 `substation.protocols.modbus` mapping the simulator uses and validated against the
 frozen [`docs/schema.md`](../../docs/schema.md) /
 [`event-log.schema.json`](../schema/event-log.schema.json) before it is written.
-So you can run the shipped Tier-1 detections directly over a probe capture, e.g.:
+So you can run the shipped **Tier-1 (Sigma-over-JSON)** detections directly over a
+probe capture, e.g.:
 
 ```sh
 # Validate a probe capture against the frozen schema.
 python -m substation.schema honeypot-probes.jsonl
 ```
 
-Because the probe log uses the contract the detections bind to, a write from an
-unrecognized source surfaces to **M1**, reserved/undefined function codes and the
-honeypot's `ILLEGAL_FUNCTION` / `ILLEGAL_DATA_ADDRESS` exception replies surface to
-**M2**, and function-code/unit sweeps surface to **M3** — no special-casing.
+Because the probe log uses the contract the detections bind to, the Tier-1 Sigma
+rules run on `honeypot-probes.jsonl` with no special-casing: a write from an
+unrecognized source surfaces to **M1**, and reserved/undefined function codes plus
+the honeypot's `ILLEGAL_FUNCTION` / `ILLEGAL_DATA_ADDRESS` exception replies surface
+to **M2**.
+
+The same probe telemetry also exercises the **M3** function-code/unit sweep
+*behavior*, but **M3 is a Tier-2 Zeek detection** that runs over a **PCAP**, not the
+JSON log — so feeding it the captured probes requires the Tier-2 Zeek path (a PCAP
+of the probe traffic), not `honeypot-probes.jsonl` directly.
 
 ## What it is **not**
 
