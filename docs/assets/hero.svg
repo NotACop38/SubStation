@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1280" height="360" viewBox="0 0 1280 360" role="img"
+     aria-label="Substation — a defensive ICS detection-content pack for Modbus, DNP3 and Siemens S7, mapped to MITRE ATT&amp;CK for ICS and validated without OT hardware.">
+  <title>Substation</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#0e141c"/>
+      <stop offset="1" stop-color="#090c12"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#e9f2f6"/>
+      <stop offset="1" stop-color="#7fe0ea"/>
+    </linearGradient>
+    <linearGradient id="trace" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#39c5cf" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#39c5cf" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#56d364" stop-opacity="0.75"/>
+    </linearGradient>
+    <radialGradient id="cyanGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#39c5cf" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#39c5cf" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="amberGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f2cc60" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#f2cc60" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3.4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+      <path d="M34 0H0V34" fill="none" stroke="#172030" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- canvas -->
+  <rect width="1280" height="360" rx="18" fill="url(#bg)"/>
+  <rect width="1280" height="360" rx="18" fill="url(#grid)" opacity="0.55"/>
+  <circle cx="150" cy="150" r="240" fill="url(#cyanGlow)"/>
+  <circle cx="1120" cy="250" r="230" fill="url(#amberGlow)"/>
+
+  <!-- faint telemetry trace in the band between tagline and stat pills, with a travelling pulse -->
+  <path id="sig" d="M252 248 H610 l8 -14 l8 26 l9 -32 l9 22 H980 l9 -16 l8 20 H1116"
+        fill="none" stroke="url(#trace)" stroke-width="2.5" stroke-linejoin="round" opacity="0.9"/>
+  <circle r="4.5" fill="#7ee8ef" filter="url(#soft)">
+    <animateMotion dur="4.6s" repeatCount="indefinite" rotate="auto">
+      <mpath xlink:href="#sig"/>
+    </animateMotion>
+  </circle>
+  <!-- detection node at the end of the trace -->
+  <g transform="translate(1140 248)">
+    <circle r="14" fill="#f85149" opacity="0.20">
+      <animate attributeName="r" values="11;20;11" dur="2.4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.30;0.05;0.30" dur="2.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="6" fill="#ff7b72"/>
+    <text x="20" y="5" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
+          font-size="15" font-weight="700" fill="#ff7b72" letter-spacing="1.5">FIRED</text>
+  </g>
+
+  <!-- ============================ emblem ============================ -->
+  <g transform="translate(150 150)">
+    <polygon points="0,-78 67.5,-39 67.5,39 0,78 -67.5,39 -67.5,-39" fill="none" stroke="#39c5cf" stroke-width="1.5" opacity="0">
+      <animate attributeName="opacity" values="0.55;0;0.55" dur="3s" repeatCount="indefinite"/>
+      <animateTransform attributeName="transform" type="scale" values="1;1.28;1" dur="3s" repeatCount="indefinite"/>
+    </polygon>
+    <polygon points="0,-72 62,-36 62,36 0,72 -62,36 -62,-36" fill="#0c1219" stroke="#2b3a4d" stroke-width="2"/>
+    <polygon points="0,-72 62,-36 62,36 0,72 -62,36 -62,-36" fill="none" stroke="#39c5cf" stroke-width="2" opacity="0.65"/>
+    <g stroke="#22425a" stroke-width="2" opacity="0.85">
+      <line x1="-40" y1="-18" x2="40" y2="-18"/>
+      <line x1="-40" y1="20" x2="40" y2="20"/>
+    </g>
+    <g fill="#2f5572">
+      <circle cx="-40" cy="-18" r="3.2"/><circle cx="40" cy="-18" r="3.2"/>
+      <circle cx="-40" cy="20" r="3.2"/><circle cx="40" cy="20" r="3.2"/>
+    </g>
+    <path d="M14,-44 L-22,8 L2,8 L-8,46 L30,-6 L6,-6 Z" fill="#f2cc60" filter="url(#soft)"/>
+    <path d="M14,-44 L-22,8 L2,8 L-8,46 L30,-6 L6,-6 Z" fill="#ffe08a"/>
+  </g>
+
+  <!-- ============================ wordmark ============================ -->
+  <text x="252" y="104" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif"
+        font-size="15" font-weight="700" letter-spacing="4.5" fill="#56d4dd">DEFENSIVE ICS DETECTION CONTENT</text>
+
+  <text x="249" y="176" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif"
+        font-size="76" font-weight="800" letter-spacing="2" fill="url(#ink)">SUBSTATION</text>
+
+  <text x="252" y="212" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif"
+        font-size="19" font-weight="500" fill="#adbac7">Synthetic Modbus · DNP3 · S7 telemetry → real detections → a live
+    <tspan fill="#e3b341" font-weight="700"> ATT&amp;CK-for-ICS</tspan> coverage map.</text>
+
+  <!-- ============================ stat pills ============================ -->
+  <g font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif">
+    <g transform="translate(252 274)">
+      <rect width="176" height="48" rx="11" fill="#0c141b" stroke="#22303f"/>
+      <text x="28" y="31" text-anchor="middle" font-size="24" font-weight="800" fill="#3fb950">11</text>
+      <text x="52" y="22" font-size="12.5" fill="#9da7b1">detections</text>
+      <text x="52" y="38" font-size="12.5" fill="#6e7681">3 ICS protocols</text>
+    </g>
+    <g transform="translate(444 274)">
+      <rect width="200" height="48" rx="11" fill="#0c141b" stroke="#22303f"/>
+      <text x="28" y="31" text-anchor="middle" font-size="24" font-weight="800" fill="#e3b341">10</text>
+      <text x="52" y="22" font-size="12.5" fill="#9da7b1">ATT&amp;CK techniques</text>
+      <text x="52" y="38" font-size="12.5" fill="#6e7681">5 / 12 tactics</text>
+    </g>
+    <g transform="translate(660 274)">
+      <rect width="212" height="48" rx="11" fill="#0c141b" stroke="#22303f"/>
+      <text x="28" y="31" text-anchor="middle" font-size="24" font-weight="800" fill="#58a6ff">2</text>
+      <text x="52" y="22" font-size="12.5" fill="#9da7b1">engines · Sigma + Zeek</text>
+      <text x="52" y="38" font-size="12.5" fill="#6e7681">files-only · no live OT</text>
+    </g>
+    <g transform="translate(888 274)">
+      <rect width="196" height="48" rx="11" fill="#0c141b" stroke="#22303f"/>
+      <text x="28" y="31" text-anchor="middle" font-size="24" font-weight="800" fill="#bc8cff">1</text>
+      <text x="52" y="22" font-size="12.5" fill="#9da7b1">command</text>
+      <text x="52" y="38" font-size="12.5" fill="#6e7681">Python-only · &lt; 5 min</text>
+    </g>
+  </g>
+</svg>

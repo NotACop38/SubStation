@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="374" viewBox="0 0 1200 374" role="img" aria-label="ATT&amp;CK-for-ICS coverage matrix: 5 of 12 tactics covered by 11 detections across 10 techniques.">
+  <title>ATT&amp;CK-for-ICS coverage matrix</title>
+  <defs>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e141c"/><stop offset="1" stop-color="#0a0e14"/>
+    </linearGradient>
+    <pattern id="g" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M30 0H0V30" fill="none" stroke="#141c27" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect x="0.5" y="0.5" width="1199" height="373" rx="16" fill="url(#card)" stroke="#2b3440"/>
+  <rect x="1" y="1" width="1198" height="372" rx="16" fill="url(#g)" opacity="0.5"/>
+  <text x="22" y="40" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="22" font-weight="800" fill="#eef3f7">ATT&amp;CK-for-ICS coverage</text>
+  <text x="22" y="62" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="13" fill="#8b949e">Every detection mapped to a verified technique &amp; tactic · generated from the detection registry</text>
+  <g transform="translate(1045 24)">
+    <rect width="123" height="40" rx="10" fill="#0c141b" stroke="#22303f"/>
+    <text x="14" y="27" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="20" font-weight="800" fill="#58a6ff">5/12</text>
+    <text x="74" y="26" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="12.5" fill="#9da7b1">tactics</text>
+  </g>
+  <g transform="translate(877 24)">
+    <rect width="150" height="40" rx="10" fill="#0c141b" stroke="#22303f"/>
+    <text x="14" y="27" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="20" font-weight="800" fill="#e3b341">10</text>
+    <text x="48" y="26" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="12.5" fill="#9da7b1">techniques</text>
+  </g>
+  <g transform="translate(709 24)">
+    <rect width="150" height="40" rx="10" fill="#0c141b" stroke="#22303f"/>
+    <text x="14" y="27" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="20" font-weight="800" fill="#3fb950">11</text>
+    <text x="48" y="26" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="12.5" fill="#9da7b1">detections</text>
+  </g>
+  <g>
+    <rect x="22.0" y="92" width="89.0" height="66" rx="8" fill="#0d121a" stroke="#1f2630"/>
+    <rect x="22.0" y="92" width="3.5" height="66" rx="1.5" fill="#2b333d"/>    <text x="67.5" y="118" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#6b7480">Initial</text>    <text x="67.5" y="131" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#6b7480">Access</text>    <text x="67.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#4a525d">TA0108</text>  </g>    <text x="66.5" y="243.0" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11" fill="#3b434e">no coverage</text>
+  <g>
+    <rect x="119.0" y="92" width="89.0" height="66" rx="8" fill="#10241a" stroke="#27553b"/>
+    <rect x="119.0" y="92" width="3.5" height="66" rx="1.5" fill="#3fb950"/>    <text x="164.5" y="124" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#e7f0ea">Execution</text>    <text x="164.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#7bd69b">TA0104</text>  </g>
+    <g transform="translate(127.0 172.0)">
+      <rect width="73.0" height="22" rx="6" fill="#0c1e13" stroke="#2c6b3c"/>
+      <circle cx="11" cy="11.0" r="3" fill="#74e08a"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#74e08a">S1</text>
+    </g>
+  <g>
+    <rect x="216.0" y="92" width="89.0" height="66" rx="8" fill="#0d121a" stroke="#1f2630"/>
+    <rect x="216.0" y="92" width="3.5" height="66" rx="1.5" fill="#2b333d"/>    <text x="261.5" y="124" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#6b7480">Persistence</text>    <text x="261.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#4a525d">TA0110</text>  </g>    <text x="260.5" y="243.0" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11" fill="#3b434e">no coverage</text>
+  <g>
+    <rect x="313.0" y="92" width="89.0" height="66" rx="8" fill="#0d121a" stroke="#1f2630"/>
+    <rect x="313.0" y="92" width="3.5" height="66" rx="1.5" fill="#2b333d"/>    <text x="358.5" y="118" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#6b7480">Privilege</text>    <text x="358.5" y="131" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#6b7480">Escalation</text>    <text x="358.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#4a525d">TA0111</text>  </g>    <text x="357.5" y="243.0" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11" fill="#3b434e">no coverage</text>
+  <g>
+    <rect x="410.0" y="92" width="89.0" height="66" rx="8" fill="#0d121a" stroke="#1f2630"/>
+    <rect x="410.0" y="92" width="3.5" height="66" rx="1.5" fill="#2b333d"/>    <text x="455.5" y="124" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#6b7480">Evasion</text>    <text x="455.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#4a525d">TA0103</text>  </g>    <text x="454.5" y="243.0" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11" fill="#3b434e">no coverage</text>
+  <g>
+    <rect x="507.0" y="92" width="89.0" height="66" rx="8" fill="#10241a" stroke="#27553b"/>
+    <rect x="507.0" y="92" width="3.5" height="66" rx="1.5" fill="#3fb950"/>    <text x="552.5" y="124" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#e7f0ea">Discovery</text>    <text x="552.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#7bd69b">TA0102</text>  </g>
+    <g transform="translate(515.0 172.0)">
+      <rect width="73.0" height="22" rx="6" fill="#0c191e" stroke="#2c6470"/>
+      <circle cx="11" cy="11.0" r="3" fill="#7fe0ea"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#7fe0ea">M2</text>
+    </g>
+    <g transform="translate(515.0 201.0)">
+      <rect width="73.0" height="22" rx="6" fill="#0c191e" stroke="#2c6470"/>
+      <circle cx="11" cy="11.0" r="3" fill="#7fe0ea"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#7fe0ea">M3</text>
+    </g>
+    <g transform="translate(515.0 230.0)">
+      <rect width="73.0" height="22" rx="6" fill="#1c170b" stroke="#6b5a23"/>
+      <circle cx="11" cy="11.0" r="3" fill="#f0cd6b"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#f0cd6b">D4</text>
+    </g>
+    <g transform="translate(515.0 259.0)">
+      <rect width="73.0" height="22" rx="6" fill="#0c1e13" stroke="#2c6b3c"/>
+      <circle cx="11" cy="11.0" r="3" fill="#74e08a"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#74e08a">S3</text>
+    </g>
+    <g transform="translate(515.0 288.0)">
+      <rect width="73.0" height="22" rx="6" fill="#1e0f0e" stroke="#6b3330"/>
+      <circle cx="11" cy="11.0" r="3" fill="#ff9a90"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#ff9a90">X1</text>
+    </g>
+  <g>
+    <rect x="604.0" y="92" width="89.0" height="66" rx="8" fill="#10241a" stroke="#27553b"/>
+    <rect x="604.0" y="92" width="3.5" height="66" rx="1.5" fill="#3fb950"/>    <text x="649.5" y="118" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#e7f0ea">Lateral</text>    <text x="649.5" y="131" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#e7f0ea">Movement</text>    <text x="649.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#7bd69b">TA0109</text>  </g>
+    <g transform="translate(612.0 172.0)">
+      <rect width="73.0" height="22" rx="6" fill="#0c1e13" stroke="#2c6b3c"/>
+      <circle cx="11" cy="11.0" r="3" fill="#74e08a"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#74e08a">S2</text>
+    </g>
+  <g>
+    <rect x="701.0" y="92" width="89.0" height="66" rx="8" fill="#0d121a" stroke="#1f2630"/>
+    <rect x="701.0" y="92" width="3.5" height="66" rx="1.5" fill="#2b333d"/>    <text x="746.5" y="124" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#6b7480">Collection</text>    <text x="746.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#4a525d">TA0100</text>  </g>    <text x="745.5" y="243.0" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11" fill="#3b434e">no coverage</text>
+  <g>
+    <rect x="798.0" y="92" width="89.0" height="66" rx="8" fill="#0d121a" stroke="#1f2630"/>
+    <rect x="798.0" y="92" width="3.5" height="66" rx="1.5" fill="#2b333d"/>    <text x="843.5" y="118" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#6b7480">Command and</text>    <text x="843.5" y="131" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#6b7480">Control</text>    <text x="843.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#4a525d">TA0101</text>  </g>    <text x="842.5" y="243.0" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11" fill="#3b434e">no coverage</text>
+  <g>
+    <rect x="895.0" y="92" width="89.0" height="66" rx="8" fill="#10241a" stroke="#27553b"/>
+    <rect x="895.0" y="92" width="3.5" height="66" rx="1.5" fill="#3fb950"/>    <text x="940.5" y="112" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#e7f0ea">Inhibit</text>    <text x="940.5" y="125" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#e7f0ea">Response</text>    <text x="940.5" y="138" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#e7f0ea">Function</text>    <text x="940.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#7bd69b">TA0107</text>  </g>
+    <g transform="translate(903.0 172.0)">
+      <rect width="73.0" height="22" rx="6" fill="#1c170b" stroke="#6b5a23"/>
+      <circle cx="11" cy="11.0" r="3" fill="#f0cd6b"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#f0cd6b">D1</text>
+    </g>
+    <g transform="translate(903.0 201.0)">
+      <rect width="73.0" height="22" rx="6" fill="#1c170b" stroke="#6b5a23"/>
+      <circle cx="11" cy="11.0" r="3" fill="#f0cd6b"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#f0cd6b">D2</text>
+    </g>
+  <g>
+    <rect x="992.0" y="92" width="89.0" height="66" rx="8" fill="#10241a" stroke="#27553b"/>
+    <rect x="992.0" y="92" width="3.5" height="66" rx="1.5" fill="#3fb950"/>    <text x="1037.5" y="112" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#e7f0ea">Impair</text>    <text x="1037.5" y="125" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#e7f0ea">Process</text>    <text x="1037.5" y="138" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#e7f0ea">Control</text>    <text x="1037.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#7bd69b">TA0106</text>  </g>
+    <g transform="translate(1000.0 172.0)">
+      <rect width="73.0" height="22" rx="6" fill="#0c191e" stroke="#2c6470"/>
+      <circle cx="11" cy="11.0" r="3" fill="#7fe0ea"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#7fe0ea">M1</text>
+    </g>
+    <g transform="translate(1000.0 201.0)">
+      <rect width="73.0" height="22" rx="6" fill="#1c170b" stroke="#6b5a23"/>
+      <circle cx="11" cy="11.0" r="3" fill="#f0cd6b"/>
+      <text x="22" y="15.0" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#f0cd6b">D3</text>
+    </g>
+  <g>
+    <rect x="1089.0" y="92" width="89.0" height="66" rx="8" fill="#0d121a" stroke="#1f2630"/>
+    <rect x="1089.0" y="92" width="3.5" height="66" rx="1.5" fill="#2b333d"/>    <text x="1134.5" y="124" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#6b7480">Impact</text>    <text x="1134.5" y="150" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9" fill="#4a525d">TA0105</text>  </g>    <text x="1133.5" y="243.0" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="11" fill="#3b434e">no coverage</text>  <text x="22" y="352" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="12" fill="#8b949e">Detection by protocol:</text>
+  <g transform="translate(172 340)">
+    <rect width="16" height="16" rx="4" fill="#0c191e" stroke="#2c6470"/>
+    <circle cx="8" cy="8" r="3" fill="#7fe0ea"/>
+    <text x="24" y="13" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="12" fill="#adbac7">Modbus</text>
+  </g>
+  <g transform="translate(270 340)">
+    <rect width="16" height="16" rx="4" fill="#1c170b" stroke="#6b5a23"/>
+    <circle cx="8" cy="8" r="3" fill="#f0cd6b"/>
+    <text x="24" y="13" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="12" fill="#adbac7">DNP3</text>
+  </g>
+  <g transform="translate(354 340)">
+    <rect width="16" height="16" rx="4" fill="#0c1e13" stroke="#2c6b3c"/>
+    <circle cx="8" cy="8" r="3" fill="#74e08a"/>
+    <text x="24" y="13" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="12" fill="#adbac7">Siemens S7</text>
+  </g>
+  <g transform="translate(480 340)">
+    <rect width="16" height="16" rx="4" fill="#1e0f0e" stroke="#6b3330"/>
+    <circle cx="8" cy="8" r="3" fill="#ff9a90"/>
+    <text x="24" y="13" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="12" fill="#adbac7">Cross-protocol</text>
+  </g>
+  <g transform="translate(928 340)">
+    <rect width="16" height="16" rx="4" fill="#10241a" stroke="#27553b"/>
+    <rect width="3.5" height="16" rx="1.5" fill="#3fb950"/>
+    <text x="24" y="13" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="12" fill="#adbac7">covered</text>
+    <rect x="108" width="16" height="16" rx="4" fill="#0d121a" stroke="#1f2630"/>
+    <text x="132" y="13" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="12" fill="#8b949e">gap</text>
+  </g>
+</svg>

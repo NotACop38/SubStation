@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="262" viewBox="0 0 1200 262" role="img"
+     aria-label="How it works: scenario YAML to scenario model to dual emit (PCAP plus JSON) to Sigma/Zeek detection to a hits-and-coverage report — one command.">
+  <title>Substation pipeline — generate, detect, report</title>
+  <defs>
+    <linearGradient id="pcard" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e141c"/><stop offset="1" stop-color="#0a0e14"/>
+    </linearGradient>
+    <pattern id="pg" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M30 0H0V30" fill="none" stroke="#141c27" stroke-width="1"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#46566a"/>
+    </marker>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="1199" height="261" rx="16" fill="url(#pcard)" stroke="#2b3440"/>
+  <rect x="1" y="1" width="1198" height="260" rx="16" fill="url(#pg)" opacity="0.5"/>
+
+  <text x="24" y="40" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif"
+        font-size="22" font-weight="800" fill="#eef3f7">How it works</text>
+  <text x="212" y="40" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
+        font-size="14" fill="#8b949e">one command · generate <tspan fill="#46566a">→</tspan> detect <tspan fill="#46566a">→</tspan> report</text>
+
+  <!-- connectors -->
+  <g stroke="#46566a" stroke-width="2">
+    <line x1="222" y1="138" x2="258" y2="138" marker-end="url(#arrow)"/>
+    <line x1="460" y1="138" x2="497" y2="138" marker-end="url(#arrow)"/>
+    <line x1="699" y1="138" x2="735" y2="138" marker-end="url(#arrow)"/>
+    <line x1="937" y1="138" x2="974" y2="138" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- node template: card + top accent + icon + title + subtitle -->
+  <!-- 1 · scenarios -->
+  <g font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif">
+    <g>
+      <rect x="24" y="78" width="198" height="120" rx="12" fill="#0c141b" stroke="#22303f"/>
+      <rect x="24" y="78" width="198" height="4" rx="2" fill="#56d4dd"/>
+      <circle cx="123" cy="112" r="20" fill="#0a161b" stroke="#2c6470"/>
+      <g stroke="#7fe0ea" stroke-width="2" fill="none">
+        <path d="M116 103 h10 l5 5 v14 h-15 z" fill="#0a161b"/>
+        <line x1="119" y1="111" x2="128" y2="111"/><line x1="119" y1="116" x2="128" y2="116"/>
+      </g>
+      <text x="123" y="156" text-anchor="middle" font-size="15" font-weight="700" fill="#eef3f7">Scenario YAML</text>
+      <text x="123" y="176" text-anchor="middle" font-size="11.5" fill="#8b949e">benign + anomalous,</text>
+      <text x="123" y="190" text-anchor="middle" font-size="11.5" fill="#8b949e">human-editable</text>
+    </g>
+    <!-- 2 · model -->
+    <g>
+      <rect x="262" y="78" width="198" height="120" rx="12" fill="#0c141b" stroke="#22303f"/>
+      <rect x="262" y="78" width="198" height="4" rx="2" fill="#56d4dd"/>
+      <circle cx="361" cy="112" r="20" fill="#0a161b" stroke="#2c6470"/>
+      <polygon points="361,98 373,105 373,119 361,126 349,119 349,105" fill="none" stroke="#7fe0ea" stroke-width="2"/>
+      <circle cx="361" cy="112" r="3.5" fill="#7fe0ea"/>
+      <text x="361" y="156" text-anchor="middle" font-size="15" font-weight="700" fill="#eef3f7">Scenario model</text>
+      <text x="361" y="176" text-anchor="middle" font-size="11.5" fill="#7bd69b">single source of truth</text>
+      <text x="361" y="190" text-anchor="middle" font-size="11.5" fill="#8b949e">actors · exchanges · labels</text>
+    </g>
+    <!-- 3 · dual emit -->
+    <g>
+      <rect x="501" y="78" width="198" height="120" rx="12" fill="#0c141b" stroke="#22303f"/>
+      <rect x="501" y="78" width="198" height="4" rx="2" fill="#e3b341"/>
+      <circle cx="600" cy="112" r="20" fill="#1c170b" stroke="#6b5a23"/>
+      <g stroke="#f0cd6b" stroke-width="2" fill="none">
+        <path d="M592 112 h7"/><path d="M599 112 l9 -7"/><path d="M599 112 l9 7"/>
+        <circle cx="610" cy="105" r="1.6" fill="#f0cd6b"/><circle cx="610" cy="119" r="1.6" fill="#f0cd6b"/>
+      </g>
+      <text x="600" y="156" text-anchor="middle" font-size="15" font-weight="700" fill="#eef3f7">Dual emit</text>
+      <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5">
+        <rect x="520" y="166" width="76" height="20" rx="5" fill="#0c191e" stroke="#2c6470"/>
+        <text x="558" y="180" text-anchor="middle" fill="#7fe0ea">*.pcap</text>
+        <rect x="604" y="166" width="76" height="20" rx="5" fill="#0c191e" stroke="#2c6470"/>
+        <text x="642" y="180" text-anchor="middle" fill="#7fe0ea">*.jsonl</text>
+      </g>
+    </g>
+    <!-- 4 · detect -->
+    <g>
+      <rect x="739" y="78" width="198" height="120" rx="12" fill="#0c141b" stroke="#22303f"/>
+      <rect x="739" y="78" width="198" height="4" rx="2" fill="#58a6ff"/>
+      <circle cx="838" cy="112" r="20" fill="#0a1320" stroke="#284a73"/>
+      <g fill="none" stroke="#79b8ff" stroke-width="2">
+        <circle cx="838" cy="112" r="11"/><circle cx="838" cy="112" r="5.5"/>
+      </g>
+      <circle cx="838" cy="112" r="2.4" fill="#79b8ff"/>
+      <text x="838" y="156" text-anchor="middle" font-size="15" font-weight="700" fill="#eef3f7">Detect</text>
+      <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5">
+        <rect x="758" y="166" width="78" height="20" rx="5" fill="#0a1320" stroke="#284a73"/>
+        <text x="797" y="180" text-anchor="middle" fill="#79b8ff">Sigma · T1</text>
+        <rect x="844" y="166" width="78" height="20" rx="5" fill="#0a1320" stroke="#284a73"/>
+        <text x="883" y="180" text-anchor="middle" fill="#79b8ff">Zeek · T2</text>
+      </g>
+    </g>
+    <!-- 5 · report -->
+    <g>
+      <rect x="978" y="78" width="198" height="120" rx="12" fill="#0c141b" stroke="#22303f"/>
+      <rect x="978" y="78" width="198" height="4" rx="2" fill="#3fb950"/>
+      <circle cx="1077" cy="112" r="20" fill="#0c1e13" stroke="#27553b"/>
+      <path d="M1069 112 l6 6 l11 -12" fill="none" stroke="#56d364" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="1077" y="156" text-anchor="middle" font-size="15" font-weight="700" fill="#eef3f7">Report</text>
+      <text x="1077" y="176" text-anchor="middle" font-size="11.5" fill="#7bd69b">hits + ATT&amp;CK map</text>
+      <text x="1077" y="190" text-anchor="middle" font-size="11.5" fill="#8b949e">fire on attack · quiet on benign</text>
+    </g>
+  </g>
+
+  <text x="600" y="234" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif"
+        font-size="12.5" fill="#7a8593">One scenario model drives both emitters, so the PCAP and the JSON event log <tspan fill="#adbac7" font-weight="600">can never drift</tspan>.</text>
+</svg>
