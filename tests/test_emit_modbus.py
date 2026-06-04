@@ -63,18 +63,31 @@ def test_benign_scenario_emits_schema_valid_jsonl(tmp_path: Path) -> None:
     assert list(iter_jsonl_errors(result.jsonl)) == []  # the frozen schema gate
 
 
-def test_pcap_and_jsonl_do_not_drift(tmp_path: Path) -> None:
-    scenario = load_scenario(_EXAMPLE)
-    result = write_artifacts(scenario, tmp_path)
-
-    events = _json_events(result.jsonl)
-    segments = _modbus_segments(result.pcap)
-
-    # Exactly one Modbus segment per JSON event, with identical key fields and order.
+def _assert_lockstep(jsonl_path: Path, pcap_path: Path) -> None:
+    """Exactly one Modbus segment per JSON event, same key fields, **same order**."""
+    events = _json_events(jsonl_path)
+    segments = _modbus_segments(pcap_path)
     assert len(segments) == len(events)
     json_keys = [(int(e["func_code"]), e["detail"]["tid"], e["detail"]["unit"]) for e in events]
     pcap_keys = [(func, tid, unit) for (tid, unit, func) in segments]
     assert pcap_keys == json_keys
+
+
+def test_pcap_and_jsonl_do_not_drift(tmp_path: Path) -> None:
+    scenario = load_scenario(_EXAMPLE)
+    result = write_artifacts(scenario, tmp_path)
+    _assert_lockstep(result.jsonl, result.pcap)
+
+
+def test_lockstep_holds_for_overlapping_offsets(tmp_path: Path) -> None:
+    # Several exchanges on one connection with omitted (so equal, 0.0) offsets:
+    # per-connection timestamp serialization must keep each response ahead of the
+    # next request in the capture, so PCAP order still matches JSON order even
+    # though a naive global time sort would interleave them (PR #5 review, P1).
+    scenario = load_scenario(_write_scenario(tmp_path, _OVERLAPPING_SCENARIO))
+    result = write_artifacts(scenario, tmp_path)
+    assert result.event_count == 6
+    _assert_lockstep(result.jsonl, result.pcap)
 
 
 def test_request_response_pairing_and_action_class(tmp_path: Path) -> None:
@@ -163,6 +176,42 @@ actors:
 exchanges: []
 """
 
+_OVERLAPPING_SCENARIO = """
+name: overlapping
+protocol: modbus
+label: benign
+actors:
+  - {id: hmi, role: hmi, host: 10.0.0.10}
+  - {id: plc, role: plc, host: 10.0.0.50, port: 502}
+exchanges:
+  - source: hmi
+    target: plc
+    function: ReadHoldingRegisters
+    params: {address: 0, quantity: 2}
+  - source: hmi
+    target: plc
+    function: ReadHoldingRegisters
+    params: {address: 2, quantity: 2}
+  - source: hmi
+    target: plc
+    function: WriteSingleRegister
+    params: {address: 9, value: 7}
+"""
+
+_SPAN_OVERFLOW_SCENARIO = """
+name: span-overflow
+protocol: modbus
+label: benign
+actors:
+  - {id: hmi, role: hmi, host: 10.0.0.10}
+  - {id: plc, role: plc, host: 10.0.0.50, port: 502}
+exchanges:
+  - source: hmi
+    target: plc
+    function: ReadHoldingRegisters
+    params: {address: 65535, quantity: 2}
+"""
+
 
 def test_other_function_codes_emit_and_validate(tmp_path: Path) -> None:
     # Exercises the read-bit, multi-register-write and single-coil encoders beyond
@@ -189,4 +238,12 @@ def test_missing_required_param_raises(tmp_path: Path) -> None:
 def test_non_modbus_protocol_raises(tmp_path: Path) -> None:
     scenario = load_scenario(_write_scenario(tmp_path, _DNP3_SCENARIO))
     with pytest.raises(EmitError, match="Modbus only"):
+        write_artifacts(scenario, tmp_path)
+
+
+def test_span_past_address_space_raises(tmp_path: Path) -> None:
+    # address (65535) and quantity (2) are each in range, but their span overflows
+    # the 16-bit Modbus address space — reject it rather than emit telemetry.
+    scenario = load_scenario(_write_scenario(tmp_path, _SPAN_OVERFLOW_SCENARIO))
+    with pytest.raises(ModbusError, match="address space"):
         write_artifacts(scenario, tmp_path)

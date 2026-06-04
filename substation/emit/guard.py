@@ -29,7 +29,17 @@ class FilesOnlyViolation(RuntimeError):
 # The transmit/connect primitives that would put data on the wire. Blocking these
 # on the ``socket.socket`` class covers raw, UDP and TCP sends — and therefore any
 # library (scapy included) that ultimately calls down to a kernel socket.
-_BLOCKED_METHODS = ("connect", "connect_ex", "send", "sendall", "sendto", "sendmsg")
+# ``sendfile`` is included because its zero-copy fast path (os.sendfile) transmits
+# without routing through ``send``/``sendall``, so it would otherwise be a bypass.
+_BLOCKED_METHODS = (
+    "connect",
+    "connect_ex",
+    "send",
+    "sendall",
+    "sendto",
+    "sendmsg",
+    "sendfile",
+)
 
 
 def _blocked(name: str) -> Callable[..., Any]:

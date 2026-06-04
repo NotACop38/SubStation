@@ -57,6 +57,20 @@ def test_guard_blocks_connect_and_transmit() -> None:
             sock.close()
 
 
+def test_guard_blocks_sendfile(tmp_path: Path) -> None:
+    # sendfile()'s zero-copy path transmits without going through send/sendall, so
+    # the guard must block it too or it is a hole in the files-only invariant.
+    payload = tmp_path / "f.bin"
+    payload.write_bytes(b"data")
+    with files_only_guard():
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            with payload.open("rb") as handle, pytest.raises(FilesOnlyViolation):
+                sock.sendfile(handle)
+        finally:
+            sock.close()
+
+
 def test_guard_restores_socket_methods_on_exit() -> None:
     original_send = socket.socket.send
     original_connect = socket.socket.connect

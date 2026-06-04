@@ -234,6 +234,20 @@ def _req_seq(
     return tuple(value)
 
 
+def _check_span(address: int, count: int, where: str) -> None:
+    """Reject a coil/register span that runs past the 16-bit Modbus address space.
+
+    ``address`` and ``count`` may each be individually in range while their span
+    ``[address, address + count)`` still overflows past ``0xFFFF`` — an impossible
+    Modbus operation we refuse up front rather than emit telemetry for.
+    """
+    if address + count > _U16 + 1:
+        raise ModbusError(
+            f"{where}: span [{address}, {address + count}) runs past the 16-bit "
+            f"Modbus address space (address + quantity must be <= {_U16 + 1})"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class _Payload:
     """Per-function semantic content shared by the request and its response."""
@@ -253,11 +267,13 @@ def _encode_exchange(code: int, params: Mapping[str, object], where: str) -> _Pa
     if code in (READ_COILS, READ_DISCRETE_INPUTS):
         address = _req_int(params, "address", where, 0, _U16)
         quantity = _req_int(params, "quantity", where, 1, _MAX_READ_BITS)
+        _check_span(address, quantity, where)
         response = tuple((address + i) & 1 for i in range(quantity))
         return _Payload(address, quantity, (), response)
     if code in (READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS):
         address = _req_int(params, "address", where, 0, _U16)
         quantity = _req_int(params, "quantity", where, 1, _MAX_READ_REGISTERS)
+        _check_span(address, quantity, where)
         response = tuple((address + i) & _U16 for i in range(quantity))
         return _Payload(address, quantity, (), response)
     if code == WRITE_SINGLE_REGISTER:
@@ -271,10 +287,12 @@ def _encode_exchange(code: int, params: Mapping[str, object], where: str) -> _Pa
     if code == WRITE_MULTIPLE_REGISTERS:
         address = _req_int(params, "address", where, 0, _U16)
         values = _req_int_list(params, "values", where, 0, _U16, _MAX_WRITE_REGISTERS)
+        _check_span(address, len(values), where)
         return _Payload(address, len(values), values, ())
     if code == WRITE_MULTIPLE_COILS:
         address = _req_int(params, "address", where, 0, _U16)
         values = _req_bit_list(params, "values", where, _MAX_WRITE_BITS)
+        _check_span(address, len(values), where)
         return _Payload(address, len(values), values, ())
     # resolve_function only returns codes we encode; guard the invariant anyway.
     raise ModbusError(f"{where}: no encoder for function code {code:#04x}")
@@ -317,6 +335,9 @@ class _Conn:
     resp_h: str
     resp_p: int
     _tid: int = 0
+    # Time the last response on this connection completed; requests are clamped to
+    # not precede it so a single flow's events stay causally ordered (see build_events).
+    last_response_ts: float = float("-inf")
 
     def next_tid(self) -> int:
         # Modbus transaction id is 16-bit; cycle 1..65535 (never 0) per connection.
@@ -371,7 +392,14 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
         tid = conn.next_tid()
         unit = _opt_int(exchange.params, "unit_id", where, 0, 255, 1)
         payload = _encode_exchange(code, exchange.params, where)
-        request_ts = scenario.timing.start + exchange.offset
+        # Serialize transactions on a connection: a request never precedes the
+        # previous response on the same flow. This keeps each flow causally
+        # ordered (and its TCP seq/ack valid) even when exchanges share an offset
+        # or sit closer than RESPONSE_DELAY, so the PCAP's global time sort cannot
+        # reorder a request ahead of an earlier response (PR #5 review).
+        request_ts = max(scenario.timing.start + exchange.offset, conn.last_response_ts)
+        response_ts = request_ts + RESPONSE_DELAY
+        conn.last_response_ts = response_ts
 
         events.append(
             ModbusEvent(
@@ -394,7 +422,7 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
         )
         events.append(
             ModbusEvent(
-                ts=request_ts + RESPONSE_DELAY,
+                ts=response_ts,
                 uid=conn.uid,
                 orig_h=conn.orig_h,
                 orig_p=conn.orig_p,
