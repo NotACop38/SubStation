@@ -82,3 +82,4 @@ exercises:
     - S1   # the only run-state change comes from the allow-listed EWS.
     - S2   # the only program download comes from the allow-listed EWS; HMI only writes tags.
     - S3   # a single module-identity read is not enumeration.
+    - X1   # every talker/pair/function here is part of the learned baseline.

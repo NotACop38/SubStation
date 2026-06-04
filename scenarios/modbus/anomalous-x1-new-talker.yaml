@@ -1,0 +1,89 @@
+# =============================================================================
+# Anomalous (X1) — cross-protocol baseline deviation: NEW TALKER
+# =============================================================================
+# X1 (PRD.md §5.4): a source/destination/function combination not in the learned
+# baseline, across any supported protocol. This scenario exercises the strongest
+# deviation class — a NEW TALKER: a host (10.0.0.123) that is NOT in the learned
+# baseline (the benign baselines establish only hmi-1 10.0.0.10 and ews-1
+# 10.0.0.11 as Modbus talkers to plc-1) suddenly originates Modbus traffic.
+#
+# The new talker only READS (no writes, all legal function codes), so it must
+# stay quiet on M1 (unauthorized write) and M2 (illegal function code): X1's
+# signal is "this host has no baseline", NOT "this host did something malicious".
+# That is exactly why X1 needs the learned state + set membership a stateless
+# field-match cannot provide — and why it complements, not duplicates, M1/M2.
+#
+# Learned baseline (derived from scenarios/*/benign-baseline.yaml and injected
+# into the X1 Zeek script by the Tier-2 runner):
+#   * Known Modbus talkers: hmi-1 10.0.0.10, ews-1 10.0.0.11
+#   * Known PLC:            plc-1 10.0.0.50:502
+# 10.0.0.123 is in NEITHER known_talkers NOR known_pairs -> X1 fires (new talker).
+# -----------------------------------------------------------------------------
+
+name: anomalous-x1-new-talker
+description: >-
+  An unbaselined host (10.0.0.123, never seen in the learned baseline) originates
+  Modbus reads to the PLC amid normal HMI/EWS polling. Fires X1 (cross-protocol
+  baseline deviation — new talker); stays quiet on M1 (no writes) and M2 (all
+  function codes legal).
+
+protocol: modbus
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: hmi-1            # baselined, allow-listed: read-only polling.
+    role: hmi
+    host: 10.0.0.10
+  - id: ews-1            # baselined, allow-listed writer.
+    role: ews
+    host: 10.0.0.11
+  - id: rogue-1         # NOT in the learned baseline — the new talker (X1).
+    role: master
+    host: 10.0.0.123
+  - id: plc-1
+    role: plc
+    host: 10.0.0.50
+    port: 502
+
+exchanges:
+  # --- baselined background traffic the detection must NOT flag --------------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 0.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+  - source: ews-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 2.0
+    params: { unit_id: 1, address: 40, quantity: 10 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadInputRegisters
+    offset: 4.0
+    params: { unit_id: 1, address: 0, quantity: 8 }
+
+  # --- the new talker (X1): a host with no baseline originates OT traffic ----
+  # Reads only — deliberately benign-looking — so the signal is purely "no
+  # baseline for this talker", not any malicious function.
+  - source: rogue-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 6.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+  - source: rogue-1
+    target: plc-1
+    function: ReadCoils
+    offset: 8.0
+    params: { unit_id: 1, address: 0, quantity: 16 }
+
+exercises:
+  fires:
+    - X1   # 10.0.0.123 is a new talker / new asset pair vs the learned baseline.
+  quiet:
+    - M1   # the new talker only reads — no write functions at all.
+    - M2   # every function code is legal/standard Modbus.

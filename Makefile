@@ -24,7 +24,7 @@ dev: ## Install the package with dev tooling (pinned)
 ## ---------------------------------------------------------------------------
 ## CI — the local gate. Run this after any change; it must pass before "done".
 ## ---------------------------------------------------------------------------
-ci: format-check lint type test schema coverage-build ## Run the full local CI gate
+ci: format-check lint type test schema coverage-check ## Run the full local CI gate
 	@echo "--- detection harness (Tier 1 generate->detect->report) runs under 'test'"
 	@echo "--- [placeholder] security (bandit + pip-audit) — wire via 'make security' in Phase 2"
 	@echo "ci: OK"
@@ -48,10 +48,11 @@ schema: ## Validate emitted .jsonl events against the frozen event-log JSON Sche
 	$(PY) -m substation.schema
 
 coverage-build: ## Generate the ATT&CK-for-ICS coverage map + Navigator layer (from the registry)
-	$(PY) -m substation.coverage
+	$(PY) -m substation.coverage --out coverage
+	$(PY) -m substation.coverage --out docs/coverage   # committed, published snapshot
 
-coverage-check: ## Verify a committed coverage snapshot matches the registry (drift gate)
-	$(PY) -m substation.coverage --check
+coverage-check: ## Verify the committed coverage snapshot (docs/coverage) matches the registry
+	$(PY) -m substation.coverage --check --out docs/coverage
 
 security: ## Security audit: bandit (code) + pip-audit (deps)
 	bandit -q -r $(PKG)
