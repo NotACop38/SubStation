@@ -74,8 +74,8 @@ demo-cast: ## Record `make demo` to an animated SVG/GIF (asciinema + agg; needs 
 verify: ## Tier-2 validation: real Zeek/ICSNPP fidelity + Zeek/Suricata detections (Docker)
 	$(PY) scripts/verify/run.py
 
-release: ## Cut a release (stub)
-	@echo "make release: not yet implemented (Phase 0 stub)."
+release: ## Cut a local release: gate -> build sdist/wheel -> regen artifacts -> bump + changelog -> tag
+	$(PY) scripts/release/run.py $(RELEASE_ARGS)
 
 ## ---------------------------------------------------------------------------
 ## Local "continuous" gate

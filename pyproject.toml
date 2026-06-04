@@ -35,6 +35,7 @@ dev = [
     "bandit==1.9.4",
     "pip-audit==2.10.0",
     "detect-secrets==1.5.0",  # secret scan in `make security` (gitleaks-via-Docker preferred when present).
+    "build==1.5.0",  # sdist + wheel builder for `make release` (PyPA build).
 ]
 
 [project.scripts]
