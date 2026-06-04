@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="180" viewBox="0 0 760 180" role="img" aria-label="Substation demo placeholder">
+  <rect width="760" height="180" rx="8" fill="#0d1117"/>
+  <circle cx="22" cy="22" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="22" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="22" r="6" fill="#27c93f"/>
+  <text x="24" y="78" font-family="SFMono-Regular,Consolas,Liberation Mono,monospace" font-size="15" fill="#8b949e">$ make demo</text>
+  <text x="24" y="104" font-family="SFMono-Regular,Consolas,Liberation Mono,monospace" font-size="15" fill="#c9d1d9">[detect]   2 hit(s) — <tspan fill="#f97583">M1 FIRED</tspan> (Impair Process Control · T1692.001)</text>
+  <text x="24" y="150" font-family="SFMono-Regular,Consolas,Liberation Mono,monospace" font-size="13" fill="#6e7681">placeholder — run `make demo-cast` locally to record the real animated cast</text>
+</svg>
