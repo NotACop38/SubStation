@@ -44,38 +44,57 @@ make demo     # generate → detect → report (Tier 1, pure Python)
 
 `make demo` builds synthetic Modbus telemetry from a scenario, runs the Sigma
 detections over the JSON event log, and prints the hits plus an ATT&CK-for-ICS
-coverage map. A benign baseline stays **quiet** (low false positives); point it at
-an attack scenario and the matching detection **fires**:
+coverage map. The bundled default scenario is a **benign** poll, so it stays
+**quiet** (low false positives) — exactly what you want from a detection pack.
+Below is the verbatim current output:
 
 ```text
 $ make demo
-substation demo — generate → detect → report (Tier 1, pure Python)
+substation demo — generate emits live Modbus PCAP + JSON; detect/report remain Phase-1 placeholders
 
-[load]     benign-baseline (modbus, benign): 3 actors, 6 exchanges
-[generate] wrote 24 events -> benign-baseline.pcap, benign-baseline.jsonl
-[detect]   0 hit(s) from the JSON event log         ← quiet on benign traffic
+[load]     benign-poll (modbus, benign): 3 actors, 3 exchanges
+[generate] wrote 6 events -> benign-poll.pcap, benign-poll.jsonl
+[detect]   0 hit(s) from the JSON event log
 [report]   rendering coverage map
-  M1  Unauthorized register/coil write .......... no hits
-  M2  Illegal / abnormal function code .......... no hits
-  M3  Function-code / unit-ID sweep ............. no hits
 
+ATT&CK-for-ICS coverage map (Phase 0 placeholder)
+==================================================
+  M1       no hits
+  M2       no hits
+  M3       no hits
+==================================================
+scenarios loaded: 1 · detections tracked: 3
+```
+
+Point the same loop at an **attack** scenario and the matching detection
+**fires** (M1 → Impair Process Control, ATT&CK `T1692.001`):
+
+```text
 $ substation demo --scenario scenarios/modbus/anomalous-m1-unauthorized-write.yaml
+substation demo — generate emits live Modbus PCAP + JSON; detect/report remain Phase-1 placeholders
+
 [load]     anomalous-m1-unauthorized-write (modbus, anomalous): 4 actors, 5 exchanges
-[generate] wrote 10 events -> anomalous-m1-unauthorized-write.pcap, ...jsonl
-[detect]   2 hit(s) from the JSON event log         ← fires on the attack
+[generate] wrote 10 events -> anomalous-m1-unauthorized-write.pcap, anomalous-m1-unauthorized-write.jsonl
+[detect]   2 hit(s) from the JSON event log
 [report]   rendering coverage map
-  M1  Unauthorized register/coil write .......... FIRED  (Impair Process Control · T1692.001)
-  M2  Illegal / abnormal function code .......... no hits
-  M3  Function-code / unit-ID sweep ............. no hits
+
+ATT&CK-for-ICS coverage map (Phase 0 placeholder)
+==================================================
+  M1       FIRED
+  M2       no hits
+  M3       no hits
+==================================================
+scenarios loaded: 1 · detections tracked: 3
 ```
 
 ![Substation demo](docs/assets/demo.svg)
 
-> The one-command demo loop is being polished into its launch form (checklist
-> Phase 2); the line format and detection results above are the tool's real
-> output. Regenerate the full coverage map any time with `make coverage-build`.
-> The image above is a placeholder — record the real animated cast with
-> [`make demo-cast`](#recording-the-demo).
+> The two blocks above are the tool's **verbatim current output**. The
+> report/coverage rendering is still the Phase-0 placeholder box; it is being
+> polished into its launch form (checklist Phase 2). The full ATT&CK-for-ICS
+> coverage map is generated separately by `make coverage-build` (see
+> [Coverage](#coverage)). The image above is a styled placeholder — record the
+> real animated cast with [`make demo-cast`](#recording-the-demo).
 
 ## Architecture
 
@@ -119,9 +138,13 @@ flowchart TD
 ## Coverage
 
 Substation maps every detection to a **verified** ATT&CK-for-ICS technique ID
-(confirmed against the live matrix, never from memory). The table below is
-**generated** from `detections/registry.yaml` by `make coverage-build` — it can't
-drift from the detections.
+(confirmed against the live matrix, never from memory). The authoritative coverage
+map is **generated** from `detections/registry.yaml` by `make coverage-build` and
+checked against the registry by `make ci` (`coverage-check`), so it can't drift
+from the detections — see [`docs/coverage/coverage.md`](docs/coverage/coverage.md).
+The table below is a hand-maintained **snapshot** of that generated map for
+at-a-glance reading; if it ever disagrees with the generated file, the generated
+file wins.
 
 **Load it in the Navigator:** download
 [`docs/coverage/navigator-layer.json`](docs/coverage/navigator-layer.json) and open
@@ -191,10 +214,12 @@ real OT monitoring product.
 
 ## Recording the demo
 
-`make demo-cast` records the one-command demo to an animated **SVG** (and
-optionally a GIF) using [asciinema](https://asciinema.org/) +
-[agg](https://github.com/asciinema/agg), writing the result to
-`docs/assets/demo.svg`:
+`make demo-cast` records the one-command demo with
+[asciinema](https://asciinema.org/) and renders it to the embedded animated
+**SVG** with [svg-term-cli](https://github.com/marionebl/svg-term-cli), writing
+`docs/assets/demo.svg`. An optional **GIF** can additionally be rendered with
+[agg](https://github.com/asciinema/agg) via `RENDER_GIF=1 make demo-cast` (agg
+emits GIF, not SVG, which is why the SVG path uses svg-term):
 
 ```sh
 make demo-cast
