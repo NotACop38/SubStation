@@ -111,6 +111,17 @@ def test_bool_is_not_an_integer() -> None:
     assert any("func_code" in e for e in iter_event_errors(event))
 
 
+def test_non_finite_decoded_number_rejected() -> None:
+    event = _a_valid_read_request()
+    event["ts"] = float("nan")
+    assert any("ts" in e and "expected type number" in e for e in iter_event_errors(event))
+
+
+def test_non_finite_decoded_number_rejected_without_type() -> None:
+    schema = {"minimum": 0}
+    assert any("non-finite" in e for e in iter_event_errors(float("inf"), schema))
+
+
 def test_conn_requires_all_endpoints() -> None:
     event = _a_valid_read_request()
     del event["conn"]["resp_p"]
