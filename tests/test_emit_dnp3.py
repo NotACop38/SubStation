@@ -181,6 +181,15 @@ def test_inconsistent_object_count_rejected(tmp_path: Path) -> None:
         write_artifacts(scenario, tmp_path)
 
 
+def test_oversized_response_range_rejected_before_writing_artifacts(tmp_path: Path) -> None:
+    scenario = load_scenario(_write_scenario(tmp_path, _OVERSIZED_RANGE_SCENARIO))
+    out_dir = tmp_path / "artifacts"
+    with pytest.raises(Dnp3Error, match="single-frame DNP3 PCAP limit"):
+        write_artifacts(scenario, out_dir)
+    assert not (out_dir / "dnp3-oversized-range.jsonl").exists()
+    assert not (out_dir / "dnp3-oversized-range.pcap").exists()
+
+
 def test_unknown_object_type_rejected(tmp_path: Path) -> None:
     scenario = load_scenario(_write_scenario(tmp_path, _BAD_OBJECT_TYPE_SCENARIO))
     with pytest.raises(Dnp3Error, match="unknown DNP3 object type"):
@@ -307,6 +316,24 @@ exchanges:
     target: r
     function: Read
     params: {object_type: Binary Input With Status, range_low: 0, range_high: 0, object_count: 10}
+"""
+
+_OVERSIZED_RANGE_SCENARIO = """
+name: dnp3-oversized-range
+protocol: dnp3
+label: benign
+actors:
+  - {id: m, role: master, host: 10.0.1.10}
+  - {id: r, role: outstation, host: 10.0.1.50, port: 20000}
+exchanges:
+  - source: m
+    target: r
+    function: Read
+    params:
+      object_type: Binary Input With Status
+      range_low: 0
+      range_high: 255
+      object_count: 256
 """
 
 _BAD_OBJECT_TYPE_SCENARIO = """
