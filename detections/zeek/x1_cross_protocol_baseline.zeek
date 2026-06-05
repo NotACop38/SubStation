@@ -49,9 +49,9 @@
 ##! Data sources (per-protocol, normalized into one tuple):
 ##!   * Modbus — base `modbus_message` (`headers$function_code`); verified for M3.
 ##!   * DNP3   — base `dnp3_application_request_header` (`fc`); verified for D4.
-##!   * S7comm — ICSNPP `s7comm_read_szl` (`szl_id`); verified for S3 (Tier 2).
-##! Adding further S7 events (the general S7 header) is a mechanical extension of
-##! the same `observe()` normalizer; the verified-today events are wired here.
+##!   * S7comm — ICSNPP `s7comm_header` for every S7comm request; `s7comm_read_szl`
+##!              keeps the existing SZL-ID-specific baseline detail for Read SZL.
+##!   * S7comm-plus — ICSNPP `s7comm_plus_header` for S7comm-plus requests.
 
 @load base/protocols/modbus
 @load base/protocols/dnp3
@@ -92,6 +92,21 @@ export {
 function norm_func(proto: string, code: string): string
 	{
 	return fmt("%s:%s", proto, code);
+	}
+
+# Normalize the general ICSNPP S7comm header into a stable function token. Include
+# ROSCTR so Job Read Variable (function 0x04) and User-Data CPU Functions / Read
+# SZL (also function group 0x04) remain distinct. Include subfunction and PLC
+# control service when present because those fields are the actual verb within
+# User-Data and PLC Control requests.
+function norm_s7comm_header_func(rosctr: count, function_code: count, subfunction: count, plc_control: string): string
+	{
+	local func = fmt("rosctr=0x%02x,function=0x%02x", rosctr, function_code);
+	if ( subfunction != 0 )
+		func = fmt("%s,subfunction=0x%02x", func, subfunction);
+	if ( plc_control != "" )
+		func = fmt("%s,plc_control=%s", func, plc_control);
+	return func;
 	}
 
 # Set on the first observation; gates the optional self-learning window.
@@ -165,10 +180,35 @@ event dnp3_application_request_header(c: connection, is_orig: bool, application_
 	observe(c, norm_func("dnp3", fmt("%d", fc)));
 	}
 
+event s7comm_header(c: connection, is_orig: bool, rosctr: count, pdu_reference: count, function_code: count, subfunction: count, plc_control: string, error_class: count, error_code: count)
+	{
+	# Requests only; responses repeat the function/subfunction and would double-count.
+	if ( ! is_orig )
+		return;
+
+	# Read SZL is handled below with the SZL ID to preserve the original
+	# S7-specific baseline precision while this general header path covers the
+	# rest of the S7comm surface (Setup Communication, Read/Write Variable,
+	# upload/download functions, PLC Control/Stop, List Blocks, etc.).
+	if ( rosctr == 0x07 && function_code == 0x04 && subfunction == 0x01 )
+		return;
+
+	observe(c, norm_func("s7comm", norm_s7comm_header_func(rosctr, function_code, subfunction, plc_control)));
+	}
+
 event s7comm_read_szl(c: connection, is_orig: bool, pdu_reference: count, method: count, return_code: count, szl_id: count, szl_index: count)
 	{
 	# Requests only; the response returns the same szl_id and would double-count.
 	if ( ! is_orig )
 		return;
 	observe(c, norm_func("s7comm", fmt("szl=0x%x", szl_id)));
+	}
+
+event s7comm_plus_header(c: connection, is_orig: bool, version: count, opcode: count, function_code: count)
+	{
+	# Requests only; responses/notifications would double-count the originator's
+	# behavior. The opcode is retained because S7comm-plus verbs are opcode-scoped.
+	if ( ! is_orig )
+		return;
+	observe(c, norm_func("s7comm-plus", fmt("opcode=0x%02x,function=0x%04x", opcode, function_code)));
 	}

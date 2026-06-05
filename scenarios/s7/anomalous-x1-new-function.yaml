@@ -1,0 +1,51 @@
+# =============================================================================
+# Anomalous (X1) — S7 non-SZL cross-protocol baseline deviation: NEW FUNCTION
+# =============================================================================
+# Learned baseline (derived from scenarios/*/benign-baseline.yaml and injected
+# into the X1 Zeek script by the Tier-2 runner):
+#   * ews-1 (10.0.4.10) is a known talker.
+#   * ews-1 -> plc-1 (10.0.4.50) is a known pair.
+#   * That pair has Setup Communication, Read SZL, Request/Download/Download Ended,
+#     and PLC Control in the baseline — but NOT Write Variable.
+#
+# The anomaly is deliberately a non-SZL S7comm function so X1's S7 path proves it
+# observes the base s7comm_header, not only the s7comm_read_szl detail event.
+# -----------------------------------------------------------------------------
+
+name: s7-anomalous-x1-new-function
+description: >-
+  A baselined engineering workstation/PLC pair issues a non-SZL S7comm function
+  (Write Variable) that was never observed for that pair in the learned baseline.
+  Fires X1 as a new function for a known pair, without relying on Read SZL.
+
+protocol: s7comm
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: ews-1          # baselined, allow-listed engineering workstation.
+    role: ews
+    host: 10.0.4.10
+  - id: plc-1          # baselined PLC.
+    role: plc
+    host: 10.0.4.50
+    port: 102
+
+exchanges:
+  # --- baselined background traffic the detection must NOT flag --------------
+  - { source: ews-1, target: plc-1, function: SetupCommunication, offset: 0.0 }
+  - { source: ews-1, target: plc-1, function: ReadSZL, offset: 1.0, params: { szl_id: 0x0011 } }
+
+  # --- the non-SZL new function (X1): known talker + known pair, novel verb ----
+  - { source: ews-1, target: plc-1, function: WriteVariable, offset: 2.0 }
+
+exercises:
+  fires:
+    - X1   # known talker/pair, but Write Variable is new for ews-1 -> plc-1.
+  quiet:
+    - S1   # no PLC Control/Stop operation.
+    - S2   # plain Write Variable is not a program/data-block download/write.
+    - S3   # a single Read SZL is normal module-identity access, not enumeration.
