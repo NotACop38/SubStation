@@ -189,6 +189,21 @@ def test_nested_params_are_deep_frozen(tmp_path: Path) -> None:
         params["nested"]["k"] = 2  # type: ignore[index]
 
 
+def test_recursive_yaml_alias_in_params_rejected(tmp_path: Path) -> None:
+    text = _MINIMAL.replace(
+        "exchanges: []",
+        "exchanges:\n"
+        "  - source: a\n"
+        "    target: a\n"
+        "    function: Read\n"
+        "    params:\n"
+        "      values: &recursive [*recursive]",
+    )
+    with pytest.raises(ScenarioError) as exc:
+        load_scenario(_write(tmp_path, text))
+    assert "cyclic YAML aliases" in str(exc.value)
+
+
 def test_detection_in_both_fires_and_quiet_rejected(tmp_path: Path) -> None:
     text = _MINIMAL + "exercises:\n  fires: [M1]\n  quiet: [M1]\n"
     with pytest.raises(ScenarioError) as exc:
