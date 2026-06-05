@@ -12,6 +12,7 @@ See ``docs/scenario-format.md`` and the fully commented example at
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping
 from pathlib import Path
@@ -117,7 +118,13 @@ def _opt_number(mapping: dict[str, object], key: str, where: str, default: float
     value = mapping[key]
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ScenarioError(f"{where}.{key}: expected a number")
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        raise ScenarioError(f"{where}.{key}: expected a finite number") from None
+    if not math.isfinite(number):
+        raise ScenarioError(f"{where}.{key}: expected a finite number")
+    return number
 
 
 def _str_tuple(value: object, where: str) -> tuple[str, ...]:

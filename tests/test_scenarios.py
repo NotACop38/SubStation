@@ -92,6 +92,31 @@ def test_invalid_scenarios_raise(tmp_path: Path, text: str, needle: str) -> None
     assert needle in str(exc.value)
 
 
+@pytest.mark.parametrize(
+    ("field", "yaml_value"),
+    [
+        ("timing.start", ".nan"),
+        ("timing.default_interval", ".inf"),
+        ("exchanges[0].offset", "-.inf"),
+    ],
+)
+def test_non_finite_scenario_numbers_rejected(tmp_path: Path, field: str, yaml_value: str) -> None:
+    text = _MINIMAL
+    if field == "timing.start":
+        text += f"timing: {{start: {yaml_value}}}\n"
+    elif field == "timing.default_interval":
+        text += f"timing: {{default_interval: {yaml_value}}}\n"
+    else:
+        text = text.replace(
+            "exchanges: []",
+            f"exchanges:\n  - {{source: a, target: a, function: Read, offset: {yaml_value}}}",
+        )
+
+    with pytest.raises(ScenarioError) as exc:
+        load_scenario(_write(tmp_path, text))
+    assert f"{field}: expected a finite number" in str(exc.value)
+
+
 def test_exchange_referencing_unknown_actor_raises(tmp_path: Path) -> None:
     text = _MINIMAL.replace(
         "exchanges: []",
