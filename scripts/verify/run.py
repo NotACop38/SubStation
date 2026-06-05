@@ -131,22 +131,34 @@ def _checkout(dest: Path, commit: str) -> bool:
     return subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode == 0
 
 
+def _discard_cached_clone(dest: Path) -> bool:
+    try:
+        if dest.is_symlink() or dest.is_file():
+            dest.unlink()
+        elif dest.exists():
+            shutil.rmtree(dest)
+    except OSError as exc:
+        print(f"verify: could not discard stale ICSNPP cache {dest}: {exc}", file=sys.stderr)
+        return False
+    return True
+
+
 def ensure_icsnpp(name: str) -> Path | None:
     """Return the local ICSNPP scripts dir for ``name`` at the **pinned** commit.
 
-    On a cache hit the clone is re-verified against the pin and re-checked-out if it
-    drifted (an older/partially-updated cache must not silently run the fidelity
-    golden tests against different analyzer scripts than the commit claims).
+    On a cache hit the clone is re-verified against the pin. A drifted cache is
+    discarded and cloned again instead of checked out in place, because Git runs
+    repository-local checkout hooks from existing caches.
     """
     url, commit = _ICSNPP[name]
     dest = _CACHE / f"icsnpp-{name}"
     scripts = dest / "scripts"
     if (dest / ".git").is_dir():
-        if not _at_commit(dest, commit):
-            print(f"verify: re-pinning cached icsnpp-{name} -> {commit[:10]} ...")
-            if not _checkout(dest, commit):
-                return None
-        return scripts if scripts.is_dir() else None
+        if _at_commit(dest, commit):
+            return scripts if scripts.is_dir() else None
+        print(f"verify: discarding drifted icsnpp-{name} cache -> {commit[:10]} ...")
+        if not _discard_cached_clone(dest):
+            return None
     _CACHE.mkdir(exist_ok=True)
     print(f"verify: fetching icsnpp-{name} @ {commit[:10]} ...")
     if subprocess.run(["git", "clone", url, str(dest)], capture_output=True).returncode != 0:
