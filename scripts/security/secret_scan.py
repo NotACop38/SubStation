@@ -3,8 +3,8 @@
 
 Backend selection, in order of preference:
 
-  1. **gitleaks** — native binary if on PATH, else the official Docker image
-     (``zricethezav/gitleaks``) when Docker is usable. The canonical secret
+  1. **gitleaks** — native binary if on PATH, else a digest-pinned Docker
+     image when Docker is usable. The canonical secret
      scanner.
   2. **detect-secrets** — the pinned dev dependency (``make security`` installs
      it); a pure-Python fallback that needs no Docker.
@@ -24,6 +24,10 @@ import sys
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+GITLEAKS_DOCKER_IMAGE = (
+    "zricethezav/gitleaks:v8.30.1"
+    "@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb"
+)
 
 # High-signal patterns for the builtin fallback. Deliberately conservative to
 # avoid false positives on a detection-content repo full of sample hex/IDs.
@@ -79,8 +83,8 @@ def _run_gitleaks_docker() -> int | None:
     print("secret_scan: backend = gitleaks (Docker)")
     return subprocess.run(
         [
-            "docker", "run", "--rm", "-v", f"{_REPO_ROOT}:/repo",
-            "zricethezav/gitleaks:latest",
+            "docker", "run", "--rm", "-v", f"{_REPO_ROOT}:/repo:ro",
+            GITLEAKS_DOCKER_IMAGE,
             "detect", "--source", "/repo", "--no-banner", "--redact",
         ],
     ).returncode
