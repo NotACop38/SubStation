@@ -18,6 +18,7 @@ still enforced below.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 from substation.detect import run_detections
@@ -52,12 +53,15 @@ _FIRE_IDS = [f"{d.id}-{s.name}" for d, s in _FIRE_CASES]
 _QUIET_IDS = [f"{d.id}-{s.name}" for d, s in _QUIET_CASES]
 
 
-def _count_hits(det: Detection, scenario: Scenario, tmp_path: Path) -> int:
+def _count_hits(
+    det: Detection, scenario: Scenario, tmp_path: Path, *, allow_unemittable: bool = False
+) -> int:
     """Run the Tier-1 loop (emit -> detect) for one detection on one scenario.
 
     Skips (rather than fails) when Tier 1 cannot exercise the case: a Tier-2
-    detection, or a scenario the current emitter cannot yet encode (a
-    forward-looking fixture). The skip reason names why, so the gap is visible.
+    detection, or an explicitly allowed partial forward-looking fire fixture.
+    Validated Tier-1 detections must always emit; otherwise the Detection
+    Contract would turn a regression into a green CI skip.
     """
     if det.engine != "sigma" or det.tier != 1:
         pytest.skip(
@@ -67,7 +71,12 @@ def _count_hits(det: Detection, scenario: Scenario, tmp_path: Path) -> int:
     try:
         result = write_artifacts(scenario, tmp_path)
     except (EmitError, ModbusError) as exc:
-        pytest.skip(f"scenario {scenario.name!r} not yet emittable ({exc})")
+        if allow_unemittable:
+            pytest.skip(f"scenario {scenario.name!r} not yet emittable ({exc})")
+        pytest.fail(
+            f"{det.id} is status={det.status!r}; scenario {scenario.name!r} must be "
+            f"emittable for the Tier-1 Detection Contract ({exc})"
+        )
     hits = run_detections(result.jsonl, [det])
     return sum(1 for hit in hits if hit.detection_id == det.id)
 
@@ -129,7 +138,7 @@ def test_fires_on_anomaly(det: Detection, scenario: Scenario, tmp_path: Path) ->
     assert scenario.label.value == "anomalous", (
         f"{scenario.name} lists {det.id} under exercises.fires but is not labelled anomalous"
     )
-    hits = _count_hits(det, scenario, tmp_path)
+    hits = _count_hits(det, scenario, tmp_path, allow_unemittable=det.status == "partial")
     assert hits >= 1, f"{det.id} did not fire on anomalous scenario {scenario.name!r}"
 
 
@@ -137,3 +146,22 @@ def test_fires_on_anomaly(det: Detection, scenario: Scenario, tmp_path: Path) ->
 def test_quiet_on_benign(det: Detection, scenario: Scenario, tmp_path: Path) -> None:
     hits = _count_hits(det, scenario, tmp_path)
     assert hits == 0, f"{det.id} fired on quiet scenario {scenario.name!r} ({hits} hit(s))"
+
+
+def test_validated_tier1_emit_errors_fail_contract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Validated Tier-1 scenarios must fail, not skip, if emission regresses."""
+    det, scenario = next(
+        (d, s)
+        for d, s in _FIRE_CASES
+        if d.engine == "sigma" and d.tier == 1 and d.status == "validated"
+    )
+
+    def fail_emit(_scenario: Scenario, _out_dir: Path) -> NoReturn:
+        raise EmitError("regression made validated fixture un-emittable")
+
+    monkeypatch.setattr("tests.test_detection_contract.write_artifacts", fail_emit)
+
+    with pytest.raises(pytest.fail.Exception, match="must be emittable"):
+        _count_hits(det, scenario, tmp_path)
