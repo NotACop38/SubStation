@@ -17,10 +17,19 @@ fi
 root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 cd "$root" || exit 0
 
-if make ci >/tmp/substation_ci.log 2>&1; then
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/substation_ci.XXXXXX")" || exit 2
+log="$tmpdir/ci.log"
+cleanup() {
+    rm -rf "$tmpdir"
+}
+trap cleanup EXIT HUP INT TERM
+: >"$log"
+chmod 600 "$log"
+
+if make ci >"$log" 2>&1; then
     exit 0
 fi
 
 echo "make ci failed — task is not done until it passes. Last output:" >&2
-tail -n 40 /tmp/substation_ci.log >&2
+tail -n 40 "$log" >&2
 exit 2
