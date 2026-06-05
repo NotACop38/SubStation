@@ -70,7 +70,8 @@ fi
 # --- capture ----------------------------------------------------------------
 echo "Recording \`make demo\` -> ${CAST_FILE}"
 rm -f "${CAST_FILE}"
-asciinema rec --overwrite --command "make -C '${REPO_ROOT}' demo" "${CAST_FILE}"
+export SUBSTATION_DEMO_REPO_ROOT="${REPO_ROOT}"
+asciinema rec --overwrite --command 'make -C "$SUBSTATION_DEMO_REPO_ROOT" demo' "${CAST_FILE}"
 
 # --- render -----------------------------------------------------------------
 echo "Rendering SVG -> ${SVG_FILE}"
