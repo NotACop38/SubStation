@@ -288,6 +288,31 @@ def _opt_str(params: Mapping[str, object], key: str, where: str, default: str) -
     return value
 
 
+def _opt_plc_control_service(params: Mapping[str, object], where: str) -> str:
+    service = _opt_str(params, "service", where, "P_PROGRAM")
+    if service not in PLC_CONTROL_SERVICES:
+        raise S7Error(
+            f"{where}.service: unknown S7 PLC control service {service!r}; "
+            f"valid: {', '.join(sorted(PLC_CONTROL_SERVICES))}"
+        )
+    return service
+
+
+def _opt_block_number(params: Mapping[str, object], where: str) -> str:
+    block_number = _opt_str(params, "block_number", where, "00001")
+    if not re.fullmatch(r"[0-9]+", block_number):
+        raise S7Error(f"{where}.block_number: expected ASCII decimal digits")
+    # The Request/Download Block filename is encoded on the wire as
+    # _<2-char-block-type><block-number>P prefixed by one length byte.
+    max_block_number_len = 255 - len("_00P")
+    if len(block_number) > max_block_number_len:
+        raise S7Error(
+            f"{where}.block_number: too long for S7 block filename "
+            f"({len(block_number)} > {max_block_number_len} characters)"
+        )
+    return block_number
+
+
 # --- connection bookkeeping (mirrors dnp3) -----------------------------------
 
 _B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -467,9 +492,9 @@ def _append_job(
     block_filename: str | None = None
 
     if function == 0x28:  # PLC Control: subfunction carries the control service.
-        plc_control = _opt_str(params, "service", where, "P_PROGRAM")
+        plc_control = _opt_plc_control_service(params, where)
         subfunction_code = plc_control
-        subfunction_name = PLC_CONTROL_SERVICES.get(plc_control, "unknown")
+        subfunction_name = PLC_CONTROL_SERVICES[plc_control]
     if function in _UPLOAD_DOWNLOAD_FUNCS:
         upload_download = {"rosctr": ROSCTR_NAMES[ROSCTR_JOB], "function_name": func_name}
         if function in _DOWNLOAD_BLOCK_FUNCS:
@@ -479,7 +504,7 @@ def _append_job(
                     f"{where}.block_type: unknown S7 block type {block_type_code!r}; "
                     f"valid: {', '.join(sorted(BLOCK_TYPES))}"
                 )
-            block_number = _opt_str(params, "block_number", where, "00001")
+            block_number = _opt_block_number(params, where)
             block_filename = f"_{block_type_code}{block_number}P"
             upload_download.update(
                 {
