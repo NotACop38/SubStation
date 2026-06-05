@@ -26,9 +26,7 @@ def test_release_scans_staged_tree_before_commit(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(release, "_run", fake_run)
     monkeypatch.setattr(release, "_git", fake_git)
 
-    release._commit_and_tag(
-        "1.2.3", argparse.Namespace(dry_run=False), already_released=False
-    )
+    release._commit_and_tag("1.2.3", argparse.Namespace(dry_run=False), already_released=False)
 
     assert calls == [
         ("git", "add", "-A"),
@@ -50,9 +48,7 @@ def test_release_aborts_if_staged_secret_scan_fails(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(release, "_run", fake_run)
 
     with pytest.raises(release.ReleaseError, match="secret scan"):
-        release._commit_and_tag(
-            "1.2.3", argparse.Namespace(dry_run=False), already_released=False
-        )
+        release._commit_and_tag("1.2.3", argparse.Namespace(dry_run=False), already_released=False)
 
     assert calls == [
         ("git", "add", "-A"),

@@ -266,7 +266,10 @@ actors:
   - {id: ews, role: ews, host: 10.0.4.10}
   - {id: plc, role: plc, host: 10.0.4.50, port: 102}
 exchanges:
-  - {source: ews, target: plc, function: RequestDownload, params: {block_type: "0A", block_number: "00é01"}}
+  - source: ews
+    target: plc
+    function: RequestDownload
+    params: {block_type: "0A", block_number: "00é01"}
 """
 
 _LONG_BLOCK_NUMBER_SCENARIO = f"""
@@ -277,5 +280,8 @@ actors:
   - {{id: ews, role: ews, host: 10.0.4.10}}
   - {{id: plc, role: plc, host: 10.0.4.50, port: 102}}
 exchanges:
-  - {{source: ews, target: plc, function: RequestDownload, params: {{block_type: "0A", block_number: "{'1' * 252}"}}}}
+  - source: ews
+    target: plc
+    function: RequestDownload
+    params: {{block_type: "0A", block_number: "{"1" * 252}"}}
 """
