@@ -168,6 +168,30 @@ def test_request_from_plc_raises(tmp_path: Path) -> None:
         write_artifacts(scenario, tmp_path)
 
 
+def test_plc_control_rejects_unknown_service_before_writing_jsonl(tmp_path: Path) -> None:
+    scenario = load_scenario(_write_scenario(tmp_path, _BAD_SERVICE_SCENARIO))
+    with pytest.raises(S7Error, match="unknown S7 PLC control service"):
+        write_artifacts(scenario, tmp_path)
+    assert not (tmp_path / "s7-bad-service.jsonl").exists()
+    assert not (tmp_path / "s7-bad-service.pcap").exists()
+
+
+def test_download_rejects_bad_block_number_before_writing_jsonl(tmp_path: Path) -> None:
+    scenario = load_scenario(_write_scenario(tmp_path, _BAD_BLOCK_NUMBER_SCENARIO))
+    with pytest.raises(S7Error, match="expected ASCII decimal digits"):
+        write_artifacts(scenario, tmp_path)
+    assert not (tmp_path / "s7-bad-block-number.jsonl").exists()
+    assert not (tmp_path / "s7-bad-block-number.pcap").exists()
+
+
+def test_download_rejects_too_long_block_number_before_writing_jsonl(tmp_path: Path) -> None:
+    scenario = load_scenario(_write_scenario(tmp_path, _LONG_BLOCK_NUMBER_SCENARIO))
+    with pytest.raises(S7Error, match="too long for S7 block filename"):
+        write_artifacts(scenario, tmp_path)
+    assert not (tmp_path / "s7-long-block-number.jsonl").exists()
+    assert not (tmp_path / "s7-long-block-number.pcap").exists()
+
+
 _READ_SZL_SCENARIO = """
 name: s7-readszl
 protocol: s7comm
@@ -221,4 +245,37 @@ actors:
   - {id: plc, role: plc, host: 10.0.4.50, port: 102}
 exchanges:
   - {source: plc, target: ews, function: ReadVariable}
+"""
+
+_BAD_SERVICE_SCENARIO = """
+name: s7-bad-service
+protocol: s7comm
+label: anomalous
+actors:
+  - {id: ews, role: ews, host: 10.0.4.10}
+  - {id: plc, role: plc, host: 10.0.4.50, port: 102}
+exchanges:
+  - {source: ews, target: plc, function: PlcControl, params: {service: "é"}}
+"""
+
+_BAD_BLOCK_NUMBER_SCENARIO = """
+name: s7-bad-block-number
+protocol: s7comm
+label: anomalous
+actors:
+  - {id: ews, role: ews, host: 10.0.4.10}
+  - {id: plc, role: plc, host: 10.0.4.50, port: 102}
+exchanges:
+  - {source: ews, target: plc, function: RequestDownload, params: {block_type: "0A", block_number: "00é01"}}
+"""
+
+_LONG_BLOCK_NUMBER_SCENARIO = f"""
+name: s7-long-block-number
+protocol: s7comm
+label: anomalous
+actors:
+  - {{id: ews, role: ews, host: 10.0.4.10}}
+  - {{id: plc, role: plc, host: 10.0.4.50, port: 102}}
+exchanges:
+  - {{source: ews, target: plc, function: RequestDownload, params: {{block_type: "0A", block_number: "{'1' * 252}"}}}}
 """
