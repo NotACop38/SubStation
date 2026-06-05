@@ -237,6 +237,11 @@ def _working_tree_dirty() -> bool:
     return bool(_git("status", "--porcelain"))
 
 
+def _scan_staged_tree(*, dry_run: bool) -> None:
+    """Re-run the secret scanner after staging the exact tree to be committed."""
+    _run([sys.executable, "scripts/security/secret_scan.py"], dry_run=dry_run)
+
+
 def _commit_and_tag(version: str, args: argparse.Namespace, already_released: bool) -> None:
     tag = f"v{version}"
 
@@ -262,6 +267,7 @@ def _commit_and_tag(version: str, args: argparse.Namespace, already_released: bo
     # the tagged commit is self-consistent with the wheel/sdist. dist/ and other
     # generated outputs stay out via .gitignore.
     _run(["git", "add", "-A"], dry_run=args.dry_run)
+    _scan_staged_tree(dry_run=args.dry_run)
     staged = _git("diff", "--cached", "--name-only")
     if not staged and not args.dry_run:
         print("release: nothing staged — working tree already at this release")
