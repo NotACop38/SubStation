@@ -47,7 +47,10 @@ from substation.scenarios import Scenario, load_scenario  # noqa: E402
 
 # --- configuration -----------------------------------------------------------
 
-ZEEK_IMAGE = "zeek/zeek:latest"
+ZEEK_IMAGE = (
+    "zeek/zeek:8.2"
+    "@sha256:32b90c30cb87d66748c3a6776ad2c0f5502aae7c12da9766cfdd426453c58838"
+)
 _DET_ZEEK = _REPO_ROOT / "detections" / "zeek"
 _DET_SURICATA = _REPO_ROOT / "detections" / "suricata"
 _SCENARIOS = _REPO_ROOT / "scenarios"
