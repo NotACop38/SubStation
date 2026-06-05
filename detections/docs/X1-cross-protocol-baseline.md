@@ -67,16 +67,23 @@ Per-protocol Zeek events, each normalized into one cross-protocol tuple by
 |---|---|---|
 | Modbus | base `modbus_message` (`headers$function_code`) | `modbus:<code>` |
 | DNP3 | base `dnp3_application_request_header` (`fc`) | `dnp3:<code>` |
-| S7comm | ICSNPP `s7comm_read_szl` (`szl_id`) | `s7comm:szl=0x<id>` |
+| S7comm | ICSNPP base `s7comm_header` (`rosctr`, `function_code`, `subfunction`, `plc_control`) | `s7comm:rosctr=0x<rosctr>,function=0x<code>[,subfunction=0x<sub>][,plc_control=<service>]` |
+| S7comm Read SZL detail | ICSNPP `s7comm_read_szl` (`szl_id`) | `s7comm:szl=0x<id>` |
+| S7comm-plus | ICSNPP `s7comm_plus_header` (`opcode`, `function_code`) | `s7comm-plus:opcode=0x<opcode>,function=0x<code>` |
 
 Only `is_orig` (request) messages are observed; the matched response echoes the
-request and would distort the originator's apparent behaviour.
+request and would distort the originator's apparent behaviour. `s7comm_header`
+now covers the full S7comm request surface emitted by ICSNPP — Setup
+Communication, Read/Write Variable, upload/download jobs, PLC Control/Stop, and
+User-Data functions such as List Blocks. Read SZL keeps the existing
+`szl_id`-specific observation so new module-identity probes remain visible at the
+same precision as before.
 
-> **VERIFY (`CLAUDE.md` gate).** The three event signatures are the same ones
-> verified for M3 / D4 / S3 against live sources on 2026-06-04 (`modbus_message`
-> and `dnp3_application_request_header` against `zeek/zeek` base; `s7comm_read_szl`
-> against `cisagov/icsnpp-s7comm`, spike 06). Extending S7 coverage to the general
-> S7 header event is a mechanical addition of one more `observe()` call.
+> **VERIFY (`CLAUDE.md` gate).** The event signatures are the same ones verified
+> for M3 / D4 / S3 against live sources on 2026-06-04 (`modbus_message` and
+> `dnp3_application_request_header` against `zeek/zeek` base; `s7comm_header`,
+> `s7comm_read_szl`, and `s7comm_plus_header` against `cisagov/icsnpp-s7comm`,
+> spike 06).
 
 ## Detection logic — learned state + set membership
 
@@ -121,7 +128,7 @@ baseline):
 - [`dnp3/benign-baseline.yaml`](../../scenarios/dnp3/benign-baseline.yaml)
 - [`s7/benign-baseline.yaml`](../../scenarios/s7/benign-baseline.yaml)
 
-Fires, across **two** protocols, with **one scenario per deviation class** (each
+Fires, across **all three** protocols, with **one scenario per deviation class** (each
 isolates its class — recall the precedence talker > pair > function, so the class
 under test must be the *highest*-precedence novelty in its scenario):
 
@@ -137,6 +144,10 @@ under test must be the *highest*-precedence novelty in its scenario):
 - **New function for a known pair** — [`dnp3/anomalous-x1-new-function.yaml`](../../scenarios/dnp3/anomalous-x1-new-function.yaml):
   the **baselined** master/outstation pair, which has only ever read, issues a
   function never seen for that pair: a **new function for a known pair**.
+- **S7 non-SZL new function for a known pair** — [`s7/anomalous-x1-new-function.yaml`](../../scenarios/s7/anomalous-x1-new-function.yaml):
+  the **baselined** EWS/PLC pair issues a non-SZL S7comm function (`Write Variable`)
+  that was not in that pair's baseline, proving X1's S7 path is not limited to
+  `s7comm_read_szl`.
 
 The baseline for the anomalous runs is the union of the benign baselines; the
 legitimate background traffic in each anomalous scenario is in that baseline (so it
