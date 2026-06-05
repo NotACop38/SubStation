@@ -133,7 +133,7 @@ def _str_tuple(value: object, where: str) -> tuple[str, ...]:
     return tuple(out)
 
 
-def _deep_freeze(value: object) -> object:
+def _deep_freeze(value: object, where: str, active: set[int]) -> object:
     """Recursively make a parsed params value immutable.
 
     ``MappingProxyType`` only protects the top level, so a nested mapping/list in
@@ -141,17 +141,39 @@ def _deep_freeze(value: object) -> object:
     single-source-of-truth invariant and letting the PCAP and JSON emitters
     observe different data. Freeze mappings to read-only proxies and lists to
     tuples, all the way down.
+
+    YAML aliases may create recursive containers (for example, a list containing
+    itself). Reject cycles explicitly so malicious scenario files fail with a
+    normal ``ScenarioError`` instead of exhausting Python's recursion limit.
     """
     if isinstance(value, dict):
-        return MappingProxyType({str(k): _deep_freeze(v) for k, v in value.items()})
+        value_id = id(value)
+        if value_id in active:
+            raise ScenarioError(f"{where}: cyclic YAML aliases are not supported")
+        active.add(value_id)
+        try:
+            return MappingProxyType(
+                {str(k): _deep_freeze(v, f"{where}.{k}", active) for k, v in value.items()}
+            )
+        finally:
+            active.remove(value_id)
     if isinstance(value, list):
-        return tuple(_deep_freeze(item) for item in value)
+        value_id = id(value)
+        if value_id in active:
+            raise ScenarioError(f"{where}: cyclic YAML aliases are not supported")
+        active.add(value_id)
+        try:
+            return tuple(
+                _deep_freeze(item, f"{where}[{i}]", active) for i, item in enumerate(value)
+            )
+        finally:
+            active.remove(value_id)
     return value
 
 
 def _freeze_params(params: dict[str, object]) -> Mapping[str, object]:
     """Deep-freeze a params mapping into an immutable ``Mapping``."""
-    return MappingProxyType({k: _deep_freeze(v) for k, v in params.items()})
+    return MappingProxyType({k: _deep_freeze(v, f"params.{k}", set()) for k, v in params.items()})
 
 
 def _parse_actor(raw: object, where: str) -> Actor:
