@@ -22,6 +22,7 @@ from pathlib import Path
 from substation.coverage import render_coverage_map
 from substation.detect import Hit, run_detections
 from substation.emit import EmitError, write_artifacts
+from substation.protocols.dnp3 import Dnp3Error
 from substation.protocols.modbus import ModbusError
 from substation.scenarios import Scenario, ScenarioError, load_scenario
 
@@ -95,7 +96,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             return 1
         try:
             emitted = write_artifacts(scenario, artifacts_dir)
-        except (EmitError, ModbusError) as exc:
+        except (EmitError, Dnp3Error, ModbusError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
 

@@ -192,6 +192,15 @@ _U16 = 0xFFFF
 _U8 = 0xFF
 _U32 = 0xFFFFFFFF
 
+# The DNP3 PCAP emitter intentionally emits one data-link frame per event. The
+# link-frame length field is one octet and covers CTRL + DEST + SRC + user data,
+# so synthetic response object bodies must fit within 250 bytes of user data.
+# Response user data is transport(1) + app_control(1) + function(1) + IIN(2) +
+# 2-byte range object header(7), leaving 238 bytes for point payloads.
+_DNP3_SINGLE_LINK_MAX_USER_DATA = 250
+_DNP3_RESPONSE_FIXED_USER_BYTES = 12
+_DNP3_RESPONSE_MAX_POINT_BYTES = _DNP3_SINGLE_LINK_MAX_USER_DATA - _DNP3_RESPONSE_FIXED_USER_BYTES
+
 
 class Dnp3Error(ValueError):
     """Raised when a scenario cannot be encoded as DNP3 telemetry."""
@@ -397,6 +406,14 @@ def _objects_detail(
                 f"{where}.object_count ({object_count}) must equal the range span "
                 f"range_high - range_low + 1 = {span}; the PCAP object body is derived "
                 "from the range, so an inconsistent count cannot be emitted"
+            )
+        point_size = OBJECT_TYPES[object_type][2]
+        max_span = _DNP3_RESPONSE_MAX_POINT_BYTES // point_size
+        if span > max_span:
+            raise Dnp3Error(
+                f"{where}: range span {span} point(s) for {object_type!r} exceeds "
+                f"the single-frame DNP3 PCAP limit of {max_span} point(s); split "
+                "the response into smaller ranges"
             )
         obj["object_count"] = object_count
         obj["range_low"] = range_low

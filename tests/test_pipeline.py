@@ -85,3 +85,34 @@ def test_demo_bad_scenario_returns_error(tmp_path: Path, capsys) -> None:  # typ
     rc = cli.main(["demo", "--scenario", str(bad), "--artifacts", str(tmp_path)])
     assert rc == 1
     assert "error:" in capsys.readouterr().err
+
+
+def test_demo_dnp3_oversized_range_returns_error_without_artifacts(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    bad = tmp_path / "dnp3-oversized.yaml"
+    bad.write_text(
+        """
+name: dnp3-oversized
+protocol: dnp3
+label: benign
+actors:
+  - {id: m, role: master, host: 10.0.1.10}
+  - {id: r, role: outstation, host: 10.0.1.50, port: 20000}
+exchanges:
+  - source: m
+    target: r
+    function: Read
+    params:
+      object_type: Binary Input With Status
+      range_low: 0
+      range_high: 255
+      object_count: 256
+""".lstrip(),
+        encoding="utf-8",
+    )
+    artifacts = tmp_path / "artifacts"
+    rc = cli.main(["demo", "--scenario", str(bad), "--artifacts", str(artifacts)])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "single-frame DNP3 PCAP limit" in captured.err
+    assert not (artifacts / "dnp3-oversized.jsonl").exists()
+    assert not (artifacts / "dnp3-oversized.pcap").exists()
