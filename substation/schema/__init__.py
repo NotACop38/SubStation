@@ -22,6 +22,7 @@ Supported keywords: ``type`` (incl. type arrays), ``enum``, ``const``,
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Callable, Iterator
 from importlib.resources import files
@@ -41,14 +42,24 @@ __all__ = [
 # Path to the packaged JSON Schema (also a normal file on disk for external tools).
 EVENT_SCHEMA_PATH: Path = Path(str(files(__package__).joinpath("event-log.schema.json")))
 
+
 # JSON Schema "type" -> Python predicate. ``bool`` is a subclass of ``int`` in
-# Python, so integer/number must explicitly exclude it.
+# Python, so integer/number must explicitly exclude it. JSON numbers are finite:
+# NaN and +/-Infinity are not valid JSON values and must not satisfy ``number``.
+def _is_json_number(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    return isinstance(value, float) and math.isfinite(value)
+
+
 _TYPE_CHECKS: dict[str, Callable[[Any], bool]] = {
     "object": lambda v: isinstance(v, dict),
     "array": lambda v: isinstance(v, list),
     "string": lambda v: isinstance(v, str),
     "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
-    "number": lambda v: isinstance(v, int | float) and not isinstance(v, bool),
+    "number": _is_json_number,
     "boolean": lambda v: isinstance(v, bool),
     "null": lambda v: v is None,
 }
@@ -128,6 +139,9 @@ def _validate(value: Any, schema: dict[str, Any], path: str, root: dict[str, Any
             yield f"{loc}: string does not match pattern {schema['pattern']!r}"
 
     if isinstance(value, int | float) and not isinstance(value, bool):
+        if not _is_json_number(value):
+            yield f"{loc}: non-finite number {value!r} is not valid JSON"
+            return
         if "minimum" in schema and value < schema["minimum"]:
             yield f"{loc}: {value} < minimum {schema['minimum']}"
         if "maximum" in schema and value > schema["maximum"]:
