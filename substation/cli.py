@@ -74,7 +74,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     # benign+anomalous set so one command shows quiet-on-benign AND fire-on-anomaly.
     scenario_paths: list[Path] = [args.scenario] if args.scenario is not None else _DEMO_SCENARIOS
 
-    print("substation demo — Tier-1 loop: generate -> detect -> report (pure Python)\n")
+    print("substation demo · Tier-1 loop: generate -> detect -> report (pure Python)\n")
 
     all_scenarios: list[Scenario] = []
     all_hits: list[Hit] = []

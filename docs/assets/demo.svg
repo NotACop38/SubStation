@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="827" height="658" viewBox="0 0 827 658" role="img" aria-label="Verbatim output of make demo: quiet on the benign baseline, fired M1 and M2 on the anomalous scenarios, and the ATT&amp;CK-for-ICS coverage map.">
-  <title>make demo — verbatim output</title>
+  <title>make demo · verbatim output</title>
   <defs>
     <linearGradient id="win" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#11161d"/>
@@ -12,10 +12,10 @@
   <circle cx="24" cy="21" r="6" fill="#ff5f56"/>
   <circle cx="44" cy="21" r="6" fill="#ffbd2e"/>
   <circle cx="64" cy="21" r="6" fill="#27c93f"/>
-  <text x="413" y="26" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="13" fill="#7d8893">make demo — substation</text>
+  <text x="413" y="26" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif" font-size="13" fill="#7d8893">make demo · substation</text>
   <g font-family="ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="15" fill="#c4cdd6">
     <text xml:space="preserve" x="26" y="60.0"><tspan fill="#56d364" font-weight="700">$</tspan><tspan fill="#eef3f7" font-weight="700"> make demo</tspan></text>
-    <text xml:space="preserve" x="26" y="103.0"><tspan fill="#56d4dd" font-weight="700">substation</tspan><tspan fill="#8b95a1"> demo — Tier-1 loop: generate -&gt; detect -&gt; report (pure Python)</tspan></text>
+    <text xml:space="preserve" x="26" y="103.0"><tspan fill="#56d4dd" font-weight="700">substation</tspan><tspan fill="#8b95a1"> demo · Tier-1 loop: generate -&gt; detect -&gt; report (pure Python)</tspan></text>
     <text xml:space="preserve" x="26" y="146.0"><tspan fill="#56d4dd" font-weight="700">[benign   ]</tspan><tspan fill="#c4cdd6"> benign-baseline                    18 events -&gt; </tspan><tspan fill="#56d364">quiet (no hits)</tspan></text>
     <text xml:space="preserve" x="26" y="167.5"><tspan fill="#e3b341" font-weight="700">[anomalous]</tspan><tspan fill="#c4cdd6"> anomalous-m1-unauthorized-write    10 events -&gt; </tspan><tspan fill="#ff7b72" font-weight="700">FIRED</tspan><tspan fill="#c4cdd6"> 2 hit(s) </tspan><tspan fill="#55606c">-&gt; </tspan><tspan fill="#e3b341" font-weight="700">M1</tspan></text>
     <text xml:space="preserve" x="26" y="189.0"><tspan fill="#e3b341" font-weight="700">[anomalous]</tspan><tspan fill="#c4cdd6"> anomalous-m2-illegal-function       4 events -&gt; </tspan><tspan fill="#ff7b72" font-weight="700">FIRED</tspan><tspan fill="#c4cdd6"> 2 hit(s) </tspan><tspan fill="#55606c">-&gt; </tspan><tspan fill="#e3b341" font-weight="700">M2</tspan></text>
