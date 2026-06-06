@@ -38,6 +38,8 @@ _OUTBOUND_CALLS = {"connect", "connect_ex"}
 # calls (``sock.send(...)`` / ``conn.sendall(...)``) on an accepted socket are the
 # sanctioned passive-reply path and are allowed.
 _SCAPY_BARE_FUNCS = {"send", "sendp", "sendpfast", "sr", "sr1", "srp", "srp1", "sniff"}
+_SOCKET_TRANSMIT_METHODS = {"send", "sendall", "sendto", "sendmsg", "sendfile"}
+_PASSIVE_REPLY_MODULE = _PKG_ROOT / "honeypot" / "modbus.py"
 
 # Raw-socket constants that must never be referenced.
 _FORBIDDEN_ATTRS = {"SOCK_RAW", "AF_PACKET"}
@@ -47,7 +49,11 @@ def _python_sources() -> list[Path]:
     return sorted(_PKG_ROOT.rglob("*.py"))
 
 
-def _violations(tree: ast.AST) -> list[str]:
+def _allows_passive_reply(source: Path) -> bool:
+    return source == _PASSIVE_REPLY_MODULE
+
+
+def _violations(tree: ast.AST, source: Path) -> list[str]:
     found: list[str] = []
     for node in ast.walk(tree):
         # Raw-socket constants (socket.SOCK_RAW / socket.AF_PACKET).
@@ -61,6 +67,12 @@ def _violations(tree: ast.AST) -> list[str]:
         # are allowed.
         if isinstance(func, ast.Attribute) and func.attr in _OUTBOUND_CALLS:
             found.append(f"line {node.lineno}: forbidden outbound '{func.attr}()'")
+        elif (
+            isinstance(func, ast.Attribute)
+            and func.attr in _SOCKET_TRANSMIT_METHODS
+            and not _allows_passive_reply(source)
+        ):
+            found.append(f"line {node.lineno}: forbidden socket transmit method '{func.attr}()'")
         # A bare function call: an outbound connect, or a scapy transmit/capture fn.
         elif isinstance(func, ast.Name) and (
             func.id in _OUTBOUND_CALLS or func.id in _SCAPY_BARE_FUNCS
@@ -72,7 +84,7 @@ def _violations(tree: ast.AST) -> list[str]:
 @pytest.mark.parametrize("source", _python_sources(), ids=lambda p: str(p.relative_to(_REPO_ROOT)))
 def test_no_outbound_or_raw_socket_calls(source: Path) -> None:
     tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-    violations = _violations(tree)
+    violations = _violations(tree, source)
     assert not violations, (
         f"{source.relative_to(_REPO_ROOT)} breaks the files-only / no-raw-socket-send "
         f"invariant:\n  " + "\n  ".join(violations)
@@ -93,6 +105,20 @@ def test_no_scapy_transmit_imports() -> None:
                             f"scapy.{node.module}.{alias.name}"
                         )
     assert not offenders, "scapy transmit/capture API imported:\n  " + "\n  ".join(offenders)
+
+
+def test_method_send_calls_are_forbidden_outside_passive_honeypot() -> None:
+    tree = ast.parse("def f(sock):\n    sock.sendall(b'x')\n")
+
+    violations = _violations(tree, _PKG_ROOT / "emit" / "future.py")
+
+    assert violations == ["line 2: forbidden socket transmit method 'sendall()'"]
+
+
+def test_method_send_calls_are_allowed_in_passive_honeypot() -> None:
+    tree = ast.parse("def f(sock):\n    sock.sendall(b'x')\n")
+
+    assert _violations(tree, _PKG_ROOT / "honeypot" / "modbus.py") == []
 
 
 def test_scan_actually_covers_the_package() -> None:

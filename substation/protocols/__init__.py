@@ -1,1 +1,1 @@
-"""Per-protocol encoders and field maps (placeholder)."""
+"""Per-protocol semantic models, encoders and field maps."""

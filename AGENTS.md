@@ -1,4 +1,4 @@
-# CLAUDE.md — Substation constitution
+# AGENTS.md — Substation constitution
 
 **One-liner:** A defensive detection-content pack for ICS protocols (Modbus,
 DNP3, Siemens S7) mapped to MITRE ATT&CK for ICS, shipped with a files-only
@@ -37,7 +37,7 @@ non-trivial work.
   freezing a protocol's schema.
 - scapy capability and the Sigma offline-eval mechanism: spike and record.
 
-## CI/CD is LOCAL and Claude-driven — NO cloud CI
+## CI/CD is LOCAL and Codex-driven — NO cloud CI
 
 There is **no GitHub Actions and no `.github/workflows/`**, ever. `make ci` is the
 gate; the git pre-push hook (`make hooks`) runs it before every push. (This
@@ -47,9 +47,9 @@ overrides the GitHub-Actions references in PRD §6.9 / checklist Phase 2.)
 
 - `make ci` — format-check, lint, type-check, unit tests (+ later: detection
   harness, security, coverage-build). The gate.
-- `make demo` — Tier-1 one-command demo.
-- `make verify` — Tier-2 fidelity validation.
-- `make release` — cut a local release.
+- `make demo` — Tier-1 one-command demo (stub for now).
+- `make verify` — Tier-2 fidelity validation (stub for now).
+- `make release` — cut a release (stub for now).
 - `make hooks` — install the pre-push gate. `make security` — bandit + pip-audit.
 
 ## Validation cadence
@@ -57,5 +57,5 @@ overrides the GitHub-Actions references in PRD §6.9 / checklist Phase 2.)
 Build and commit **per step**. Do **not** run `make ci` / `make verify` after every
 change — they remain defined but are invoked as **one large validation at the end**
 of a work batch, not continuously. There is no automated per-edit or per-stop CI
-(see `.claude/settings.json`: the heavy PostToolUse and Stop hooks are disabled).
+(see `.Codex/settings.json`: the heavy PostToolUse and Stop hooks are disabled).
 Still **no GitHub Actions, ever.**

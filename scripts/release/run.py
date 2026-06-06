@@ -12,7 +12,8 @@ Pipeline (PRD §6.9 / ENGINEERING_CHECKLIST "definition of launch-ready"):
 
   1. **Gate.** Re-run ``make ci`` (Tier 1) and ``make verify`` (Tier 2) — a
      release only happens over a green gate. ``--no-verify`` drops Tier 2 for
-     environments without Docker; ``--skip-gate`` skips both (CI re-runs it).
+     environments without Docker; ``--skip-gate`` skips both only when the local
+     gate just ran.
   2. **Build.** Produce the sdist + wheel into ``dist/`` (``python -m build``,
      no build isolation so it uses the pinned, already-installed backend).
   3. **Regenerate committed artifacts.** Rebuild the ATT&CK-for-ICS coverage map

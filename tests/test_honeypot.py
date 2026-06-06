@@ -100,8 +100,22 @@ def test_reserved_function_code_yields_illegal_function() -> None:
     assert reply is not None
     request, response = events
     assert request["action_class"] == "other"
-    assert request["func_name"] == "UNKNOWN_FUNCTION_0x42"
+    assert request["func_name"] == "unknown-66"
     assert response["is_exception"] is True
+    assert response["func_name"] == "unknown-66_EXCEPTION"
+    assert response["error"] == "ILLEGAL_FUNCTION"
+    _assert_schema_valid(events)
+
+
+def test_defined_but_unimplemented_function_uses_zeek_name_not_abnormal_class() -> None:
+    # Zeek defines 0x09 as PROGRAM_484. The honeypot may reject it as unsupported,
+    # but the request must not be logged as an undefined/abnormal `other` code.
+    reply, events = _run(_mbap_frame(0x09, b"\x00\x00"))
+    assert reply is not None
+    request, response = events
+    assert request["func_name"] == "PROGRAM_484"
+    assert request["action_class"] == "diagnostic"
+    assert response["func_name"] == "PROGRAM_484_EXCEPTION"
     assert response["error"] == "ILLEGAL_FUNCTION"
     _assert_schema_valid(events)
 
@@ -135,9 +149,17 @@ def test_non_modbus_frame_is_ignored() -> None:
 
 def test_honeypot_telemetry_fires_m2() -> None:
     rule = load_rule(_M2_RULE)
-    # A reserved-code probe (request `other` + ILLEGAL_FUNCTION reply) both fire M2.
-    _, events = _run(_mbap_frame(0x09, b"\x00\x00"))
+    # A genuinely undefined code fires both M2 arms: abnormal request + exception.
+    _, events = _run(_mbap_frame(0x42, b"\x00\x00"))
     assert matching_indices(rule, events) == [0, 1]
+
+
+def test_defined_unsupported_honeypot_probe_only_fires_m2_exception_arm() -> None:
+    rule = load_rule(_M2_RULE)
+    # 0x09 is defined in Zeek's table, so only the unsupported-function exception
+    # should fire M2; the request must not look like an abnormal undefined code.
+    _, events = _run(_mbap_frame(0x09, b"\x00\x00"))
+    assert matching_indices(rule, events) == [1]
 
 
 def test_honeypot_telemetry_fires_m1_for_unlisted_writer() -> None:

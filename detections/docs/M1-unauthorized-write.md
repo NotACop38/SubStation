@@ -14,13 +14,15 @@ unauthorized-command-message detection for the Modbus slice (`PRD.md` §5.1).
 
 ## Behavior
 
-A Modbus write command — write single/multiple coils or registers, mask-write, or
-read/write-multiple — reaches a PLC outside the write policy. A successful write
-can change a setpoint, force a coil, or otherwise move the physical process. The
-detection keys on the **write policy**: who may write (allow-listed HMI/EWS), to
-which **unit**, and which **registers**. A write that violates any of those
-dimensions fires — including an allow-listed source straying to an out-of-policy
-unit/register.
+A Modbus write command reaches a PLC outside the write policy. The Tier-1 simulator
+currently validates write single/multiple coils or registers; production
+ICSNPP-aligned telemetry that classifies mask-write, read/write-multiple, or
+write-file records as `action_class: write` is covered by the same rule. A
+successful write can change a setpoint, force a coil, or otherwise move the
+physical process. The detection keys on the **write policy**: who may write
+(allow-listed HMI/EWS), to which **unit**, and which **registers**. A write that
+violates any of those dimensions fires — including an allow-listed source straying
+to an out-of-policy unit/register.
 
 ## Engine choice + rationale
 

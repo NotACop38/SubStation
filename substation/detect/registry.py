@@ -14,6 +14,7 @@ corrupt the coverage map and the Detection Contract checks.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,10 +46,54 @@ _PROTOCOLS = {"modbus", "dnp3", "s7comm", "cross"}
 _DETECTION_KEYS = {"id", "title", "protocol", "engine", "tier", "status", "rule", "doc", "attack"}
 _ATTACK_KEYS = {"tactic", "tactic_id", "techniques"}
 _TECHNIQUE_KEYS = {"id", "name"}
+_TACTIC_ID_RE = re.compile(r"^TA\d{4}$")
+_TECHNIQUE_ID_RE = re.compile(r"^T\d{4}(?:\.\d{3})?$")
+_TACTIC_IDS = {
+    "TA0100",
+    "TA0101",
+    "TA0102",
+    "TA0103",
+    "TA0104",
+    "TA0105",
+    "TA0106",
+    "TA0107",
+    "TA0108",
+    "TA0109",
+    "TA0110",
+    "TA0111",
+}
 
 
 class RegistryError(ValueError):
     """Raised when the detection registry is malformed or internally inconsistent."""
+
+
+class _StrictLoader(yaml.SafeLoader):
+    """A safe YAML loader that rejects duplicate mapping keys."""
+
+
+def _construct_mapping_no_duplicates(
+    loader: _StrictLoader, node: yaml.nodes.MappingNode, deep: bool = False
+) -> dict[object, object]:
+    loader.flatten_mapping(node)
+    mapping: dict[object, object] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_StrictLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_mapping_no_duplicates,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,10 +167,27 @@ def _require_str(mapping: dict[str, object], key: str, where: str) -> str:
     return value
 
 
+def _require_tactic_id(mapping: dict[str, object], key: str, where: str) -> str:
+    value = _require_str(mapping, key, where)
+    if not _TACTIC_ID_RE.fullmatch(value) or value not in _TACTIC_IDS:
+        raise RegistryError(f"{where}.{key}: expected a current ATT&CK-for-ICS tactic ID (TAxxxx)")
+    return value
+
+
+def _require_technique_id(mapping: dict[str, object], key: str, where: str) -> str:
+    value = _require_str(mapping, key, where)
+    if not _TECHNIQUE_ID_RE.fullmatch(value):
+        raise RegistryError(f"{where}.{key}: expected an ATT&CK technique ID (Txxxx[.xxx])")
+    return value
+
+
 def _parse_technique(raw: object, where: str) -> Technique:
     data = _require_mapping(raw, where)
     _reject_unknown(data, _TECHNIQUE_KEYS, where)
-    return Technique(id=_require_str(data, "id", where), name=_require_str(data, "name", where))
+    return Technique(
+        id=_require_technique_id(data, "id", where),
+        name=_require_str(data, "name", where),
+    )
 
 
 def _parse_attack(raw: object, where: str) -> AttackMapping:
@@ -139,7 +201,7 @@ def _parse_attack(raw: object, where: str) -> AttackMapping:
     )
     return AttackMapping(
         tactic=_require_str(data, "tactic", where),
-        tactic_id=_require_str(data, "tactic_id", where),
+        tactic_id=_require_tactic_id(data, "tactic_id", where),
         techniques=techniques,
     )
 
@@ -183,7 +245,7 @@ def load_registry(path: str | Path = REGISTRY_PATH) -> list[Detection]:
     except OSError as exc:
         raise RegistryError(f"{p}: cannot read registry: {exc}") from exc
     try:
-        raw = yaml.safe_load(text)
+        raw = yaml.load(text, Loader=_StrictLoader)  # noqa: S506  # nosec B506
     except yaml.YAMLError as exc:
         raise RegistryError(f"{p}: invalid YAML: {exc}") from exc
 

@@ -37,6 +37,7 @@ __all__ = [
     "resolve_function",
     "FUNCTION_NAMES",
     "ACTION_CLASS",
+    "ZEEK_FUNCTION_NAMES",
     "DEFAULT_MODBUS_PORT",
     "RESPONSE_DELAY",
     "ILLEGAL_FUNCTION",
@@ -44,6 +45,8 @@ __all__ = [
     "EXCEPTION_CODE_BYTES",
     "is_standard_function",
     "abnormal_function_name",
+    "function_action_class",
+    "zeek_function_name",
 ]
 
 DEFAULT_MODBUS_PORT = 502
@@ -62,16 +65,56 @@ WRITE_SINGLE_REGISTER = 0x06
 WRITE_MULTIPLE_COILS = 0x0F
 WRITE_MULTIPLE_REGISTERS = 0x10
 
-# code -> Zeek ``Modbus::function_codes`` name (docs/schema.md; spike 01).
-FUNCTION_NAMES: dict[int, str] = {
+# code -> Zeek ``Modbus::function_codes`` name (docs/schema.md; spike 01; Zeek
+# v7.1.1 base/protocols/modbus/consts.zeek, re-checked 2026-06-06).
+ZEEK_FUNCTION_NAMES: dict[int, str] = {
     READ_COILS: "READ_COILS",
     READ_DISCRETE_INPUTS: "READ_DISCRETE_INPUTS",
     READ_HOLDING_REGISTERS: "READ_HOLDING_REGISTERS",
     READ_INPUT_REGISTERS: "READ_INPUT_REGISTERS",
     WRITE_SINGLE_COIL: "WRITE_SINGLE_COIL",
     WRITE_SINGLE_REGISTER: "WRITE_SINGLE_REGISTER",
+    0x07: "READ_EXCEPTION_STATUS",
+    0x08: "DIAGNOSTICS",
+    0x09: "PROGRAM_484",
+    0x0A: "POLL_484",
+    0x0B: "GET_COMM_EVENT_COUNTER",
+    0x0C: "GET_COMM_EVENT_LOG",
+    0x0D: "PROGRAM_584_984",
+    0x0E: "POLL_584_984",
     WRITE_MULTIPLE_COILS: "WRITE_MULTIPLE_COILS",
     WRITE_MULTIPLE_REGISTERS: "WRITE_MULTIPLE_REGISTERS",
+    0x11: "REPORT_SLAVE_ID",
+    0x12: "PROGRAM_884_U84",
+    0x13: "RESET_COMM_LINK_884_U84",
+    0x14: "READ_FILE_RECORD",
+    0x15: "WRITE_FILE_RECORD",
+    0x16: "MASK_WRITE_REGISTER",
+    0x17: "READ_WRITE_MULTIPLE_REGISTERS",
+    0x18: "READ_FIFO_QUEUE",
+    0x28: "PROGRAM_CONCEPT",
+    0x29: "MULTIPLE_FUNCTION_CODES",
+    0x2B: "ENCAP_INTERFACE_TRANSPORT",
+    0x5A: "PROGRAM_UNITY",
+    0x5B: "OBJECT_MESSAGING",
+    0x7D: "FIRMWARE_REPLACEMENT",
+    0x7E: "PROGRAM_584_984_2",
+    0x7F: "REPORT_LOCAL_ADDRESS",
+}
+
+# The eight function families the pure-Python simulator can faithfully encode today.
+FUNCTION_NAMES: dict[int, str] = {
+    code: ZEEK_FUNCTION_NAMES[code]
+    for code in (
+        READ_COILS,
+        READ_DISCRETE_INPUTS,
+        READ_HOLDING_REGISTERS,
+        READ_INPUT_REGISTERS,
+        WRITE_SINGLE_COIL,
+        WRITE_SINGLE_REGISTER,
+        WRITE_MULTIPLE_COILS,
+        WRITE_MULTIPLE_REGISTERS,
+    )
 }
 
 # code -> normalized action_class (docs/schema.md "action_class mapping (Modbus)").
@@ -84,6 +127,30 @@ ACTION_CLASS: dict[int, str] = {
     WRITE_SINGLE_REGISTER: "write",
     WRITE_MULTIPLE_COILS: "write",
     WRITE_MULTIPLE_REGISTERS: "write",
+    0x07: "diagnostic",
+    0x08: "diagnostic",
+    0x09: "diagnostic",
+    0x0A: "diagnostic",
+    0x0B: "diagnostic",
+    0x0C: "diagnostic",
+    0x0D: "diagnostic",
+    0x0E: "diagnostic",
+    0x11: "diagnostic",
+    0x12: "diagnostic",
+    0x13: "diagnostic",
+    0x14: "read",
+    0x15: "write",
+    0x16: "write",
+    0x17: "write",
+    0x18: "read",
+    0x28: "diagnostic",
+    0x29: "diagnostic",
+    0x2B: "diagnostic",
+    0x5A: "diagnostic",
+    0x5B: "diagnostic",
+    0x7D: "diagnostic",
+    0x7E: "diagnostic",
+    0x7F: "diagnostic",
 }
 
 # The FULL set of function codes base Zeek's ``Modbus::function_codes`` table NAMES
@@ -94,42 +161,7 @@ ACTION_CLASS: dict[int, str] = {
 # here but not in FUNCTION_NAMES (e.g. 0x09 PROGRAM_484, 0x08 DIAGNOSTICS) is a real
 # legacy/diagnostic function we cannot faithfully emit — that raises, rather than
 # being mis-encoded as an undefined probe.
-_ZEEK_DEFINED_FUNCTION_CODES: frozenset[int] = frozenset(
-    {
-        0x01,
-        0x02,
-        0x03,
-        0x04,
-        0x05,
-        0x06,
-        0x07,
-        0x08,
-        0x09,
-        0x0A,
-        0x0B,
-        0x0C,
-        0x0D,
-        0x0E,
-        0x0F,
-        0x10,
-        0x11,
-        0x12,
-        0x13,
-        0x14,
-        0x15,
-        0x16,
-        0x17,
-        0x18,
-        0x28,
-        0x29,
-        0x2B,
-        0x5A,
-        0x5B,
-        0x7D,
-        0x7E,
-        0x7F,
-    }
-)
+_ZEEK_DEFINED_FUNCTION_CODES: frozenset[int] = frozenset(ZEEK_FUNCTION_NAMES)
 
 # Quantity limits from the Modbus spec; reject impossible scenarios up front so an
 # author sees a clear error instead of a malformed PDU.
@@ -227,6 +259,16 @@ def abnormal_function_name(code: int) -> str:
     ``unknown-N``; the emitter mirrors that spelling for fidelity.
     """
     return f"unknown-{code}"
+
+
+def zeek_function_name(code: int) -> str:
+    """Zeek-rendered function name, including ``unknown-N`` for undefined codes."""
+    return ZEEK_FUNCTION_NAMES.get(code, abnormal_function_name(code))
+
+
+def function_action_class(code: int) -> str:
+    """Normalized action class for a Modbus function code."""
+    return ACTION_CLASS.get(code, "other")
 
 
 def resolve_function(function: str) -> int:
