@@ -119,9 +119,9 @@ local Docker gate `make verify`.
 - **Suricata.** The repo ships **no Suricata rules** (`detections/suricata/` is
   empty; Suricata is optional per PRD §6.5). The Tier-2 runner reports "nothing to
   execute" rather than inventing a rule.
-- **`Jinja2` is pinned but unused.** The coverage builder hand-rolls its
-  markdown/JSON, so `Jinja2` is currently dead weight (left pinned to respect the
-  locked Phase-0 dependency list; a candidate for removal to shrink the install).
+- **Python dependency surface.** The headline path is intentionally small:
+  scapy, pySigma and PyYAML at runtime. Template rendering was not needed for the
+  coverage builder, so no template engine is pinned in the runtime set.
 - **Environment constraints (not product gaps).** Docker Hub enforces
   unauthenticated pull-rate limits, and the in-container TLS path to GitHub is
   proxy-intercepted (so `zkg` cannot clone inside the container). The verify runner
@@ -131,7 +131,7 @@ local Docker gate `make verify`.
 ## Reproducing the validation
 
 ```sh
-make dev        # editable install + pinned dev tooling (pure-Python)
+make dev        # editable install + pinned dev tooling (pure-Python, Python 3.11+)
 make ci         # format, lint, strict mypy, tests, schema, coverage, security
 make verify     # Tier-2: real Zeek/ICSNPP fidelity + Zeek detections (needs Docker)
 make demo       # the headline: quiet-on-benign + real hits + coverage map

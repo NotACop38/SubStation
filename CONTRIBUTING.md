@@ -32,7 +32,7 @@ make demo       # Tier-1 one-command demo (generate -> detect -> report)
 
 Canonical targets: `make ci` (the gate), `make coverage-build` (regenerate the
 coverage map + Navigator layer from the registry), `make security` (bandit +
-pip-audit), `make verify` (Tier-2 fidelity, stub today).
+pip-audit), `make verify` (Tier-2 fidelity and Zeek/Suricata validation; Docker).
 
 ## What you can contribute
 

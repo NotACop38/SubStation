@@ -37,9 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from substation.protocols.modbus import (
-    ACTION_CLASS,
     DEFAULT_MODBUS_PORT,
-    FUNCTION_NAMES,
     READ_COILS,
     READ_DISCRETE_INPUTS,
     READ_HOLDING_REGISTERS,
@@ -50,6 +48,8 @@ from substation.protocols.modbus import (
     WRITE_SINGLE_REGISTER,
     ModbusEvent,
     event_to_dict,
+    function_action_class,
+    zeek_function_name,
 )
 from substation.schema import load_event_schema, validate_event
 
@@ -198,8 +198,8 @@ def _parse_frame(raw: bytes) -> _Parsed | None:
 
 
 def _func_name(func_code: int) -> str:
-    """Decoded function name, with a synthetic label for reserved/undefined codes."""
-    return FUNCTION_NAMES.get(func_code, f"UNKNOWN_FUNCTION_{func_code:#04x}")
+    """Decoded Zeek function name, including ``unknown-N`` for undefined codes."""
+    return zeek_function_name(func_code)
 
 
 def _request_event(
@@ -223,7 +223,7 @@ def _request_event(
         is_orig=True,
         func_code=parsed.func_code,
         func_name=_func_name(parsed.func_code),
-        action_class=ACTION_CLASS.get(parsed.func_code, "other"),
+        action_class=function_action_class(parsed.func_code),
         unit=parsed.unit,
         tid=parsed.tid,
         address=address,
@@ -245,7 +245,7 @@ def _response_event(
     exception_code: int | None = None,
 ) -> dict[str, Any]:
     """Build the schema event for the honeypot's reply (normal or exception)."""
-    action_class = ACTION_CLASS.get(parsed.func_code, "other")
+    action_class = function_action_class(parsed.func_code)
     if exception_code is not None:
         name = _EXCEPTION_NAMES[exception_code]
         event = ModbusEvent(

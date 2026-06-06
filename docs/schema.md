@@ -160,12 +160,12 @@ to special-case every code:
 
 | `action_class`   | Modbus functions |
 | ---------------- | ---------------- |
-| `read`           | READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS |
+| `read`           | READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS, READ_FILE_RECORD, READ_FIFO_QUEUE |
 | `write`          | WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, MASK_WRITE_REGISTER, READ_WRITE_MULTIPLE_REGISTERS, WRITE_FILE_RECORD |
-| `diagnostic`     | DIAGNOSTICS (`0x08`), READ_EXCEPTION_STATUS, REPORT_SERVER_ID, READ_DEVICE_IDENTIFICATION |
+| `diagnostic`     | DIAGNOSTICS (`0x08`), READ_EXCEPTION_STATUS, GET_COMM_EVENT_COUNTER, GET_COMM_EVENT_LOG, REPORT_SLAVE_ID, ENCAP_INTERFACE_TRANSPORT / read-device-identification, plus legacy program/poll/report function codes Zeek defines but the simulator does not encode |
 | `control`        | (none for Modbus; used by DNP3/S7 run-state controls.) |
 | `scan_indicator` | not intrinsic to a single code — set by the scenario/emitter to mark sweep/enumeration telemetry for M3. |
-| `other`          | anything not classified above, incl. reserved/undefined codes (still surfaced for M2). |
+| `other`          | codes absent from Zeek's Modbus function table (`unknown-N`), including reserved/undefined codes surfaced for M2. |
 
 > Sub-VERIFY at extension time: confirm exact `Modbus::function_codes` spellings
 > against the **pinned** Zeek `base/protocols/modbus/consts.zeek` before any new

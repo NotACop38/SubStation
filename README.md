@@ -43,19 +43,20 @@ before it ever reaches a live environment.
 |---|---|
 | 🛡️ **Defensive detection pack** | Modbus · DNP3 · Siemens S7, every rule mapped to a **verified** ATT&CK-for-ICS technique |
 | 📡 **Files-only simulator** | one scenario model → **dual emit** (PCAP **and** JSON), so telemetry can't drift from the rules |
-| 🧪 **Proven, not promised** | every detection ships with a fire-on-anomaly **and** a quiet-on-benign test (the Detection Contract) |
+| 🧪 **Proven, not promised** | every detection ships with fire-on-anomaly and quiet-on-benign scenarios; the catalogue states which engine/tier validates each rule |
 | ⚡ **One command, < 5 min** | pure-Python headline path: no Zeek, no Suricata, no Docker, no hardware |
 
 ## Quick start
 
 The headline path is **Python-only**: a one-line `pip install` of pure-Python
-wheels (scapy, pySigma, PyYAML), with **no Zeek, no Suricata, no Docker, no
-hardware, no network**. (Tier 2 below adds Docker for full-fidelity validation.)
+wheels (scapy, pySigma, PyYAML): **no Zeek, no Suricata, no Docker, no hardware,
+and no live OT network traffic**. First install may download wheels; the simulator
+itself only writes files. (Tier 2 below adds Docker for full-fidelity validation.)
 
 ```sh
 git clone https://github.com/notacop38/substation.git
 cd substation
-make dev      # editable install of the pinned, pure-Python deps + dev tooling
+make dev      # editable install of the pinned, pure-Python deps + dev tooling (Python 3.11+)
 make demo     # generate → detect → report (Tier 1, pure Python)
 ```
 
@@ -285,11 +286,11 @@ make demo-cast   # interactive: asciinema cast -> animated SVG (needs a TTY)
 
 Substation reached its **v0.1.0** release across all five build phases
 (`Modbus → DNP3 → S7 → cross-protocol + polish`). Every Tier-1 detection is validated
-fire-**and**-quiet, and the Modbus/DNP3 Zeek rails plus X1 are validated in real Zeek
-by `make verify`; the **S7 Zeek rail (S3) and X1's S7 path** are contract-complete, but
-their real-engine fire/quiet is gated on the compiled `icsnpp-s7comm` plugin, an honest
-remaining gap tracked in [`docs/launch-readiness.md`](docs/launch-readiness.md). The
-source of truth lives in:
+fire-**and**-quiet, and the Tier-2 runner validates the Modbus/DNP3 Zeek rails plus X1
+when Docker is available. The **S7 Zeek rail (S3) and X1's S7 path** are
+contract-complete, but their real-engine fire/quiet is gated on the compiled
+`icsnpp-s7comm` plugin, an honest remaining gap tracked in
+[`docs/launch-readiness.md`](docs/launch-readiness.md). The source of truth lives in:
 
 - [`PRD.md`](PRD.md): product requirements and locked decisions.
 - [`ENGINEERING_CHECKLIST.md`](ENGINEERING_CHECKLIST.md): phased build plan.
