@@ -20,13 +20,22 @@ gate). Numeric function codes are Modbus Application Protocol spec v1.1b3 (PRD ย
 
 from __future__ import annotations
 
-import hashlib
-import ipaddress
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from substation.protocols._common import (
+    EPHEMERAL_BASE as _EPHEMERAL_BASE,
+)
+from substation.protocols._common import (
+    ipv4_or_raise as _ipv4_or_raise,
+)
+from substation.protocols._common import (
+    normalize_function as _normalize_function,
+)
+from substation.protocols._common import (
+    zeek_uid as _zeek_uid,
+)
 from substation.scenarios import Actor, Protocol, Scenario
 
 __all__ = [
@@ -52,8 +61,6 @@ __all__ = [
 DEFAULT_MODBUS_PORT = 502
 # Synthetic outstation turnaround between a request and its response (seconds).
 RESPONSE_DELAY = 0.05
-# IANA dynamic/ephemeral port range start; client ports are assigned from here.
-_EPHEMERAL_BASE = 49152
 
 # Modbus function codes (Modbus Application Protocol Specification v1.1b3, PRD ยง9).
 READ_COILS = 0x01
@@ -234,12 +241,6 @@ class ModbusEvent:
 
 
 # --- function-name resolution ------------------------------------------------
-
-
-def _normalize_function(name: str) -> str:
-    """Collapse a function label to a comparison token (case/separator-insensitive)."""
-    return re.sub(r"[^a-z0-9]", "", name.lower())
-
 
 _FUNCTION_BY_TOKEN: dict[str, int] = {
     _normalize_function(label): code for code, label in FUNCTION_NAMES.items()
@@ -467,31 +468,11 @@ def _abnormal_payload(params: Mapping[str, object], where: str) -> _Payload:
     return _Payload(address, quantity, (), ())
 
 
-# --- connection bookkeeping --------------------------------------------------
-
-_B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-
-def _zeek_uid(key: str) -> str:
-    """Deterministic Zeek-style connection uid (``C`` + 17 base62 chars)."""
-    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=13).digest()
-    n = int.from_bytes(digest, "big")
-    chars: list[str] = []
-    for _ in range(17):
-        n, rem = divmod(n, 62)
-        chars.append(_B62[rem])
-    return "C" + "".join(chars)
+# --- connection bookkeeping (shared helpers: substation.protocols._common) ----
 
 
 def _ipv4(host: str, actor_id: str) -> str:
-    try:
-        ipaddress.IPv4Address(host)
-    except ipaddress.AddressValueError:
-        raise ModbusError(
-            f"actor {actor_id!r} host {host!r} is not an IPv4 address "
-            "(Modbus/TCP PCAP emission requires IPv4)"
-        ) from None
-    return host
+    return _ipv4_or_raise(host, actor_id, "Modbus/TCP", ModbusError)
 
 
 @dataclass(slots=True)

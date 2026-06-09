@@ -20,6 +20,8 @@ from pathlib import Path
 
 import yaml
 
+from substation._yaml import strict_load
+
 __all__ = [
     "RegistryError",
     "Technique",
@@ -66,34 +68,6 @@ _TACTIC_IDS = {
 
 class RegistryError(ValueError):
     """Raised when the detection registry is malformed or internally inconsistent."""
-
-
-class _StrictLoader(yaml.SafeLoader):
-    """A safe YAML loader that rejects duplicate mapping keys."""
-
-
-def _construct_mapping_no_duplicates(
-    loader: _StrictLoader, node: yaml.nodes.MappingNode, deep: bool = False
-) -> dict[object, object]:
-    loader.flatten_mapping(node)
-    mapping: dict[object, object] = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        if key in mapping:
-            raise yaml.constructor.ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"found duplicate key {key!r}",
-                key_node.start_mark,
-            )
-        mapping[key] = loader.construct_object(value_node, deep=deep)
-    return mapping
-
-
-_StrictLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    _construct_mapping_no_duplicates,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,7 +219,7 @@ def load_registry(path: str | Path = REGISTRY_PATH) -> list[Detection]:
     except OSError as exc:
         raise RegistryError(f"{p}: cannot read registry: {exc}") from exc
     try:
-        raw = yaml.load(text, Loader=_StrictLoader)  # noqa: S506  # nosec B506
+        raw = strict_load(text)
     except yaml.YAMLError as exc:
         raise RegistryError(f"{p}: invalid YAML: {exc}") from exc
 

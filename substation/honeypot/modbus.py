@@ -26,7 +26,6 @@ logs cannot drift from the contract the detections bind to (``docs/schema.md``).
 
 from __future__ import annotations
 
-import hashlib
 import json
 import socket
 import struct
@@ -36,6 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from substation.protocols._common import zeek_uid as _zeek_uid
 from substation.protocols.modbus import (
     DEFAULT_MODBUS_PORT,
     READ_COILS,
@@ -163,18 +163,6 @@ class _Parsed:
     unit: int
     func_code: int
     data: bytes
-
-
-def _zeek_uid(key: str) -> str:
-    """Deterministic Zeek-style connection uid (``C`` + 17 base62 chars)."""
-    b62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=13).digest()
-    n = int.from_bytes(digest, "big")
-    chars: list[str] = []
-    for _ in range(17):
-        n, rem = divmod(n, 62)
-        chars.append(b62[rem])
-    return "C" + "".join(chars)
 
 
 def _parse_frame(raw: bytes) -> _Parsed | None:

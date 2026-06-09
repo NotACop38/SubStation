@@ -20,6 +20,8 @@ from types import MappingProxyType
 
 import yaml
 
+from substation._yaml import strict_load
+
 from .model import (
     Actor,
     ActorRole,
@@ -55,40 +57,6 @@ _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 class ScenarioError(ValueError):
     """Raised when a scenario file is malformed or internally inconsistent."""
-
-
-class _StrictLoader(yaml.SafeLoader):
-    """A safe YAML loader that rejects duplicate mapping keys.
-
-    PyYAML's default safe loader silently keeps the *last* value when a key is
-    repeated, so a hand-authored scenario with two ``label:`` (or ``exercises:``)
-    blocks could quietly change the Detection Contract. The strict loader makes
-    that a parse error instead.
-    """
-
-
-def _construct_mapping_no_duplicates(
-    loader: _StrictLoader, node: yaml.nodes.MappingNode, deep: bool = False
-) -> dict[object, object]:
-    loader.flatten_mapping(node)
-    mapping: dict[object, object] = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        if key in mapping:
-            raise yaml.constructor.ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"found duplicate key {key!r}",
-                key_node.start_mark,
-            )
-        mapping[key] = loader.construct_object(value_node, deep=deep)
-    return mapping
-
-
-_StrictLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    _construct_mapping_no_duplicates,
-)
 
 
 def _require_mapping(value: object, where: str) -> dict[str, object]:
@@ -321,11 +289,9 @@ def load_scenario(path: str | Path) -> Scenario:
     except OSError as exc:
         raise ScenarioError(f"{p}: cannot read scenario file: {exc}") from exc
     try:
-        # _StrictLoader is a SafeLoader subclass (no arbitrary object construction)
-        # that additionally rejects duplicate mapping keys; this is as safe as
-        # yaml.safe_load. noqa/nosec silence the ruff/bandit yaml.load heuristics,
-        # which only whitelist the loader by name.
-        raw = yaml.load(text, Loader=_StrictLoader)  # noqa: S506  # nosec B506
+        # strict_load is yaml.safe_load plus duplicate-mapping-key rejection
+        # (a repeated `label:`/`exercises:` block would otherwise silently win).
+        raw = strict_load(text)
     except yaml.YAMLError as exc:
         raise ScenarioError(f"{p}: invalid YAML: {exc}") from exc
     if raw is None:

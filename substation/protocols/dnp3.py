@@ -19,13 +19,22 @@ taken from the verified source, never invented from memory (CLAUDE.md VERIFY gat
 
 from __future__ import annotations
 
-import hashlib
-import ipaddress
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from substation.protocols._common import (
+    EPHEMERAL_BASE as _EPHEMERAL_BASE,
+)
+from substation.protocols._common import (
+    ipv4_or_raise as _ipv4_or_raise,
+)
+from substation.protocols._common import (
+    normalize_function as _normalize_function,
+)
+from substation.protocols._common import (
+    zeek_uid as _zeek_uid,
+)
 from substation.scenarios import Actor, ActorRole, Protocol, Scenario
 
 __all__ = [
@@ -45,7 +54,6 @@ __all__ = [
 DEFAULT_DNP3_PORT = 20000  # DNP3/TCP well-known port (Zeek base/protocols/dnp3).
 # Synthetic outstation turnaround between a request and its response (seconds).
 RESPONSE_DELAY = 0.05
-_EPHEMERAL_BASE = 49152  # IANA dynamic/ephemeral client-port range start.
 
 # DNP3 application function codes (Zeek DNP3::function_codes, consts.zeek — spike 04).
 CONFIRM = 0x00
@@ -244,12 +252,6 @@ class Dnp3Event:
 
 # --- function-name resolution (mirrors modbus.resolve_function) ---------------
 
-
-def _normalize_function(name: str) -> str:
-    """Collapse a function label to a comparison token (case/separator-insensitive)."""
-    return re.sub(r"[^a-z0-9]", "", name.lower())
-
-
 _FUNCTION_BY_TOKEN: dict[str, int] = {
     _normalize_function(label): code for code, label in FUNCTION_NAMES.items()
 }
@@ -421,31 +423,11 @@ def _objects_detail(
     return obj
 
 
-# --- connection bookkeeping (mirrors modbus) ----------------------------------
-
-_B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-
-def _zeek_uid(key: str) -> str:
-    """Deterministic Zeek-style connection uid (``C`` + 17 base62 chars)."""
-    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=13).digest()
-    n = int.from_bytes(digest, "big")
-    chars: list[str] = []
-    for _ in range(17):
-        n, rem = divmod(n, 62)
-        chars.append(_B62[rem])
-    return "C" + "".join(chars)
+# --- connection bookkeeping (shared helpers: substation.protocols._common) ----
 
 
 def _ipv4(host: str, actor_id: str) -> str:
-    try:
-        ipaddress.IPv4Address(host)
-    except ipaddress.AddressValueError:
-        raise Dnp3Error(
-            f"actor {actor_id!r} host {host!r} is not an IPv4 address "
-            "(DNP3/TCP PCAP emission requires IPv4)"
-        ) from None
-    return host
+    return _ipv4_or_raise(host, actor_id, "DNP3/TCP", Dnp3Error)
 
 
 @dataclass(slots=True)
