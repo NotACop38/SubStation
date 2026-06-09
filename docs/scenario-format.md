@@ -17,7 +17,7 @@ document is the reference for the fields and validation rules.
 
 | Key           | Required | Type             | Notes                                                        |
 |---------------|----------|------------------|--------------------------------------------------------------|
-| `name`        | yes      | string           | Filesystem-safe basename (`[A-Za-z0-9._-]`, no path separators); names the generated artifacts. |
+| `name`        | yes      | string           | Filesystem-safe basename (`[A-Za-z0-9._-]`, no path separators); names the generated artifacts. Convention: prefix with the protocol (`modbus-`, `dnp3-`, `s7-`) so artifacts from different protocols cannot collide in a shared output directory. |
 | `description` | no       | string           | Free-form prose.                                             |
 | `protocol`    | yes      | enum             | `modbus` \| `dnp3` \| `s7comm` (closed v1 set, `PRD.md` §5). |
 | `label`       | yes      | enum             | `benign` \| `anomalous` — ground-truth intent.               |

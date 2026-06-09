@@ -77,9 +77,9 @@ so one command shows both halves:
 $ make demo
 substation demo · Tier-1 loop: generate -> detect -> report (pure Python)
 
-[benign   ] benign-baseline                    18 events -> quiet (no hits)
-[anomalous] anomalous-m1-unauthorized-write    10 events -> FIRED 2 hit(s) -> M1
-[anomalous] anomalous-m2-illegal-function       4 events -> FIRED 2 hit(s) -> M2
+[benign   ] modbus-benign-baseline                 18 events -> quiet (no hits)
+[anomalous] modbus-anomalous-m1-unauthorized-write 10 events -> FIRED 2 hit(s) -> M1
+[anomalous] modbus-anomalous-m2-illegal-function    4 events -> FIRED 2 hit(s) -> M2
 
 ATT&CK-for-ICS coverage map
 ============================================================

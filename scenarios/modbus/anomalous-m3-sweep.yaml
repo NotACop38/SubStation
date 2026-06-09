@@ -14,7 +14,7 @@
 #     the breadth of codes/units from one source, not any illegal code).
 # -----------------------------------------------------------------------------
 
-name: anomalous-m3-sweep
+name: modbus-anomalous-m3-sweep
 description: >-
   A single scanning host (10.0.0.66) walks several Modbus function codes across
   several unit ids on the PLC in a short window — high function/unit diversity at

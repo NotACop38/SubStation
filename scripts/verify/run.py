@@ -47,10 +47,7 @@ from substation.scenarios import Scenario, load_scenario  # noqa: E402
 
 # --- configuration -----------------------------------------------------------
 
-ZEEK_IMAGE = (
-    "zeek/zeek:8.2"
-    "@sha256:32b90c30cb87d66748c3a6776ad2c0f5502aae7c12da9766cfdd426453c58838"
-)
+ZEEK_IMAGE = "zeek/zeek:8.2@sha256:32b90c30cb87d66748c3a6776ad2c0f5502aae7c12da9766cfdd426453c58838"
 _DET_ZEEK = _REPO_ROOT / "detections" / "zeek"
 _DET_SURICATA = _REPO_ROOT / "detections" / "suricata"
 _SCENARIOS = _REPO_ROOT / "scenarios"
@@ -63,8 +60,14 @@ _CACHE = _REPO_ROOT / ".verify-cache"
 _ICSNPP = {
     # The hex strings are upstream git COMMIT PINS (not secrets) — allowlisted for
     # the secret scanner's high-entropy detector.
-    "modbus": ("https://github.com/cisagov/icsnpp-modbus", "64559be1640dd91b888aed993531a06156deaed0"),  # pragma: allowlist secret
-    "dnp3": ("https://github.com/cisagov/icsnpp-dnp3", "6e997bfc9445ff6b6845beaa1e4beab4ecec458e"),  # pragma: allowlist secret
+    "modbus": (
+        "https://github.com/cisagov/icsnpp-modbus",
+        "64559be1640dd91b888aed993531a06156deaed0",
+    ),  # pragma: allowlist secret
+    "dnp3": (
+        "https://github.com/cisagov/icsnpp-dnp3",
+        "6e997bfc9445ff6b6845beaa1e4beab4ecec458e",
+    ),  # pragma: allowlist secret
 }
 
 # Per Tier-2 Zeek detection: the Notice::Type token it raises, and whether it needs
@@ -110,9 +113,7 @@ def _docker_ok() -> bool:
 
 
 def _image_present() -> bool:
-    out = subprocess.run(
-        ["docker", "image", "inspect", ZEEK_IMAGE], capture_output=True
-    )
+    out = subprocess.run(["docker", "image", "inspect", ZEEK_IMAGE], capture_output=True)
     if out.returncode == 0:
         return True
     print(f"verify: pulling {ZEEK_IMAGE} ...")
@@ -127,11 +128,17 @@ def _at_commit(dest: Path, commit: str) -> bool:
 
 
 def _checkout(dest: Path, commit: str) -> bool:
-    if subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode == 0:
+    if (
+        subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode
+        == 0
+    ):
         return True
     # The pinned commit may not be in a shallow/older cache — fetch it, then retry.
     subprocess.run(["git", "-C", str(dest), "fetch", "--all", "--tags"], capture_output=True)
-    return subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode == 0
+    return (
+        subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode
+        == 0
+    )
 
 
 def _discard_cached_clone(dest: Path) -> bool:
@@ -178,9 +185,13 @@ def run_zeek(pcap: Path, loads: list[str], mounts: list[tuple[Path, str]]) -> Pa
     """Run ``zeek -r pcap <loads>`` in the container; return a host dir of logs."""
     outdir = Path(tempfile.mkdtemp(prefix="zeeklogs-"))
     cmd = [
-        "docker", "run", "--rm",
-        "-v", f"{pcap.parent}:/pcaps:ro",
-        "-v", f"{outdir}:/out",
+        "docker",
+        "run",
+        "--rm",
+        "-v",
+        f"{pcap.parent}:/pcaps:ro",
+        "-v",
+        f"{outdir}:/out",
     ]
     for host, container in mounts:
         cmd += ["-v", f"{host}:{container}:ro"]
@@ -264,7 +275,9 @@ def fidelity_check(proto: str, results: Results) -> None:
         # Only Modbus/DNP3 have vendored ICSNPP *script* packages; S7comm fidelity
         # would need the compiled icsnpp-s7comm plugin AND a fidelity mapping that is
         # not yet wired, so skip explicitly rather than KeyError on _ICSNPP[proto].
-        results.skip(f"fidelity[{proto}]: no vendored ICSNPP scripts / fidelity mapping (not wired)")
+        results.skip(
+            f"fidelity[{proto}]: no vendored ICSNPP scripts / fidelity mapping (not wired)"
+        )
         return
     scripts = ensure_icsnpp(proto)
     if scripts is None:
@@ -352,7 +365,7 @@ def _x1_baseline_redef(outdir: Path) -> Path:
             funcs.add((src, dst, token))
 
     lines = ["redef CrossProtoBaseline::known_talkers += {"]
-    lines += [f'\t{t},' for t in sorted(talkers)]
+    lines += [f"\t{t}," for t in sorted(talkers)]
     lines.append("};")
     lines.append("redef CrossProtoBaseline::known_pairs += {")
     lines += [f"\t[{s}, {d}]," for s, d in sorted(pairs)]
@@ -445,9 +458,17 @@ def _s7_plugin_available() -> bool:
     detect it honestly rather than assume.
     """
     probe = subprocess.run(
-        ["docker", "run", "--rm", ZEEK_IMAGE, "bash", "-c",
-         "zeek -N 2>/dev/null | grep -qi s7comm && echo yes || echo no"],
-        capture_output=True, text=True,
+        [
+            "docker",
+            "run",
+            "--rm",
+            ZEEK_IMAGE,
+            "bash",
+            "-c",
+            "zeek -N 2>/dev/null | grep -qi s7comm && echo yes || echo no",
+        ],
+        capture_output=True,
+        text=True,
     )
     return probe.stdout.strip() == "yes"
 

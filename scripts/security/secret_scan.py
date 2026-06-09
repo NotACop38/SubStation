@@ -54,9 +54,7 @@ def _git_tracked_files() -> list[Path]:
 def _docker_usable() -> bool:
     if shutil.which("docker") is None:
         return False
-    return subprocess.run(
-        ["docker", "info"], capture_output=True, text=True
-    ).returncode == 0
+    return subprocess.run(["docker", "info"], capture_output=True, text=True).returncode == 0
 
 
 def _run_gitleaks_native() -> int | None:
@@ -83,9 +81,17 @@ def _run_gitleaks_docker() -> int | None:
     print("secret_scan: backend = gitleaks (Docker)")
     return subprocess.run(
         [
-            "docker", "run", "--rm", "-v", f"{_REPO_ROOT}:/repo:ro",
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{_REPO_ROOT}:/repo:ro",
             GITLEAKS_DOCKER_IMAGE,
-            "detect", "--source", "/repo", "--no-banner", "--redact",
+            "detect",
+            "--source",
+            "/repo",
+            "--no-banner",
+            "--redact",
         ],
     ).returncode
 

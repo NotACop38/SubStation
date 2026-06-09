@@ -22,7 +22,7 @@ def test_emit_writes_modbus_artifacts(tmp_path: Path) -> None:
     assert result.pcap.read_bytes()  # a real Modbus/TCP capture, not an empty file
     assert result.event_count > 0
     assert len(result.jsonl.read_text(encoding="utf-8").splitlines()) == result.event_count
-    assert result.pcap.name == "benign-poll.pcap"
+    assert result.pcap.name == "modbus-benign-poll.pcap"
 
 
 def test_detect_stays_quiet_on_benign(tmp_path: Path) -> None:
@@ -64,8 +64,8 @@ def test_demo_single_scenario_runs_end_to_end(tmp_path: Path, capsys) -> None:  
     out = capsys.readouterr().out
     assert "generate -> detect -> report" in out
     assert "ATT&CK-for-ICS coverage map" in out
-    assert "benign-poll" in out
-    assert (tmp_path / "benign-poll.jsonl").exists()
+    assert "modbus-benign-poll" in out
+    assert (tmp_path / "modbus-benign-poll.jsonl").exists()
 
 
 def test_demo_default_set_shows_quiet_and_fire(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]

@@ -19,6 +19,7 @@ mechanism (spike 03 "Scope / follow-ups").
 
 from __future__ import annotations
 
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -46,9 +47,21 @@ def parse_rule(rule_yaml: str) -> Any:
     return rules[0]
 
 
+@cache
+def _load_rule_cached(resolved: str) -> Any:
+    return parse_rule(Path(resolved).read_text(encoding="utf-8"))
+
+
 def load_rule(path: str | Path) -> Any:
-    """Load and parse a Sigma rule file into a single pySigma ``SigmaRule``."""
-    return parse_rule(Path(path).read_text(encoding="utf-8"))
+    """Load and parse a Sigma rule file into a single pySigma ``SigmaRule``.
+
+    Parsed rules are cached per resolved path: ``run_detections`` evaluates the
+    same shipped rule files over every scenario, and re-reading + re-parsing the
+    YAML per scenario is pure waste. The returned rule is treated as read-only
+    by the evaluator (each ``matching_indices`` call builds fresh ASTs via
+    ``parsed_condition[...].parse()``), so sharing one instance is safe.
+    """
+    return _load_rule_cached(str(Path(path).resolve()))
 
 
 def _lookup(event: dict[str, Any], dotted: str) -> Any:

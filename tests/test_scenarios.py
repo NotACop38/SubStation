@@ -20,7 +20,7 @@ _EXAMPLE = _REPO_ROOT / "scenarios" / "modbus" / "benign-poll.yaml"
 
 def test_bundled_example_loads_and_validates() -> None:
     scenario = load_scenario(_EXAMPLE)
-    assert scenario.name == "benign-poll"
+    assert scenario.name == "modbus-benign-poll"
     assert scenario.protocol is Protocol.MODBUS
     assert scenario.label is Label.BENIGN
     assert len(scenario.actors) == 3
@@ -44,7 +44,27 @@ def test_actor_lookup_and_roles() -> None:
 
 def test_load_scenarios_finds_bundled_modbus() -> None:
     scenarios = load_scenarios(_REPO_ROOT / "scenarios" / "modbus")
-    assert any(s.name == "benign-poll" for s in scenarios)
+    assert any(s.name == "modbus-benign-poll" for s in scenarios)
+
+
+def test_bundled_scenario_names_are_protocol_prefixed_and_unique() -> None:
+    """Artifact filenames derive from scenario names (artifacts/<name>.pcap).
+
+    Enforce the documented convention (docs/scenario-format.md): every bundled
+    scenario name is prefixed with its protocol directory (modbus-/dnp3-/s7-),
+    so artifacts emitted from different protocols can never collide in a shared
+    output directory — and names stay unique repo-wide.
+    """
+    base = _REPO_ROOT / "scenarios"
+    seen: dict[str, Path] = {}
+    for proto_dir in sorted(p for p in base.iterdir() if p.is_dir()):
+        for scenario in load_scenarios(proto_dir):
+            prefix = f"{proto_dir.name}-"
+            assert scenario.name.startswith(prefix), (
+                f"{proto_dir.name} scenario {scenario.name!r} must be prefixed {prefix!r}"
+            )
+            assert scenario.name not in seen, f"duplicate scenario name {scenario.name!r}"
+            seen[scenario.name] = proto_dir
 
 
 def _write(tmp_path: Path, text: str) -> Path:

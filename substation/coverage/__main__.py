@@ -5,7 +5,7 @@ Usage::
     python -m substation.coverage [--check] [--out DIR]
 
 Default: render every coverage artifact from ``detections/registry.yaml`` into the
-repo's ``coverage/`` directory (``coverage.md``, ``coverage.json``,
+committed snapshot directory ``docs/coverage/`` (``coverage.md``, ``coverage.json``,
 ``navigator-layer.json``). These are GENERATED — never hand-edit them.
 
 ``--check``: render in memory and compare against the committed files; exit 1 if
@@ -25,7 +25,9 @@ from pathlib import Path
 from substation.coverage.builder import render_all
 from substation.detect.registry import REPO_ROOT, RegistryError
 
-_DEFAULT_OUT = REPO_ROOT / "coverage"
+# The committed, published snapshot is the single output home; `make ci`
+# drift-checks it so it can never fall out of sync with the registry.
+_DEFAULT_OUT = REPO_ROOT / "docs" / "coverage"
 
 
 def main(argv: Sequence[str] | None = None) -> int:

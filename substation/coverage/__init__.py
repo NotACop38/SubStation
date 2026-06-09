@@ -13,7 +13,7 @@ Two surfaces live here:
 from __future__ import annotations
 
 from substation.detect import Hit
-from substation.detect.registry import load_registry
+from substation.detect.registry import Detection, load_registry
 from substation.scenarios import Scenario
 
 from .builder import (
@@ -32,15 +32,19 @@ __all__ = [
 ]
 
 
-def render_coverage_map(scenarios: list[Scenario], hits: list[Hit]) -> str:
+def render_coverage_map(
+    scenarios: list[Scenario], hits: list[Hit], registry: list[Detection] | None = None
+) -> str:
     """Render the demo's live ATT&CK-for-ICS coverage map as text.
 
     Driven by the authoritative ``detections/registry.yaml`` (the same metadata the
     generated coverage table is built from), so the demo shows the *real* shipped
     coverage — every detection, its verified ATT&CK technique + tactic, and whether
     it FIRED in this run (from ``hits``) or stayed quiet on the loaded scenarios.
+    Pass ``registry`` to reuse an already-loaded registry (the CLI does).
     """
-    registry = load_registry()
+    if registry is None:
+        registry = load_registry()
     fired = {h.detection_id for h in hits}
     exercised: set[str] = set()
     for s in scenarios:
@@ -62,9 +66,12 @@ def render_coverage_map(scenarios: list[Scenario], hits: list[Hit]) -> str:
         tech = det.attack.primary.id
         rows.append(f"  {det.id:<4} {tech:<11} {det.attack.tactic:<26} {run}")
 
-    width = 60
+    # Rule width tracks the widest row (min 60) so long tactic/technique names
+    # cannot overflow the frame.
+    header = f"  {'ID':<4} {'Technique':<11} {'Tactic':<26} This run"
+    width = max(60, *(len(r) for r in rows), len(header)) if rows else 60
     lines = ["ATT&CK-for-ICS coverage map", "=" * width]
-    lines.append(f"  {'ID':<4} {'Technique':<11} {'Tactic':<26} This run")
+    lines.append(header)
     lines.append("  " + "-" * (width - 2))
     lines.extend(rows)
     lines.append("=" * width)

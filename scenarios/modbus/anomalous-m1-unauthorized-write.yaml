@@ -13,7 +13,7 @@
 # setpoint registers 40–49. rogue-1 (10.0.0.77) is NOT an allow-listed writer.
 # -----------------------------------------------------------------------------
 
-name: anomalous-m1-unauthorized-write
+name: modbus-anomalous-m1-unauthorized-write
 description: >-
   An unauthorized writer (10.0.0.77, not on the HMI/EWS allow-list) issues
   Modbus write functions to the PLC — a single-register setpoint write and a
