@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import pathlib
 
 from PIL import Image, ImageDraw, ImageFont
@@ -123,8 +124,39 @@ TOP = BAR_H + 16
 FONT_SIZE = 15
 SCALE = 2  # supersample, then downscale for crisp text
 
-FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
-FONT_BLD = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
+# Monospace font discovery: probe per-platform candidates instead of assuming a
+# Linux path, so `make demo-gif` works on macOS/Windows too (regular, bold).
+_FONT_CANDIDATES = [
+    # Linux (Debian/Ubuntu/Fedora layouts)
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"),
+    ("/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf",
+     "/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono-Bold.ttf"),
+    ("/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+     "/usr/share/fonts/TTF/DejaVuSansMono-Bold.ttf"),
+    # macOS (system + Homebrew font-dejavu cask)
+    ("/Library/Fonts/DejaVuSansMono.ttf", "/Library/Fonts/DejaVuSansMono-Bold.ttf"),
+    (os.path.expanduser("~/Library/Fonts/DejaVuSansMono.ttf"),
+     os.path.expanduser("~/Library/Fonts/DejaVuSansMono-Bold.ttf")),
+    ("/System/Library/Fonts/Menlo.ttc", "/System/Library/Fonts/Menlo.ttc"),
+    # Windows
+    (r"C:\Windows\Fonts\consola.ttf", r"C:\Windows\Fonts\consolab.ttf"),
+]
+
+
+def _find_fonts():
+    for reg, bld in _FONT_CANDIDATES:
+        if os.path.exists(reg) and os.path.exists(bld):
+            return reg, bld
+    raise SystemExit(
+        "render-demo-gif: no monospace font found. Install DejaVu Sans Mono "
+        "(Linux: fonts-dejavu / dejavu-sans-mono-fonts; macOS: "
+        "`brew install --cask font-dejavu`) or add your font path to "
+        "_FONT_CANDIDATES in scripts/render-demo-gif.py."
+    )
+
+
+FONT_REG, FONT_BLD = _find_fonts()
 
 
 def _font(bold):

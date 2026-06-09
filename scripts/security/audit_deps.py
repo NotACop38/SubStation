@@ -108,7 +108,15 @@ def main() -> int:
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
         fh.write("\n".join(reqs) + "\n")
         req_file = fh.name
+    try:
+        return _audit(reqs, req_file)
+    finally:
+        # delete=False is needed so pip-audit (a separate process) can open the
+        # file by name on every platform; clean it up on every exit path.
+        Path(req_file).unlink(missing_ok=True)
 
+
+def _audit(reqs: list[str], req_file: str) -> int:
     cmd = _add_ignored(
         [
             sys.executable,
@@ -155,10 +163,12 @@ def main() -> int:
             print("audit_deps: fallback OK — no actionable vulnerabilities found")
             return 0
         _report_failure(fallback)
-        return fallback.returncode
+        return 1
 
     _report_failure(result)
-    return result.returncode
+    # Normalize to the documented 0/1 contract: pip-audit's internal-error codes
+    # (>=2) must not leak through as the gate's exit status.
+    return 1
 
 
 if __name__ == "__main__":

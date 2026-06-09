@@ -4,29 +4,18 @@ Consumes the **same** :class:`~substation.protocols.dnp3.Dnp3Event` list as the 
 emitter (PRD §6.1: one model, dual emit, no drift). scapy ships no DNP3 layer (spike
 05), so this module assembles the DNP3 data-link / transport / application bytes
 itself — with the CRC verified against a real capture
-(:func:`substation.protocols.dnp3.dnp3_crc`) — and frames them on a synthetic but
-well-formed TCP stream (SYN handshake, PSH/ACK segments, FIN teardown) via scapy's
-generic ``Ether``/``IP``/``TCP``. Output is deterministic: identical input yields
-byte-identical PCAP. Writing uses scapy's ``PcapWriter`` (ordinary file I/O); no
-socket is ever opened — see :mod:`substation.emit.guard`.
-
-NB: the synthetic-TCP-stream framing mirrors the Modbus emitter's ``_TcpFlow``; the
-duplication is intentional and flagged as friction for ``docs/adding-a-protocol.md``
-(a shared ``emit/_tcp.py`` is the eventual home).
+(:func:`substation.protocols.dnp3.dnp3_crc`) — and frames them on the shared
+synthetic TCP stream (:mod:`substation.emit._tcp`). Output is deterministic:
+identical input yields byte-identical PCAP. No socket is ever opened — see
+:mod:`substation.emit.guard`.
 """
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
 
-from scapy.layers.inet import IP, TCP
-from scapy.layers.l2 import Ether
-from scapy.packet import Raw
-from scapy.utils import PcapWriter
-
+from substation.emit._tcp import write_flow_pcap
 from substation.protocols.dnp3 import (
     OBJECT_TYPES,
     READ,
@@ -38,10 +27,7 @@ from substation.protocols.dnp3 import (
 
 __all__ = ["write_pcap"]
 
-_DLT_EN10MB = 1  # Ethernet link-type for the PCAP global header.
 _DNP3_START = b"\x05\x64"
-_HANDSHAKE_GAP = 0.003
-_TEARDOWN_GAP = 0.003
 
 # Inverse of the CROB label tables (dnp3.py) so the encoder can rebuild the wire
 # control_code byte from the schema-clean detail.control labels.
@@ -157,84 +143,6 @@ def _dnp3_pdu(event: Dnp3Event) -> bytes:
     )
 
 
-def _mac(ipv4: str) -> str:
-    octets = ipv4.split(".")
-    return "02:00:" + ":".join(f"{int(o):02x}" for o in octets)
-
-
-def _isn(key: str) -> int:
-    return int.from_bytes(hashlib.blake2b(key.encode("utf-8"), digest_size=4).digest(), "big")
-
-
-class _TcpFlow:
-    """Tracks one connection's TCP state and emits well-formed segments.
-
-    Sequence/acknowledgement numbers advance as real TCP does (SYN/FIN consume one;
-    data consumes its length), so the stream reassembles cleanly for Tier-2 Zeek.
-    """
-
-    def __init__(self, first: Dnp3Event) -> None:
-        self.orig_h, self.orig_p = first.orig_h, first.orig_p
-        self.resp_h, self.resp_p = first.resp_h, first.resp_p
-        self.client_mac, self.server_mac = _mac(first.orig_h), _mac(first.resp_h)
-        self.client_seq = _isn(f"{first.uid}>client")
-        self.server_seq = _isn(f"{first.uid}>server")
-        self.packets: list[Any] = []
-
-    def _emit(
-        self, *, from_client: bool, flags: str, when: float, payload: bytes | None = None
-    ) -> None:
-        if from_client:
-            frame = (
-                Ether(src=self.client_mac, dst=self.server_mac)
-                / IP(src=self.orig_h, dst=self.resp_h)
-                / TCP(
-                    sport=self.orig_p,
-                    dport=self.resp_p,
-                    flags=flags,
-                    seq=self.client_seq,
-                    ack=self.server_seq,
-                )
-            )
-        else:
-            frame = (
-                Ether(src=self.server_mac, dst=self.client_mac)
-                / IP(src=self.resp_h, dst=self.orig_h)
-                / TCP(
-                    sport=self.resp_p,
-                    dport=self.orig_p,
-                    flags=flags,
-                    seq=self.server_seq,
-                    ack=self.client_seq,
-                )
-            )
-        consumed = 1 if ("S" in flags or "F" in flags) else 0
-        if payload is not None:
-            frame = frame / Raw(load=payload)
-            consumed += len(payload)
-        frame.time = max(0.0, when)
-        self.packets.append(frame)
-        if from_client:
-            self.client_seq = (self.client_seq + consumed) & 0xFFFFFFFF
-        else:
-            self.server_seq = (self.server_seq + consumed) & 0xFFFFFFFF
-
-    def build(self, events: list[Dnp3Event]) -> list[Any]:
-        start = events[0].ts
-        end = events[-1].ts
-        self._emit(from_client=True, flags="S", when=start - _HANDSHAKE_GAP)
-        self._emit(from_client=False, flags="SA", when=start - 2 * _HANDSHAKE_GAP / 3)
-        self._emit(from_client=True, flags="A", when=start - _HANDSHAKE_GAP / 3)
-        for event in events:
-            self._emit(
-                from_client=event.is_orig, flags="PA", when=event.ts, payload=_dnp3_pdu(event)
-            )
-        self._emit(from_client=True, flags="FA", when=end + _TEARDOWN_GAP / 3)
-        self._emit(from_client=False, flags="FA", when=end + 2 * _TEARDOWN_GAP / 3)
-        self._emit(from_client=True, flags="A", when=end + _TEARDOWN_GAP)
-        return self.packets
-
-
 def write_pcap(events: Iterable[Dnp3Event], path: str | Path) -> int:
     """Write ``events`` as a DNP3/TCP capture to ``path``; return packet count.
 
@@ -242,19 +150,4 @@ def write_pcap(events: Iterable[Dnp3Event], path: str | Path) -> int:
     handshake, data segments and teardown, then written in timestamp order. An empty
     event list still yields a valid (header-only) PCAP.
     """
-    by_connection: dict[str, list[Dnp3Event]] = {}
-    for event in events:
-        by_connection.setdefault(event.uid, []).append(event)
-
-    packets: list[Any] = []
-    for flow_events in by_connection.values():
-        packets.extend(_TcpFlow(flow_events[0]).build(flow_events))
-    packets.sort(key=lambda pkt: float(pkt.time))
-
-    writer = PcapWriter(str(path), linktype=_DLT_EN10MB, sync=True)
-    try:
-        for packet in packets:
-            writer.write(packet)
-    finally:
-        writer.close()
-    return len(packets)
+    return write_flow_pcap(events, path, _dnp3_pdu)

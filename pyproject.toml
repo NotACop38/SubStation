@@ -35,6 +35,7 @@ dev = [
     "pip-audit==2.10.0",
     "detect-secrets==1.5.0",  # secret scan in `make security` (gitleaks-via-Docker preferred when present).
     "build==1.5.0",  # sdist + wheel builder for `make release` (PyPA build).
+    "types-PyYAML==6.0.12.20260518",  # real yaml stubs so strict mypy checks the loaders.
 ]
 
 [project.scripts]
@@ -81,7 +82,9 @@ files = ["substation", "tests"]
 # Third-party libs without type stubs (revisited as code lands). pytest ships
 # py.typed and is fully typed when visible; this only matters when mypy runs in
 # an isolated env (e.g. a uv-managed tool) that can't see the test deps.
-module = ["scapy.*", "sigma.*", "yaml", "yaml.*", "pytest", "pytest.*"]
+# yaml is NOT listed: types-PyYAML ships real stubs (dev extra), so the strict
+# checks (including disallow_subclassing_any on the SafeLoader subclasses) apply.
+module = ["scapy.*", "sigma.*", "pytest", "pytest.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
