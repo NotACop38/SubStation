@@ -1,5 +1,15 @@
 # Substation full codebase review — 2026-06-09
 
+> **Implementation status:** every finding below was fixed on this branch in
+> the commits following this document — the P1 tooling fixes, the
+> `emit/_tcp.py` / `protocols/_common.py` / `_yaml.py` deduplication, Sigma
+> rule caching, the CLI growth (`--version`, multi-scenario + `--strict` demo,
+> `list`/`validate`/`coverage`), protocol-prefixed scenario names, pinned
+> contract hit counts, the Zeek syntax gate, honeypot log rotation, and the
+> misc polish (including a latent secret-scan pragma bug found while fixing).
+> The two "fine at current scale" notes (streaming JSONL I/O, in-memory PCAP
+> assembly) were deliberately left as-is and documented.
+
 Scope: every Python module in `substation/`, `scripts/`, and `tests/`; the
 Makefile, `pyproject.toml`, `.claude/` tooling; all detection content
 (`detections/`), scenarios, schema, and docs. Findings were verified empirically
