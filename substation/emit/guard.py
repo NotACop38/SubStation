@@ -55,7 +55,15 @@ def _blocked(name: str) -> Callable[..., Any]:
 
 @contextmanager
 def files_only_guard() -> Iterator[None]:
-    """Forbid socket connect/transmit for the duration of the ``with`` block."""
+    """Forbid socket connect/transmit for the duration of the ``with`` block.
+
+    The guard patches ``socket.socket`` **process-wide** and is not thread-safe:
+    while it is active, every thread in the process is denied socket transmit,
+    and concurrent guards would race on save/restore. Emission is single-threaded
+    by design, so this is an intentional simplification — do not run emission
+    concurrently with code that legitimately needs a socket (e.g. the opt-in
+    honeypot) in one process.
+    """
     saved: dict[str, Any] = {}
     for name in _BLOCKED_METHODS:
         if hasattr(socket.socket, name):

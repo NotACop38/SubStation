@@ -132,6 +132,22 @@ def test_sigma_rule_consistent_with_registry(det: Detection) -> None:
 
 # --- the Detection Contract: fire-on-anomaly + quiet-on-benign ---------------
 
+# Golden per-case hit counts for the validated Tier-1 fire fixtures. `>= 1 hit`
+# alone would let an over-matching rule edit (one that also fires on responses,
+# or on extra benign-looking events) pass the contract; pinning the exact count
+# turns that into a visible failure. Update a pin ONLY alongside a deliberate
+# rule/scenario change, and say why in the commit.
+_EXPECTED_FIRE_HITS: dict[tuple[str, str], int] = {
+    ("M1", "modbus-anomalous-m1-out-of-policy-write"): 2,
+    ("M1", "modbus-anomalous-m1-unauthorized-write"): 2,
+    ("M2", "modbus-anomalous-m2-illegal-function"): 2,
+    ("D1", "dnp3-anomalous-d1-restart"): 1,
+    ("D2", "dnp3-anomalous-d2-disable-unsolicited"): 1,
+    ("D3", "dnp3-anomalous-d3-unauthorized-operate"): 2,
+    ("S1", "s7-anomalous-s1-cpu-stop"): 1,
+    ("S2", "s7-anomalous-s2-program-download"): 4,
+}
+
 
 @pytest.mark.parametrize(("det", "scenario"), _FIRE_CASES, ids=_FIRE_IDS)
 def test_fires_on_anomaly(det: Detection, scenario: Scenario, tmp_path: Path) -> None:
@@ -140,12 +156,43 @@ def test_fires_on_anomaly(det: Detection, scenario: Scenario, tmp_path: Path) ->
     )
     hits = _count_hits(det, scenario, tmp_path, allow_unemittable=det.status == "partial")
     assert hits >= 1, f"{det.id} did not fire on anomalous scenario {scenario.name!r}"
+    expected = _EXPECTED_FIRE_HITS.get((det.id, scenario.name))
+    if expected is not None:
+        assert hits == expected, (
+            f"{det.id} fired {hits} hit(s) on {scenario.name!r}, expected exactly {expected} — "
+            "an unexpected count means the rule now over- or under-matches; update the pin "
+            "only with a deliberate rule/scenario change"
+        )
+    elif det.status == "validated":
+        pytest.fail(
+            f"({det.id}, {scenario.name}) is a validated Tier-1 fire case without a pinned "
+            "hit count — add it to _EXPECTED_FIRE_HITS"
+        )
 
 
 @pytest.mark.parametrize(("det", "scenario"), _QUIET_CASES, ids=_QUIET_IDS)
 def test_quiet_on_benign(det: Detection, scenario: Scenario, tmp_path: Path) -> None:
     hits = _count_hits(det, scenario, tmp_path)
     assert hits == 0, f"{det.id} fired on quiet scenario {scenario.name!r} ({hits} hit(s))"
+
+
+def test_sigma_rule_uuids_are_unique() -> None:
+    """Every shipped Sigma rule must carry a distinct `id:` UUID.
+
+    Sigma rule ids identify rules to downstream SIEMs; copy-pasting an existing
+    rule as a starting point would otherwise silently ship a duplicate.
+    """
+    seen: dict[str, str] = {}
+    for det in REGISTRY:
+        if det.engine != "sigma":
+            continue
+        rule = load_rule(det.rule_path)
+        rule_id = str(rule.id)
+        assert rule_id not in seen, (
+            f"{det.id}: Sigma rule id {rule_id} duplicates {seen[rule_id]}'s — "
+            "give every rule a fresh UUID"
+        )
+        seen[rule_id] = det.id
 
 
 def test_validated_tier1_emit_errors_fail_contract(

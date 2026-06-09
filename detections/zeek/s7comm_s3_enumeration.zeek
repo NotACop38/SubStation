@@ -25,6 +25,9 @@
 ##! icsnpp-s7comm plugin (Tier 2).
 
 @load base/frameworks/notice
+# No @load for s7comm: the s7comm_read_szl event is defined by the ICSNPP
+# s7comm package (not base Zeek), which the Tier-2 container loads alongside
+# this script (scripts/verify/run.py). Base Zeek has no s7comm analyzer.
 
 module S7Enum;
 

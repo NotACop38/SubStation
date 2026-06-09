@@ -62,12 +62,12 @@ _ICSNPP = {
     # the secret scanner's high-entropy detector.
     "modbus": (
         "https://github.com/cisagov/icsnpp-modbus",
-        "64559be1640dd91b888aed993531a06156deaed0",
-    ),  # pragma: allowlist secret
+        "64559be1640dd91b888aed993531a06156deaed0",  # pragma: allowlist secret
+    ),
     "dnp3": (
         "https://github.com/cisagov/icsnpp-dnp3",
-        "6e997bfc9445ff6b6845beaa1e4beab4ecec458e",
-    ),  # pragma: allowlist secret
+        "6e997bfc9445ff6b6845beaa1e4beab4ecec458e",  # pragma: allowlist secret
+    ),
 }
 
 # Per Tier-2 Zeek detection: the Notice::Type token it raises, and whether it needs

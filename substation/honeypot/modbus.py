@@ -534,10 +534,16 @@ class HoneypotConfig:
     allow_external: bool = False
     recv_timeout: float = 10.0
     backlog: int = 8
+    # Rotate the probe log once it reaches this size (bytes): the current file is
+    # renamed to <log>.1 (replacing any previous one) and a fresh file is started.
+    # A noisy scanner must not be able to grow the log without bound. 0 disables.
+    max_log_bytes: int = 50 * 1024 * 1024
 
     def validate(self) -> None:
         if not 1 <= self.port <= 65535:
             raise HoneypotConfigError(f"port {self.port} out of range (1-65535)")
+        if self.max_log_bytes < 0:
+            raise HoneypotConfigError("max_log_bytes must be >= 0 (0 disables rotation)")
         if self.bind_host not in _LOOPBACK_HOSTS and not self.allow_external:
             raise HoneypotConfigError(
                 f"refusing to bind non-loopback address {self.bind_host!r} without "
@@ -548,19 +554,38 @@ class HoneypotConfig:
 
 
 class _ProbeLog:
-    """Append-only writer for schema-validated honeypot events."""
+    """Append-only, size-capped writer for schema-validated honeypot events.
 
-    def __init__(self, path: Path) -> None:
+    When the log reaches ``max_bytes`` it is rotated to ``<log>.1`` (replacing
+    any previous rotation) so a noisy scanner cannot fill the disk; at most two
+    files (current + one rotation) ever exist.
+    """
+
+    def __init__(self, path: Path, max_bytes: int = 0) -> None:
         self._schema = load_event_schema()
+        self._path = path
+        self._max_bytes = max_bytes
         path.parent.mkdir(parents=True, exist_ok=True)
         self._fh = path.open("a", encoding="utf-8")
+        self._size = path.stat().st_size
+
+    def _rotate_if_needed(self, incoming: int) -> None:
+        if self._max_bytes <= 0 or self._size + incoming <= self._max_bytes:
+            return
+        self._fh.close()
+        self._path.replace(self._path.with_name(self._path.name + ".1"))
+        self._fh = self._path.open("a", encoding="utf-8")
+        self._size = 0
 
     def write(self, event: dict[str, Any]) -> None:
         # Validate against the frozen contract before writing so the honeypot can
         # never emit telemetry the detections cannot consume (docs/schema.md).
         validate_event(event, self._schema)
-        self._fh.write(json.dumps(event, allow_nan=False) + "\n")
+        line = json.dumps(event, allow_nan=False) + "\n"
+        self._rotate_if_needed(len(line.encode("utf-8")))
+        self._fh.write(line)
         self._fh.flush()
+        self._size += len(line.encode("utf-8"))
 
     def close(self) -> None:
         self._fh.close()
@@ -579,7 +604,7 @@ class ModbusHoneypot:
         config.validate()
         self.config = config
         self.device = StubDevice()
-        self._log = _ProbeLog(config.log_path)
+        self._log = _ProbeLog(config.log_path, max_bytes=config.max_log_bytes)
         self._conn_seq = 0
 
     def _next_uid(self, peer: tuple[str, int]) -> str:
@@ -605,6 +630,9 @@ class ModbusHoneypot:
                 return  # peer closed
             buffer.extend(chunk)
             # A scanner may pipeline several frames; drain every complete ADU.
+            # NB: the probe and its reply share one observation timestamp (the
+            # honeypot answers in-process, sub-millisecond) — unlike the
+            # simulator, which models an explicit outstation turnaround delay.
             for raw in _split_adus(buffer):
                 reply, events = process_frame(
                     raw,

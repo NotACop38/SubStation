@@ -17,6 +17,9 @@ Exits non-zero if any backend reports a finding. Run:
 
 from __future__ import annotations
 
+import importlib.util
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -98,12 +101,7 @@ def _run_gitleaks_docker() -> int | None:
 
 def _run_detect_secrets() -> int | None:
     """Run detect-secrets over tracked files. Returns exit code, or None if absent."""
-    try:
-        import importlib.util
-
-        if importlib.util.find_spec("detect_secrets") is None:
-            return None
-    except ImportError:
+    if importlib.util.find_spec("detect_secrets") is None:
         return None
     print("secret_scan: backend = detect-secrets")
     # Scan only git-tracked files so build caches (.mypy_cache, .ruff_cache, …)
@@ -118,8 +116,6 @@ def _run_detect_secrets() -> int | None:
     if proc.returncode != 0:
         sys.stderr.write(proc.stderr)
         return proc.returncode
-    import json
-
     report = json.loads(proc.stdout or "{}")
     findings = report.get("results", {})
     if findings:
@@ -157,8 +153,6 @@ def _run_builtin() -> int:
 
 
 def main() -> int:
-    import os
-
     # Explicit opt-in to gitleaks-via-Docker (the canonical scanner) when asked.
     if os.environ.get("SUBSTATION_SECRET_SCANNER") == "gitleaks-docker":
         rc = _run_gitleaks_docker()

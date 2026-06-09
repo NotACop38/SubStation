@@ -238,3 +238,42 @@ def test_processing_opens_no_socket(monkeypatch: pytest.MonkeyPatch) -> None:
     reply, events = _run(_mbap_frame(0x03, struct.pack(">HH", 0, 2)))
     assert reply is not None
     _assert_schema_valid(events)
+
+
+def test_probe_log_rotates_at_size_cap(tmp_path: Path) -> None:
+    """The probe log must not grow without bound: it rotates to <log>.1 at the cap."""
+    from substation.honeypot.modbus import _ProbeLog
+
+    log_path = tmp_path / "probes.jsonl"
+    _, events = _run(_mbap_frame(0x03, struct.pack(">HH", 0, 2)))
+    one_line = len((__import__("json").dumps(events[0]) + "\n").encode("utf-8"))
+
+    log = _ProbeLog(log_path, max_bytes=one_line * 2)
+    try:
+        for _ in range(5):
+            log.write(events[0])
+    finally:
+        log.close()
+
+    rotated = tmp_path / "probes.jsonl.1"
+    assert rotated.exists(), "log should have rotated at the size cap"
+    assert log_path.stat().st_size <= one_line * 2
+    # Every surviving line is still valid, schema-clean JSON.
+    for path in (log_path, rotated):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            assert not list(iter_event_errors(__import__("json").loads(line)))
+
+
+def test_probe_log_rotation_disabled_with_zero_cap(tmp_path: Path) -> None:
+    from substation.honeypot.modbus import _ProbeLog
+
+    log_path = tmp_path / "probes.jsonl"
+    _, events = _run(_mbap_frame(0x03, struct.pack(">HH", 0, 2)))
+    log = _ProbeLog(log_path, max_bytes=0)
+    try:
+        for _ in range(20):
+            log.write(events[0])
+    finally:
+        log.close()
+    assert not (tmp_path / "probes.jsonl.1").exists()
+    assert len(log_path.read_text(encoding="utf-8").splitlines()) == 20

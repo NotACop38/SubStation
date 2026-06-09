@@ -56,6 +56,10 @@
 @load base/protocols/modbus
 @load base/protocols/dnp3
 @load base/frameworks/notice
+# No @load for s7comm: the s7comm_header / s7comm_read_szl / s7comm_plus_header
+# events are defined by the ICSNPP s7comm package (not base Zeek), which the
+# Tier-2 container loads alongside this script (scripts/verify/run.py). Base
+# Zeek has no s7comm analyzer, so there is nothing to @load here.
 
 module CrossProtoBaseline;
 

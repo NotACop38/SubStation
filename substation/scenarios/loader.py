@@ -269,6 +269,12 @@ def _parse_scenario(raw: object) -> Scenario:
             "(allowed: letters, digits, '.', '_', '-'; no path separators)"
         )
 
+    description_raw = data.get("description", "")
+    if not isinstance(description_raw, str):
+        raise ScenarioError(
+            f"scenario.description: expected a string, got {type(description_raw).__name__}"
+        )
+
     return Scenario(
         name=name,
         protocol=protocol,
@@ -277,7 +283,7 @@ def _parse_scenario(raw: object) -> Scenario:
         exchanges=exchanges,
         timing=_parse_timing(data.get("timing")),
         exercises=_parse_exercises(data.get("exercises")),
-        description=str(data.get("description", "")),
+        description=description_raw,
     )
 
 
