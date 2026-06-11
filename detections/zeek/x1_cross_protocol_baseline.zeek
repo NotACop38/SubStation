@@ -190,7 +190,9 @@ event s7comm_header(c: connection, is_orig: bool, rosctr: count, pdu_reference: 
 	# S7-specific baseline precision while this general header path covers the
 	# rest of the S7comm surface (Setup Communication, Read/Write Variable,
 	# upload/download functions, PLC Control/Stop, List Blocks, etc.).
-	if ( rosctr == 0x07 && function_code == 0x04 && subfunction == 0x01 )
+	# User-Data Read SZL request FUNC is 0x44 (request nibble 0x4 |
+	# CPU-functions group 0x04), not the bare group value 0x04.
+	if ( rosctr == 0x07 && function_code == 0x44 && subfunction == 0x01 )
 		return;
 
 	observe(c, norm_func("s7comm", norm_s7comm_header_func(rosctr, function_code, subfunction, plc_control)));
