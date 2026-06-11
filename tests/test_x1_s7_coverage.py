@@ -29,3 +29,11 @@ def test_x1_documents_and_fixtures_non_szl_s7_fire_case() -> None:
     assert "s7/anomalous-x1-new-function.yaml" in doc
     assert "function: WriteVariable" in scenario
     assert "- X1" in scenario
+
+
+def test_x1_skips_actual_read_szl_request_function_from_generic_header() -> None:
+    """Read SZL requests use User-Data FUNC 0x44 and must stay SZL-only."""
+    rule = _X1_RULE.read_text()
+
+    assert "function_code == 0x44" in rule
+    assert "function_code == 0x04 && subfunction == 0x01" not in rule
