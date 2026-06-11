@@ -16,6 +16,7 @@ Run: ``python scripts/security/audit_deps.py`` (invoked by ``make security``).
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -74,6 +75,25 @@ def _print_process_output(result: subprocess.CompletedProcess[str]) -> None:
         print(result.stderr, end="" if result.stderr.endswith("\n") else "\n", file=sys.stderr)
 
 
+def _write_requirements(path: Path, requirements: list[str]) -> None:
+    path.write_text("\n".join(requirements) + "\n", encoding="utf-8")
+
+
+def _read_resolver_report(path: Path) -> list[str]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    resolved: set[str] = set()
+    for package in data.get("install", []):
+        metadata = package.get("metadata", {})
+        name = metadata.get("name")
+        version = metadata.get("version")
+        if not isinstance(name, str) or not isinstance(version, str):
+            raise ValueError("missing package name/version in pip resolver report")
+        resolved.add(f"{name}=={version}")
+    if not resolved:
+        raise ValueError("pip resolver report did not contain resolved packages")
+    return sorted(resolved, key=str.casefold)
+
+
 def _looks_like_tool_failure(result: subprocess.CompletedProcess[str]) -> bool:
     output = f"{result.stdout}\n{result.stderr}".lower()
     return (
@@ -81,6 +101,15 @@ def _looks_like_tool_failure(result: subprocess.CompletedProcess[str]) -> bool:
         or "traceback" in output
         or "calledprocesserror" in output
         or "no module named pip_audit" in output
+    )
+
+
+def _report_resolver_failure(result: subprocess.CompletedProcess[str]) -> None:
+    _print_process_output(result)
+    print(
+        "audit_deps: FAILED — dependency resolver could not complete. This is a "
+        "tooling failure, not a confirmed vulnerability finding.",
+        file=sys.stderr,
     )
 
 
@@ -103,34 +132,68 @@ def _report_failure(result: subprocess.CompletedProcess[str]) -> None:
 
 def main() -> int:
     reqs = _pinned_requirements()
-    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
-        fh.write("\n".join(reqs) + "\n")
-        req_file = fh.name
-
-    cmd = _add_ignored(
-        [
-            sys.executable,
-            "-m",
-            "pip_audit",
-            "-r",
-            req_file,
-            "--progress-spinner",
-            "off",
-        ]
-    )
-
     print(
         f"audit_deps: auditing {len(reqs)} pinned dependencies "
         f"(ignoring {len(_IGNORED)} documented advisory id(s))"
     )
-    result = _run(cmd)
-    if result.returncode == 0:
-        _print_process_output(result)
-        print("audit_deps: OK — no actionable vulnerabilities in the declared closure")
-        return 0
+    with tempfile.TemporaryDirectory() as tmpdir:
+        declared_req_file = Path(tmpdir) / "declared-requirements.txt"
+        resolver_report = Path(tmpdir) / "resolver-report.json"
+        resolved_req_file = Path(tmpdir) / "resolved-requirements.txt"
+        _write_requirements(declared_req_file, reqs)
 
-    _report_failure(result)
-    return result.returncode
+        resolver_cmd = [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--dry-run",
+            "--ignore-installed",
+            "--no-input",
+            "--keyring-provider=subprocess",
+            "--report",
+            str(resolver_report),
+            "-r",
+            str(declared_req_file),
+        ]
+        resolver = _run(resolver_cmd)
+        if resolver.returncode != 0:
+            _report_resolver_failure(resolver)
+            return resolver.returncode
+
+        try:
+            resolved = _read_resolver_report(resolver_report)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(
+                f"audit_deps: FAILED — dependency resolver produced an unreadable report: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+
+        _write_requirements(resolved_req_file, resolved)
+        print(f"audit_deps: resolved {len(resolved)} packages in the declared closure")
+
+        cmd = _add_ignored(
+            [
+                sys.executable,
+                "-m",
+                "pip_audit",
+                "-r",
+                str(resolved_req_file),
+                "--no-deps",
+                "--disable-pip",
+                "--progress-spinner",
+                "off",
+            ]
+        )
+        result = _run(cmd)
+        if result.returncode == 0:
+            _print_process_output(result)
+            print("audit_deps: OK — no actionable vulnerabilities in the declared closure")
+            return 0
+
+        _report_failure(result)
+        return result.returncode
 
 
 if __name__ == "__main__":
