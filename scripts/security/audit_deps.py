@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import sysconfig
 import tempfile
 import tomllib
 from pathlib import Path
@@ -57,10 +56,6 @@ def _pinned_requirements() -> list[str]:
     return [r.split("#", 1)[0].strip() for r in reqs if r.split("#", 1)[0].strip()]
 
 
-def _site_packages_path() -> str:
-    return sysconfig.get_paths()["purelib"]
-
-
 def _add_ignored(cmd: list[str]) -> list[str]:
     out = list(cmd)
     for advisory in _IGNORED:
@@ -82,7 +77,10 @@ def _print_process_output(result: subprocess.CompletedProcess[str]) -> None:
 def _looks_like_tool_failure(result: subprocess.CompletedProcess[str]) -> bool:
     output = f"{result.stdout}\n{result.stderr}".lower()
     return (
-        result.returncode not in (0, 1) or "traceback" in output or "calledprocesserror" in output
+        result.returncode not in (0, 1)
+        or "traceback" in output
+        or "calledprocesserror" in output
+        or "no module named pip_audit" in output
     )
 
 
@@ -130,32 +128,6 @@ def main() -> int:
         _print_process_output(result)
         print("audit_deps: OK — no actionable vulnerabilities in the declared closure")
         return 0
-
-    if _looks_like_tool_failure(result):
-        _print_process_output(result)
-        fallback_cmd = _add_ignored(
-            [
-                sys.executable,
-                "-m",
-                "pip_audit",
-                "--path",
-                _site_packages_path(),
-                "--progress-spinner",
-                "off",
-            ]
-        )
-        print(
-            "audit_deps: pip-audit resolver failed before completing; "
-            "falling back to the installed dev environment",
-            file=sys.stderr,
-        )
-        fallback = _run(fallback_cmd)
-        if fallback.returncode == 0:
-            _print_process_output(fallback)
-            print("audit_deps: fallback OK — no actionable vulnerabilities found")
-            return 0
-        _report_failure(fallback)
-        return fallback.returncode
 
     _report_failure(result)
     return result.returncode
