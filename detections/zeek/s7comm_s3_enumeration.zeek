@@ -25,6 +25,9 @@
 ##! icsnpp-s7comm plugin (Tier 2).
 
 @load base/frameworks/notice
+# No @load for the S7 analyzer: the s7comm_read_szl event handled below is
+# provided by the icsnpp-s7comm package, which the Tier-2 container (and any
+# production deployment) loads alongside this script (e.g. `zeek ... icsnpp/s7comm`).
 
 module S7Enum;
 

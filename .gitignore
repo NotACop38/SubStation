@@ -23,10 +23,6 @@ artifacts/
 # ...except committed golden event fixtures used by the schema-validation gate.
 !tests/data/events/**/*.jsonl
 
-# Generated coverage map outputs (keep the dir, ignore generated files)
-/coverage/*
-!/coverage/.gitkeep
-
 # Tier-2 verify cache (cloned ICSNPP script packages)
 /.verify-cache/
 

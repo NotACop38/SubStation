@@ -4,9 +4,10 @@ Usage::
 
     python -m substation.coverage [--check] [--out DIR]
 
-Default: render every coverage artifact from ``detections/registry.yaml`` into the
-repo's ``coverage/`` directory (``coverage.md``, ``coverage.json``,
-``navigator-layer.json``). These are GENERATED — never hand-edit them.
+Default: render every coverage artifact from ``detections/registry.yaml`` into
+the committed snapshot directory ``docs/coverage/`` (``coverage.md``,
+``coverage.json``, ``navigator-layer.json``). These are GENERATED — never
+hand-edit them.
 
 ``--check``: render in memory and compare against the committed files; exit 1 if
 any is missing or stale (drift). This is what ``make ci`` runs so the committed
@@ -25,7 +26,9 @@ from pathlib import Path
 from substation.coverage.builder import render_all
 from substation.detect.registry import REPO_ROOT, RegistryError
 
-_DEFAULT_OUT = REPO_ROOT / "coverage"
+# The single committed snapshot (drift-checked by `make ci`); there is no
+# separate scratch output directory.
+_DEFAULT_OUT = REPO_ROOT / "docs" / "coverage"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -42,7 +45,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--out",
         type=Path,
         default=_DEFAULT_OUT,
-        help="Output directory (default: ./coverage).",
+        help="Output directory (default: docs/coverage, the committed snapshot).",
     )
     args = parser.parse_args(argv)
     out_dir: Path = args.out

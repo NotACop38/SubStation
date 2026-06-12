@@ -101,12 +101,13 @@ the coverage generator. The friction worth smoothing before the next protocol:
    *Checklist item:* run the scapy-capability spike **first** and record the verdict;
    budget for a hand-built encoder + a CRC/parse-fidelity check against a real trace.
 
-3. **The synthetic-TCP-stream framing is duplicated per emitter.** Both
-   `pcap_emitter.py` (Modbus) and `dnp3_pcap.py` (DNP3) carry a near-identical
-   `_TcpFlow` (handshake → PSH/ACK data → FIN, per-flow seq/ack, deterministic
-   MAC/ISN). *Checklist item:* extract a shared `emit/_tcp.py` so a protocol emitter
-   only supplies "bytes for this message" — do this when S7 lands rather than
-   triplicating it. (Deferred here to avoid perturbing the byte-stable Modbus PCAP.)
+3. **The synthetic-TCP-stream framing is shared — don't rewrite it.**
+   `substation/emit/_tcp.py` carries the whole synthetic-TCP scaffold (handshake →
+   PSH/ACK data → FIN, per-flow seq/ack, deterministic MAC/ISN); its `write_pcap()`
+   is parameterized by a `payload_for(event)` callable. *Checklist item:* a new
+   protocol's PCAP emitter is just PDU builders plus a one-line
+   `_tcp.write_pcap(events, path, _my_pdu)` — see `dnp3_pcap.py` for the
+   hand-built-bytes shape or `pcap_emitter.py` for the scapy-layer shape.
 
 4. **Request/response shape differs from Modbus.** Modbus echoes the function code
    on the response; DNP3 does not — a request is `READ`/`OPERATE`/… and its reply is

@@ -108,7 +108,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--out",
         type=Path,
         default=None,
-        help="Output directory (default: ./coverage).",
+        help="Output directory (default: docs/coverage, the committed snapshot).",
     )
     coverage.set_defaults(func=_cmd_coverage)
 
