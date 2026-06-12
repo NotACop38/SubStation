@@ -21,7 +21,10 @@
 # WRITE for that pair is NOT in known_funcs -> X1 fires (new function for a pair).
 # -----------------------------------------------------------------------------
 
-name: anomalous-x1-new-function
+# The dnp3- prefix matches the rest of this tree: scenario names become
+# artifact basenames (artifacts/<name>.pcap), so they must be globally
+# unique across protocols (tests/test_scenarios.py enforces this).
+name: dnp3-anomalous-x1-new-function
 description: >-
   The baselined, allow-listed master (10.0.1.10 -> rtu-1 10.0.1.50), which in the
   learned baseline only enables-unsolicited / reads / operates, issues a WRITE — a

@@ -148,6 +148,66 @@ def test_quiet_on_benign(det: Detection, scenario: Scenario, tmp_path: Path) -> 
     assert hits == 0, f"{det.id} fired on quiet scenario {scenario.name!r} ({hits} hit(s))"
 
 
+# --- exact-hit regression net -------------------------------------------------
+#
+# fire-on-anomaly (>=1 hit) and quiet-on-benign (0 hits) can both pass while a
+# rule silently over-matches (e.g. also firing on responses it never meant to).
+# This table pins each validated Tier-1 fire case to the exact event indices the
+# rule must hit, verified by hand against scenario intent: every hit lands on
+# the malicious REQUEST events (plus M2's exception-response arm, by design).
+# Changing a shipped rule or scenario such that these move is a deliberate
+# contract change — update the table in the same commit.
+
+_EXPECTED_FIRE_HITS: dict[tuple[str, str], tuple[int, ...]] = {
+    # M1: the two out-of-policy write requests.
+    ("M1", "anomalous-m1-unauthorized-write"): (6, 8),
+    ("M1", "anomalous-m1-out-of-policy-write"): (4, 6),
+    # M2: the undefined-function request and the ILLEGAL_FUNCTION exception reply.
+    ("M2", "anomalous-m2-illegal-function"): (2, 3),
+    # D1/D2/D3: the restart / disable-unsolicited / (direct-)operate requests.
+    ("D1", "dnp3-anomalous-d1-restart"): (5,),
+    ("D2", "dnp3-anomalous-d2-disable-unsolicited"): (3,),
+    ("D3", "dnp3-anomalous-d3-unauthorized-operate"): (4, 6),
+    # S1: the PLC Stop request. S2: the download-sequence + Create Object requests.
+    ("S1", "s7-anomalous-s1-cpu-stop"): (12,),
+    ("S2", "s7-anomalous-s2-program-download"): (10, 12, 14, 16),
+}
+
+
+def test_expected_hit_table_covers_every_validated_tier1_fire_case() -> None:
+    """A new validated Tier-1 fire scenario must pin its exact hits here too."""
+    validated_pairs = {
+        (d.id, s.name)
+        for d, s in _FIRE_CASES
+        if d.engine == "sigma" and d.tier == 1 and d.status == "validated"
+    }
+    assert validated_pairs == set(_EXPECTED_FIRE_HITS), (
+        "validated Tier-1 fire cases and _EXPECTED_FIRE_HITS disagree; "
+        f"missing from table: {sorted(validated_pairs - set(_EXPECTED_FIRE_HITS))}, "
+        f"stale in table: {sorted(set(_EXPECTED_FIRE_HITS) - validated_pairs)}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("det_id", "scenario_name", "expected"),
+    [(d, s, idx) for (d, s), idx in _EXPECTED_FIRE_HITS.items()],
+    ids=[f"{d}-{s}" for d, s in _EXPECTED_FIRE_HITS],
+)
+def test_fires_on_exactly_the_expected_events(
+    det_id: str, scenario_name: str, expected: tuple[int, ...], tmp_path: Path
+) -> None:
+    det = _BY_ID[det_id]
+    scenario = next(s for s in SCENARIOS if s.name == scenario_name)
+    result = write_artifacts(scenario, tmp_path)
+    hits = run_detections(result.jsonl, [det])
+    indices = tuple(sorted(h.event_index for h in hits if h.detection_id == det.id))
+    assert indices == expected, (
+        f"{det.id} on {scenario.name!r}: hit event indices {indices} != expected {expected} "
+        "(an over- or under-matching rule, or a scenario edit — if deliberate, "
+        "update _EXPECTED_FIRE_HITS)"
+    )
+
+
 def test_validated_tier1_emit_errors_fail_contract(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
