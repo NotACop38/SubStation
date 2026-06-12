@@ -26,7 +26,6 @@ logs cannot drift from the contract the detections bind to (``docs/schema.md``).
 
 from __future__ import annotations
 
-import hashlib
 import json
 import socket
 import struct
@@ -36,6 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from substation.protocols._common import zeek_uid
 from substation.protocols.modbus import (
     DEFAULT_MODBUS_PORT,
     READ_COILS,
@@ -163,18 +163,6 @@ class _Parsed:
     unit: int
     func_code: int
     data: bytes
-
-
-def _zeek_uid(key: str) -> str:
-    """Deterministic Zeek-style connection uid (``C`` + 17 base62 chars)."""
-    b62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=13).digest()
-    n = int.from_bytes(digest, "big")
-    chars: list[str] = []
-    for _ in range(17):
-        n, rem = divmod(n, 62)
-        chars.append(b62[rem])
-    return "C" + "".join(chars)
 
 
 def _parse_frame(raw: bytes) -> _Parsed | None:
@@ -597,7 +585,7 @@ class ModbusHoneypot:
     def _next_uid(self, peer: tuple[str, int]) -> str:
         self._conn_seq += 1
         key = f"{peer[0]}:{peer[1]}>{self.config.bind_host}:{self.config.port}#{self._conn_seq}"
-        return _zeek_uid(key)
+        return zeek_uid(key)
 
     def _handle_connection(self, sock: socket.socket, peer: tuple[str, int]) -> None:
         uid = self._next_uid(peer)

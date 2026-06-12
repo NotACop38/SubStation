@@ -19,13 +19,11 @@ taken from the verified source, never invented from memory (CLAUDE.md VERIFY gat
 
 from __future__ import annotations
 
-import hashlib
-import ipaddress
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from substation.protocols import _common
 from substation.scenarios import Actor, ActorRole, Protocol, Scenario
 
 __all__ = [
@@ -45,7 +43,6 @@ __all__ = [
 DEFAULT_DNP3_PORT = 20000  # DNP3/TCP well-known port (Zeek base/protocols/dnp3).
 # Synthetic outstation turnaround between a request and its response (seconds).
 RESPONSE_DELAY = 0.05
-_EPHEMERAL_BASE = 49152  # IANA dynamic/ephemeral client-port range start.
 
 # DNP3 application function codes (Zeek DNP3::function_codes, consts.zeek — spike 04).
 CONFIRM = 0x00
@@ -244,14 +241,8 @@ class Dnp3Event:
 
 # --- function-name resolution (mirrors modbus.resolve_function) ---------------
 
-
-def _normalize_function(name: str) -> str:
-    """Collapse a function label to a comparison token (case/separator-insensitive)."""
-    return re.sub(r"[^a-z0-9]", "", name.lower())
-
-
 _FUNCTION_BY_TOKEN: dict[str, int] = {
-    _normalize_function(label): code for code, label in FUNCTION_NAMES.items()
+    _common.normalize_function(label): code for code, label in FUNCTION_NAMES.items()
 }
 
 
@@ -262,7 +253,7 @@ def resolve_function(function: str) -> int:
     (``ColdRestart``), or a numeric code (``13`` / ``0x0d``). Raises
     :class:`Dnp3Error` for anything not in the verified function table.
     """
-    token = _normalize_function(function)
+    token = _common.normalize_function(function)
     if token in _FUNCTION_BY_TOKEN:
         return _FUNCTION_BY_TOKEN[token]
     raw = function.strip().lower()
@@ -302,36 +293,15 @@ def dnp3_crc(data: bytes) -> int:
 def _opt_int(
     params: Mapping[str, object], key: str, where: str, lo: int, hi: int, default: int
 ) -> int:
-    if key not in params:
-        return default
-    return _check_int(params[key], f"{where}.{key}", lo, hi)
-
-
-def _check_int(value: object, where: str, lo: int, hi: int) -> int:
-    # bool is an int subclass in Python; an address/count/time is never a bool.
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise Dnp3Error(f"{where}: expected an integer")
-    if not lo <= value <= hi:
-        raise Dnp3Error(f"{where}: {value} out of range ({lo}-{hi})")
-    return value
+    return _common.opt_int(params, key, where, lo, hi, default, error=Dnp3Error)
 
 
 def _opt_str(params: Mapping[str, object], key: str, where: str, default: str) -> str:
-    if key not in params:
-        return default
-    value = params[key]
-    if not isinstance(value, str) or not value:
-        raise Dnp3Error(f"{where}.{key}: expected a non-empty string")
-    return value
+    return _common.opt_str(params, key, where, default, error=Dnp3Error)
 
 
 def _opt_bool(params: Mapping[str, object], key: str, where: str, default: bool) -> bool:
-    if key not in params:
-        return default
-    value = params[key]
-    if not isinstance(value, bool):
-        raise Dnp3Error(f"{where}.{key}: expected a boolean")
-    return value
+    return _common.opt_bool(params, key, where, default, error=Dnp3Error)
 
 
 def _enum(value: str, table: dict[str, int], where: str) -> int:
@@ -423,29 +393,9 @@ def _objects_detail(
 
 # --- connection bookkeeping (mirrors modbus) ----------------------------------
 
-_B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-
-def _zeek_uid(key: str) -> str:
-    """Deterministic Zeek-style connection uid (``C`` + 17 base62 chars)."""
-    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=13).digest()
-    n = int.from_bytes(digest, "big")
-    chars: list[str] = []
-    for _ in range(17):
-        n, rem = divmod(n, 62)
-        chars.append(_B62[rem])
-    return "C" + "".join(chars)
-
 
 def _ipv4(host: str, actor_id: str) -> str:
-    try:
-        ipaddress.IPv4Address(host)
-    except ipaddress.AddressValueError:
-        raise Dnp3Error(
-            f"actor {actor_id!r} host {host!r} is not an IPv4 address "
-            "(DNP3/TCP PCAP emission requires IPv4)"
-        ) from None
-    return host
+    return _common.ipv4_host(host, actor_id, proto="DNP3/TCP", error=Dnp3Error)
 
 
 @dataclass(slots=True)
@@ -469,14 +419,12 @@ def _connection(conns: dict[tuple[str, str], _Conn], master: Actor, outstation: 
         orig_h = _ipv4(master.host, master.id)
         resp_h = _ipv4(outstation.host, outstation.id)
         resp_p = outstation.port if outstation.port is not None else DEFAULT_DNP3_PORT
-        orig_p = _EPHEMERAL_BASE + len(conns)
-        if orig_p > _U16:
-            raise Dnp3Error("too many distinct connections for the ephemeral port range")
+        orig_p = _common.ephemeral_port(len(conns), error=Dnp3Error)
         # DNP3 link addresses: deterministic defaults (master 100, outstation derived)
         # — they do not appear in the envelope and no detection keys on them; the
         # example capture uses master=100, outstation=5 (spike 05).
         conn = _Conn(
-            uid=_zeek_uid(f"{orig_h}:{orig_p}>{resp_h}:{resp_p}"),
+            uid=_common.zeek_uid(f"{orig_h}:{orig_p}>{resp_h}:{resp_p}"),
             orig_h=orig_h,
             orig_p=orig_p,
             resp_h=resp_h,
