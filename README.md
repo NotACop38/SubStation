@@ -110,6 +110,16 @@ Result: quiet on the benign baseline; fired 2 detection(s) on the anomalies (M1,
 > table); the downloadable ATT&CK Navigator layer + full table come from
 > `make coverage-build` (see [Coverage](#coverage)).
 
+Beyond `make demo`, the installed `substation` CLI is the single front door:
+
+```sh
+substation list                                  # registered detections + bundled scenarios
+substation demo --scenario mine-benign.yaml mine-attack.yaml   # run your own pair
+substation demo --strict                         # exit non-zero unless every exercises contract holds
+substation validate artifacts/run.jsonl          # schema-check an event log
+substation coverage --check                      # drift-check the committed coverage snapshot
+```
+
 ## How it works
 
 <div align="center">

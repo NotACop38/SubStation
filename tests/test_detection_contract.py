@@ -6,7 +6,9 @@ the detection registry (``detections/registry.yaml``) and every scenario under
 ``scenarios/``, then for each detection asserts — from that detection's own
 ``exercises:`` scenarios — that it **fires on its anomalous telemetry** and stays
 **quiet on its benign telemetry**. Adding a detection (registry entry + rule +
-scenarios) makes new cases appear here automatically; no test code changes.
+scenarios) makes the fire/quiet cases appear here automatically; the one piece
+of test code a new *validated Tier-1* fire scenario must add is its exact-hit
+entry in ``_EXPECTED_FIRE_HITS`` below (the over-match regression net).
 
 Tier scoping (PRD.md §6.2): Tier-1 Sigma detections are evaluated directly over
 the generated JSON event log here. Tier-2 detections (Zeek/Suricata) execute in

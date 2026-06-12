@@ -67,11 +67,16 @@ below keys off it.
    - `partial` — quiet proven, fire blocked on an emitter/harness gap (note why).
 
 7. **Run the harness.** `make test` (or `pytest`). The metadata-driven harness
-   auto-discovers your detection from the registry — **no test-code changes**. It
-   asserts: rule + doc exist, ≥1 fire and ≥1 quiet scenario, `exercises` reference
-   known IDs, Sigma `logsource`+tags match the registry, and (Tier 1) fire-on-anomaly
-   + quiet-on-benign over real emitted telemetry. Tier-2 fire/quiet is skipped with
-   a reason.
+   auto-discovers your detection from the registry. It asserts: rule + doc exist,
+   ≥1 fire and ≥1 quiet scenario, `exercises` reference known IDs, Sigma
+   `logsource`+tags match the registry, and (Tier 1) fire-on-anomaly +
+   quiet-on-benign over real emitted telemetry. Tier-2 fire/quiet is skipped with
+   a reason. One deliberate test-code step remains: a **validated Tier-1** fire
+   scenario must pin its exact hit indices in `_EXPECTED_FIRE_HITS`
+   (`tests/test_detection_contract.py`) — the completeness check tells you the
+   missing entry, and the indices come from the failing assertion message. This
+   is the over-match regression net: ≥1-hit alone can't catch a rule that also
+   fires on events it never meant to.
 
 8. **Write the doc** at `detections/docs/<ID>-<slug>.md` (copy an existing one):
    **engine choice + rationale**, **data source**, **detection logic**, the

@@ -218,3 +218,39 @@ catch a rule that over-matches yet still passes both gates.
   layer) from a single registry — exactly the right shape.
 - **Speed**: full unit suite in ~3s; demo in ~0.5s. The Tier-1 "zero-dep"
   promise holds up.
+
+---
+
+## Status — 2026-06-12
+
+Findings addressed in the follow-up batch (one commit per finding group, all
+gates green; emitted artifacts verified byte-identical across the refactors):
+
+- **P1.1 / P1.4** — Makefile now invokes every tool as `$(PY) -m <tool>`;
+  `make test` gained `check-python`; `types-PyYAML` pinned and the `yaml`
+  mypy override dropped.
+- **P1.2** — already fixed before this batch (`audit_deps` uses a
+  `TemporaryDirectory` and fails closed on tool errors).
+- **P1.3** — `render-demo-gif.py` probes per-platform font paths.
+- **P2.5** — shared `substation/emit/_tcp.py`; emitters keep only PDU builders.
+- **P2.6** — shared `substation/protocols/_common.py` + `substation/_yaml.py`.
+- **P2.7** — `load_rule` cached by resolved path; demo loads the registry once.
+- **P2.8** — deferred/inner imports hoisted; loader validates `description`;
+  streaming I/O deliberately deferred (current scale, as the review noted).
+- **P3.9** — CLI: `--version`, `list`, `validate`, `coverage`, multi-file
+  `demo --scenario`, `demo --strict`.
+- **P3.10** — DNP3 X1 scenario renamed `dnp3-anomalous-x1-new-function`; a test
+  now enforces globally unique scenario names. Modbus names stay unprefixed:
+  they appear verbatim in the committed demo transcript/GIF, and uniqueness is
+  now enforced rather than relying on convention.
+- **P3.11** — resolved as documentation: a `zeek --parse-only` CI gate cannot
+  work on stock Zeek (the S3/X1 rules need the icsnpp-s7comm plugin to parse),
+  and `make verify` already executes all four Zeek rules in the ICSNPP
+  container. The S3/X1 rules now state the plugin expectation explicitly.
+- **P3.12** — `_EXPECTED_FIRE_HITS` pins exact hit indices per validated
+  Tier-1 fire case, with a completeness check.
+- **P3.13** — probe log rotates at `log_max_bytes` (default 50 MiB);
+  shared-timestamp note added.
+- **P3.14** — Sigma UUID uniqueness test; Zeek `@load` comments; single
+  coverage snapshot (`docs/coverage/` only); guard thread-safety docstring;
+  coverage-map width derives from content (floor 60, output unchanged).
