@@ -30,6 +30,7 @@ dependencies = [
 dev = [
     "ruff==0.15.8",
     "mypy==1.19.1",
+    "types-PyYAML==6.0.12.20260518",  # real yaml stubs so the strict loaders type-check (no Any).
     "pytest==9.0.3",  # 9.0.2 had CVE-2025-71176 (tmp-dir perms); 9.0.3 fixes it.
     "bandit==1.9.4",
     "pip-audit==2.10.0",
@@ -80,8 +81,10 @@ files = ["substation", "tests"]
 [[tool.mypy.overrides]]
 # Third-party libs without type stubs (revisited as code lands). pytest ships
 # py.typed and is fully typed when visible; this only matters when mypy runs in
-# an isolated env (e.g. a uv-managed tool) that can't see the test deps.
-module = ["scapy.*", "sigma.*", "yaml", "yaml.*", "pytest", "pytest.*"]
+# an isolated env (e.g. a uv-managed tool) that can't see the test deps. yaml is
+# NOT listed: types-PyYAML is a pinned dev dependency, so the strict YAML loader
+# subclasses are genuinely type-checked.
+module = ["scapy.*", "sigma.*", "pytest", "pytest.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
