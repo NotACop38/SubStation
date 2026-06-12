@@ -124,6 +124,38 @@ exchanges:
     assert "not an IPv4 address" in err
 
 
+def test_demo_rejects_duplicate_scenario_names_in_one_run(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    """Two files sharing a scenario name would silently overwrite artifacts."""
+    first = tmp_path / "first.yaml"
+    second = tmp_path / "second.yaml"
+    yaml_text = _BROKEN_CONTRACT_YAML.replace('fires: ["M1"]', "fires: []")
+    first.write_text(yaml_text, encoding="utf-8")
+    second.write_text(yaml_text, encoding="utf-8")
+    rc = cli.main(["demo", "--scenario", str(first), str(second), "--artifacts", str(tmp_path)])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "reuses scenario name 'broken-contract'" in err
+    assert "first.yaml" in err
+
+
+@pytest.mark.parametrize("command", [["list"], ["demo"], ["coverage", "--check"]])
+def test_content_commands_explain_missing_registry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    command: list[str],
+) -> None:
+    """Outside a checkout (plain wheel install) the registry file doesn't exist;
+    content-driven commands must say 'run from a checkout', not dump a bare
+    file-not-found path under site-packages."""
+    monkeypatch.setattr(cli, "REGISTRY_PATH", tmp_path / "absent" / "registry.yaml")
+    rc = cli.main([*command, "--artifacts", str(tmp_path)] if command == ["demo"] else command)
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "detection registry not found" in err
+    assert "repo checkout" in err
+
+
 def test_validate_defaults_to_golden_events(capsys) -> None:  # type: ignore[no-untyped-def]
     rc = cli.main(["validate"])
     assert rc == 0
@@ -149,3 +181,29 @@ def test_coverage_writes_artifacts(tmp_path: Path, capsys) -> None:  # type: ign
     assert rc == 0
     for name in ("coverage.md", "coverage.json", "navigator-layer.json"):
         assert (tmp_path / name).exists()
+
+
+def test_pipe_closed_early_exits_quietly() -> None:
+    """`substation list | head -0` must exit 141 with no traceback.
+
+    The read end is closed BEFORE the child starts, so the EPIPE is
+    deterministic regardless of pipe-buffer capacity or stdout buffering mode
+    (the in-`try` flush guarantees the handler sees it even when block-buffered).
+    """
+    import os
+    import subprocess
+    import sys
+
+    read_fd, write_fd = os.pipe()
+    os.close(read_fd)
+    proc = subprocess.Popen(  # noqa: S603
+        [sys.executable, "-m", "substation.cli", "list"],
+        stdout=write_fd,
+        stderr=subprocess.PIPE,
+        cwd=str(_REPO_ROOT),
+    )
+    os.close(write_fd)
+    _, stderr_bytes = proc.communicate(timeout=60)
+    stderr = stderr_bytes.decode()
+    assert proc.returncode == 141, f"expected quiet SIGPIPE exit, got {proc.returncode}: {stderr}"
+    assert "Traceback" not in stderr and "Exception ignored" not in stderr, stderr

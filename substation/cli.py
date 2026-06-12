@@ -28,7 +28,7 @@ from pathlib import Path
 from substation import __version__
 from substation.coverage import render_coverage_map
 from substation.detect import Hit, run_detections
-from substation.detect.registry import Detection, RegistryError, load_registry
+from substation.detect.registry import REGISTRY_PATH, Detection, RegistryError, load_registry
 from substation.emit import EmitError, write_artifacts
 from substation.protocols.dnp3 import Dnp3Error
 from substation.protocols.modbus import ModbusError
@@ -131,15 +131,14 @@ def _cmd_demo(args: argparse.Namespace) -> int:
 
     # Load the registry once: every scenario evaluates the same detections, and
     # the coverage map renders from the same metadata.
-    try:
-        registry = load_registry()
-    except RegistryError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    registry = _load_registry_or_explain()
+    if registry is None:
         return 1
 
     all_scenarios: list[Scenario] = []
     all_hits: list[Hit] = []
     per_scenario_hits: list[tuple[Scenario, list[Hit]]] = []
+    seen_names: dict[str, Path] = {}
     for scenario_path in scenario_paths:
         # Scenarios live in the repo tree (PRD.md §6.9 keeps scenarios/ outside the
         # package), so they are only present for an in-tree checkout. Fail with an
@@ -156,6 +155,18 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         except ScenarioError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
+        # Artifact filenames derive from scenario names, so two scenarios in one
+        # run sharing a name would silently overwrite each other's PCAP/JSON.
+        if scenario.name in seen_names:
+            print(
+                f"error: {scenario_path} reuses scenario name {scenario.name!r} "
+                f"(already used by {seen_names[scenario.name]}); each scenario in a "
+                "run needs a distinct name because artifacts are written to "
+                f"<artifacts>/{scenario.name}.pcap/.jsonl",
+                file=sys.stderr,
+            )
+            return 1
+        seen_names[scenario.name] = scenario_path
         try:
             emitted = write_artifacts(scenario, artifacts_dir)
         except (EmitError, Dnp3Error, ModbusError, S7Error) as exc:
@@ -236,11 +247,33 @@ def _contract_failures(
     return failures
 
 
-def _cmd_list(_args: argparse.Namespace) -> int:
+def _load_registry_or_explain() -> list[Detection] | None:
+    """Load the detection registry, printing an actionable error when it can't be.
+
+    Substation's detection content (``detections/``, ``scenarios/``) deliberately
+    ships in the repo tree, NOT inside the installed package (PRD §6.9), so the
+    content-driven commands need a checkout — say so instead of surfacing a bare
+    file-not-found path under site-packages.
+    """
+    if not REGISTRY_PATH.exists():
+        print(
+            f"error: detection registry not found at {REGISTRY_PATH}.\n"
+            "Substation's detection content (detections/, scenarios/) ships in the "
+            "repo tree, not the installed package, so this command needs a repo "
+            "checkout: git clone https://github.com/notacop38/substation && cd substation",
+            file=sys.stderr,
+        )
+        return None
     try:
-        registry = load_registry()
+        return load_registry()
     except RegistryError as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return None
+
+
+def _cmd_list(_args: argparse.Namespace) -> int:
+    registry = _load_registry_or_explain()
+    if registry is None:
         return 1
 
     print("Detections (detections/registry.yaml):")
@@ -282,6 +315,10 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
 
 def _cmd_coverage(args: argparse.Namespace) -> int:
+    # Same checkout requirement as list/demo: the coverage map renders from the
+    # registry, which ships in the repo tree, not the installed package.
+    if _load_registry_or_explain() is None:
+        return 1
     from substation.coverage.__main__ import main as coverage_main
 
     argv: list[str] = ["--check"] if args.check else []
@@ -313,6 +350,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     try:
         result: int = args.func(args)
+        # Flush INSIDE the try: with a block-buffered pipe (the common non-TTY
+        # case), an early-closed reader surfaces EPIPE only at flush time — if
+        # that happens at interpreter shutdown instead of here, the handler
+        # below never runs and Python prints "Exception ignored" and exits 120.
+        sys.stdout.flush()
     except BrokenPipeError:
         # Piping into e.g. `head` closes stdout early; exit quietly (the Unix
         # convention, 128 + SIGPIPE) instead of dumping a traceback. Redirect
