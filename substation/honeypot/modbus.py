@@ -569,7 +569,12 @@ class _ProbeLog:
         self._path = path
         self._max_bytes = max_bytes
         path.parent.mkdir(parents=True, exist_ok=True)
-        self._fh = path.open("a", encoding="utf-8")
+        self._fh = self._open()
+
+    def _open(self) -> Any:
+        # newline="\n" disables platform newline translation so the byte
+        # accounting below holds everywhere, not just on POSIX.
+        return self._path.open("a", encoding="utf-8", newline="\n")
 
     def write(self, event: dict[str, Any]) -> None:
         # Validate against the frozen contract before writing so the honeypot can
@@ -586,7 +591,7 @@ class _ProbeLog:
     def _rotate(self) -> None:
         self._fh.close()
         self._path.replace(self._path.with_name(self._path.name + ".1"))
-        self._fh = self._path.open("a", encoding="utf-8")
+        self._fh = self._open()
 
     def close(self) -> None:
         self._fh.close()

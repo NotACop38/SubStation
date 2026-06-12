@@ -84,6 +84,46 @@ def test_demo_strict_fails_on_broken_contract(tmp_path: Path, capsys) -> None:  
     assert "expected M1 to fire but it stayed quiet" in err
 
 
+def test_demo_strict_fails_on_unknown_detection_id(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    """A typo'd exercises id must FAIL strict mode, not be skipped as 'Tier 2'."""
+    scenario = tmp_path / "typo-contract.yaml"
+    scenario.write_text(_BROKEN_CONTRACT_YAML.replace('fires: ["M1"]', 'fires: ["M9"]'), "utf-8")
+    rc = cli.main(["demo", "--strict", "--scenario", str(scenario), "--artifacts", str(tmp_path)])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "Strict contract check FAILED" in err
+    assert "unknown detection 'M9'" in err
+
+
+def test_demo_reports_s7_errors_cleanly(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    """An S7 emission error prints the clean `error:` line, like Modbus/DNP3."""
+    scenario = tmp_path / "bad-s7.yaml"
+    scenario.write_text(
+        """\
+name: bad-s7
+protocol: s7comm
+label: benign
+actors:
+  - id: eng-1
+    role: ews
+    host: not-an-ip
+  - id: plc-1
+    role: plc
+    host: 10.0.2.50
+exchanges:
+  - source: eng-1
+    target: plc-1
+    function: ReadSZL
+""",
+        encoding="utf-8",
+    )
+    rc = cli.main(["demo", "--scenario", str(scenario), "--artifacts", str(tmp_path)])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "not an IPv4 address" in err
+
+
 def test_validate_defaults_to_golden_events(capsys) -> None:  # type: ignore[no-untyped-def]
     rc = cli.main(["validate"])
     assert rc == 0

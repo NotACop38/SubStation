@@ -32,6 +32,7 @@ from substation.detect.registry import Detection, RegistryError, load_registry
 from substation.emit import EmitError, write_artifacts
 from substation.protocols.dnp3 import Dnp3Error
 from substation.protocols.modbus import ModbusError
+from substation.protocols.s7comm import S7Error
 from substation.scenarios import Scenario, ScenarioError, load_scenario, load_scenarios
 
 __all__ = ["main"]
@@ -157,7 +158,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             return 1
         try:
             emitted = write_artifacts(scenario, artifacts_dir)
-        except (EmitError, Dnp3Error, ModbusError) as exc:
+        except (EmitError, Dnp3Error, ModbusError, S7Error) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
 
@@ -211,12 +212,21 @@ def _contract_failures(
 
     Only Tier-1 Sigma detections are checkable here (Tier-2 Zeek/Suricata rules
     run over PCAP in the Tier-2 runner), mirroring the Detection Contract
-    harness's tier scoping.
+    harness's tier scoping — but an ``exercises`` id that names no registered
+    detection at all is a failure, not a skip: silently ignoring a typo'd id
+    would let strict mode report OK without having checked anything.
     """
+    registry_ids = {d.id for d in registry}
     tier1_ids = {d.id for d in registry if d.engine == "sigma" and d.tier == 1}
     failures: list[str] = []
     for scenario, hits in per_scenario_hits:
         fired_ids = {h.detection_id for h in hits}
+        for det_id in (*scenario.exercises.fires, *scenario.exercises.quiet):
+            if det_id not in registry_ids:
+                failures.append(
+                    f"{scenario.name}: exercises names unknown detection {det_id!r} "
+                    f"(known: {', '.join(sorted(registry_ids))})"
+                )
         for det_id in scenario.exercises.fires:
             if det_id in tier1_ids and det_id not in fired_ids:
                 failures.append(f"{scenario.name}: expected {det_id} to fire but it stayed quiet")
@@ -306,10 +316,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     except BrokenPipeError:
         # Piping into e.g. `head` closes stdout early; exit quietly (the Unix
         # convention, 128 + SIGPIPE) instead of dumping a traceback. Redirect
-        # stdout to devnull first so interpreter shutdown doesn't re-raise.
+        # stdout to devnull first so interpreter shutdown doesn't re-raise;
+        # tolerate streams without a real fd (e.g. captured stdout in tests).
+        import contextlib
         import os
 
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        with contextlib.suppress(OSError, ValueError):
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 141
     return result
 
