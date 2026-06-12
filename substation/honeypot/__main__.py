@@ -57,6 +57,13 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Opt in to binding a NON-loopback address. Only on an isolated research segment.",
     )
+    parser.add_argument(
+        "--log-max-bytes",
+        type=int,
+        default=HoneypotConfig.__dataclass_fields__["log_max_bytes"].default,
+        help="Rotate the probe log to <log>.1 when it would exceed this size "
+        "(default: 50 MiB; 0 disables rotation).",
+    )
     return parser
 
 
@@ -69,6 +76,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         bind_host=args.bind,
         port=args.port,
         allow_external=args.allow_external,
+        log_max_bytes=args.log_max_bytes,
     )
     try:
         honeypot = ModbusHoneypot(config)
