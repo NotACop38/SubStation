@@ -19,6 +19,7 @@ mechanism (spike 03 "Scope / follow-ups").
 
 from __future__ import annotations
 
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -47,8 +48,19 @@ def parse_rule(rule_yaml: str) -> Any:
 
 
 def load_rule(path: str | Path) -> Any:
-    """Load and parse a Sigma rule file into a single pySigma ``SigmaRule``."""
-    return parse_rule(Path(path).read_text(encoding="utf-8"))
+    """Load and parse a Sigma rule file into a single pySigma ``SigmaRule``.
+
+    Parsed rules are cached by resolved path: the demo and the Detection
+    Contract harness evaluate the same shipped rules over many scenarios, and
+    re-reading + re-parsing the YAML per scenario is pure waste. Shipped rules
+    never change mid-process; the cache is invisible to correctness.
+    """
+    return _load_rule_cached(str(Path(path).resolve()))
+
+
+@cache
+def _load_rule_cached(resolved_path: str) -> Any:
+    return parse_rule(Path(resolved_path).read_text(encoding="utf-8"))
 
 
 def _lookup(event: dict[str, Any], dotted: str) -> Any:

@@ -21,6 +21,7 @@ from pathlib import Path
 
 from substation.coverage import render_coverage_map
 from substation.detect import Hit, run_detections
+from substation.detect.registry import RegistryError, load_registry
 from substation.emit import EmitError, write_artifacts
 from substation.protocols.dnp3 import Dnp3Error
 from substation.protocols.modbus import ModbusError
@@ -76,6 +77,14 @@ def _cmd_demo(args: argparse.Namespace) -> int:
 
     print("substation demo · Tier-1 loop: generate -> detect -> report (pure Python)\n")
 
+    # Load the registry once: every scenario evaluates the same detections, and
+    # the coverage map renders from the same metadata.
+    try:
+        registry = load_registry()
+    except RegistryError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
     all_scenarios: list[Scenario] = []
     all_hits: list[Hit] = []
     for scenario_path in scenario_paths:
@@ -100,7 +109,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 1
 
-        hits: list[Hit] = run_detections(emitted.jsonl)
+        hits: list[Hit] = run_detections(emitted.jsonl, registry)
         if hits:
             ids = ", ".join(sorted({h.detection_id for h in hits}))
             verdict = f"FIRED {len(hits)} hit(s) -> {ids}"
@@ -114,7 +123,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         all_hits.extend(hits)
 
     print()
-    print(render_coverage_map(all_scenarios, all_hits))
+    print(render_coverage_map(all_scenarios, all_hits, registry))
     fired = sorted({h.detection_id for h in all_hits})
     is_default_set = args.scenario is None
     if is_default_set and fired:
