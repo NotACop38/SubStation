@@ -10,6 +10,11 @@ Emission runs inside the guard, so any accidental network path — directly or v
 scapy, which ultimately transmits through a kernel socket — fails loudly instead
 of putting packets on the wire. Writing PCAP/JSON uses ordinary file I/O (``open``),
 which the guard leaves untouched.
+
+The guard patches ``socket.socket`` methods process-wide and is therefore not
+thread-safe; the emitters are single-threaded by design, and the complementary
+static AST scan (``tests/test_no_raw_socket_send.py``) covers the whole package
+regardless of runtime path.
 """
 
 from __future__ import annotations

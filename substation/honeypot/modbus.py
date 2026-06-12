@@ -26,7 +26,6 @@ logs cannot drift from the contract the detections bind to (``docs/schema.md``).
 
 from __future__ import annotations
 
-import hashlib
 import json
 import socket
 import struct
@@ -36,6 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from substation.protocols._common import zeek_uid
 from substation.protocols.modbus import (
     DEFAULT_MODBUS_PORT,
     READ_COILS,
@@ -163,18 +163,6 @@ class _Parsed:
     unit: int
     func_code: int
     data: bytes
-
-
-def _zeek_uid(key: str) -> str:
-    """Deterministic Zeek-style connection uid (``C`` + 17 base62 chars)."""
-    b62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=13).digest()
-    n = int.from_bytes(digest, "big")
-    chars: list[str] = []
-    for _ in range(17):
-        n, rem = divmod(n, 62)
-        chars.append(b62[rem])
-    return "C" + "".join(chars)
 
 
 def _parse_frame(raw: bytes) -> _Parsed | None:
@@ -538,6 +526,11 @@ class HoneypotConfig:
     Binding any non-loopback address (to actually capture remote probes on an
     isolated research segment) requires ``allow_external=True`` as a deliberate
     opt-in — anything else raises :class:`HoneypotConfigError`.
+
+    ``log_max_bytes`` bounds the probe log: when a write would push the log past
+    it, the log rotates to ``<log_path>.1`` (one generation, replacing any
+    previous rotation) so a noisy scanner cannot grow it unboundedly. ``0``
+    disables rotation.
     """
 
     log_path: Path
@@ -546,10 +539,13 @@ class HoneypotConfig:
     allow_external: bool = False
     recv_timeout: float = 10.0
     backlog: int = 8
+    log_max_bytes: int = 50 * 1024 * 1024  # 50 MiB per generation
 
     def validate(self) -> None:
         if not 1 <= self.port <= 65535:
             raise HoneypotConfigError(f"port {self.port} out of range (1-65535)")
+        if self.log_max_bytes < 0:
+            raise HoneypotConfigError("log_max_bytes must be >= 0 (0 disables rotation)")
         if self.bind_host not in _LOOPBACK_HOSTS and not self.allow_external:
             raise HoneypotConfigError(
                 f"refusing to bind non-loopback address {self.bind_host!r} without "
@@ -560,19 +556,42 @@ class HoneypotConfig:
 
 
 class _ProbeLog:
-    """Append-only writer for schema-validated honeypot events."""
+    """Append-only, size-bounded writer for schema-validated honeypot events.
 
-    def __init__(self, path: Path) -> None:
+    When a write would push the log past ``max_bytes``, the current file rotates
+    to ``<path>.1`` (replacing any previous rotation) and a fresh log starts, so
+    a noisy scanner caps disk use at ~2x ``max_bytes`` instead of growing the
+    log without bound. ``max_bytes=0`` disables rotation.
+    """
+
+    def __init__(self, path: Path, max_bytes: int = 0) -> None:
         self._schema = load_event_schema()
+        self._path = path
+        self._max_bytes = max_bytes
         path.parent.mkdir(parents=True, exist_ok=True)
-        self._fh = path.open("a", encoding="utf-8")
+        self._fh = self._open()
+
+    def _open(self) -> Any:
+        # newline="\n" disables platform newline translation so the byte
+        # accounting below holds everywhere, not just on POSIX.
+        return self._path.open("a", encoding="utf-8", newline="\n")
 
     def write(self, event: dict[str, Any]) -> None:
         # Validate against the frozen contract before writing so the honeypot can
         # never emit telemetry the detections cannot consume (docs/schema.md).
         validate_event(event, self._schema)
-        self._fh.write(json.dumps(event, allow_nan=False) + "\n")
+        line = json.dumps(event, allow_nan=False) + "\n"
+        # json.dumps default ensure_ascii means one char == one byte here, so
+        # tell() + len(line) is the post-write byte size.
+        if self._max_bytes and self._fh.tell() + len(line) > self._max_bytes:
+            self._rotate()
+        self._fh.write(line)
         self._fh.flush()
+
+    def _rotate(self) -> None:
+        self._fh.close()
+        self._path.replace(self._path.with_name(self._path.name + ".1"))
+        self._fh = self._open()
 
     def close(self) -> None:
         self._fh.close()
@@ -591,13 +610,13 @@ class ModbusHoneypot:
         config.validate()
         self.config = config
         self.device = StubDevice()
-        self._log = _ProbeLog(config.log_path)
+        self._log = _ProbeLog(config.log_path, config.log_max_bytes)
         self._conn_seq = 0
 
     def _next_uid(self, peer: tuple[str, int]) -> str:
         self._conn_seq += 1
         key = f"{peer[0]}:{peer[1]}>{self.config.bind_host}:{self.config.port}#{self._conn_seq}"
-        return _zeek_uid(key)
+        return zeek_uid(key)
 
     def _handle_connection(self, sock: socket.socket, peer: tuple[str, int]) -> None:
         uid = self._next_uid(peer)
@@ -617,6 +636,9 @@ class ModbusHoneypot:
                 return  # peer closed
             buffer.extend(chunk)
             # A scanner may pipeline several frames; drain every complete ADU.
+            # NB: the probe and its reply share one time.time() timestamp (unlike
+            # the simulator's modeled 50ms turnaround); a detection keying on
+            # request->response ordering should use the line order, not ts deltas.
             for raw in _split_adus(buffer):
                 reply, events = process_frame(
                     raw,

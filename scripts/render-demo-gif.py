@@ -123,8 +123,43 @@ TOP = BAR_H + 16
 FONT_SIZE = 15
 SCALE = 2  # supersample, then downscale for crisp text
 
-FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
-FONT_BLD = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
+# Monospace font candidates per platform. DejaVu Sans Mono is the committed
+# asset's face; the macOS/extra fallbacks keep `make demo-gif` runnable anywhere
+# (the output is only byte-reproducible where DejaVu is available).
+_FONT_CANDIDATES = {
+    "regular": [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",  # Debian/Ubuntu
+        "/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf",  # Fedora
+        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",  # Arch
+        "/opt/homebrew/share/fonts/DejaVuSansMono.ttf",  # macOS (homebrew font-dejavu)
+        "/Library/Fonts/DejaVuSansMono.ttf",  # macOS (manual install)
+        "/System/Library/Fonts/Menlo.ttc",  # macOS system fallback
+    ],
+    "bold": [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+        "/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono-Bold.ttf",
+        "/usr/share/fonts/TTF/DejaVuSansMono-Bold.ttf",
+        "/opt/homebrew/share/fonts/DejaVuSansMono-Bold.ttf",
+        "/Library/Fonts/DejaVuSansMono-Bold.ttf",
+        "/System/Library/Fonts/Menlo.ttc",
+    ],
+}
+
+
+def _find_font(kind):
+    for candidate in _FONT_CANDIDATES[kind]:
+        if pathlib.Path(candidate).exists():
+            return candidate
+    raise SystemExit(
+        f"render-demo-gif: no {kind} monospace font found. Install DejaVu Sans Mono "
+        "(Debian/Ubuntu: `apt install fonts-dejavu-core`; macOS: "
+        "`brew install --cask font-dejavu`) or add your font's path to "
+        "_FONT_CANDIDATES in scripts/render-demo-gif.py."
+    )
+
+
+FONT_REG = _find_font("regular")
+FONT_BLD = _find_font("bold")
 
 
 def _font(bold):

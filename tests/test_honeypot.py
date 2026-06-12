@@ -238,3 +238,43 @@ def test_processing_opens_no_socket(monkeypatch: pytest.MonkeyPatch) -> None:
     reply, events = _run(_mbap_frame(0x03, struct.pack(">HH", 0, 2)))
     assert reply is not None
     _assert_schema_valid(events)
+
+
+def test_probe_log_rotates_at_max_bytes(tmp_path: Path) -> None:
+    """The probe log rotates to <path>.1 instead of growing without bound."""
+    import json
+
+    from substation.honeypot.modbus import _ProbeLog
+
+    _, events = _run(_mbap_frame(0x03, struct.pack(">HH", 0, 1)))
+    line_size = len(json.dumps(events[0])) + 1
+    log_path = tmp_path / "probes.jsonl"
+    # Cap at ~3 lines so the 4th write must rotate.
+    log = _ProbeLog(log_path, max_bytes=3 * line_size + 10)
+    for _ in range(4):
+        log.write(events[0])
+    log.close()
+
+    rotated = tmp_path / "probes.jsonl.1"
+    assert rotated.exists(), "log did not rotate at max_bytes"
+    assert len(rotated.read_text(encoding="utf-8").splitlines()) == 3
+    assert len(log_path.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_probe_log_unbounded_when_rotation_disabled(tmp_path: Path) -> None:
+    from substation.honeypot.modbus import _ProbeLog
+
+    _, events = _run(_mbap_frame(0x03, struct.pack(">HH", 0, 1)))
+    log_path = tmp_path / "probes.jsonl"
+    log = _ProbeLog(log_path, max_bytes=0)
+    for _ in range(5):
+        log.write(events[0])
+    log.close()
+    assert not (tmp_path / "probes.jsonl.1").exists()
+    assert len(log_path.read_text(encoding="utf-8").splitlines()) == 5
+
+
+def test_config_rejects_negative_log_max_bytes(tmp_path: Path) -> None:
+    config = HoneypotConfig(log_path=tmp_path / "p.jsonl", log_max_bytes=-1)
+    with pytest.raises(HoneypotConfigError, match="log_max_bytes"):
+        config.validate()

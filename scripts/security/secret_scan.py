@@ -17,6 +17,9 @@ Exits non-zero if any backend reports a finding. Run:
 
 from __future__ import annotations
 
+import importlib.util
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -54,9 +57,7 @@ def _git_tracked_files() -> list[Path]:
 def _docker_usable() -> bool:
     if shutil.which("docker") is None:
         return False
-    return subprocess.run(
-        ["docker", "info"], capture_output=True, text=True
-    ).returncode == 0
+    return subprocess.run(["docker", "info"], capture_output=True, text=True).returncode == 0
 
 
 def _run_gitleaks_native() -> int | None:
@@ -83,9 +84,17 @@ def _run_gitleaks_docker() -> int | None:
     print("secret_scan: backend = gitleaks (Docker)")
     return subprocess.run(
         [
-            "docker", "run", "--rm", "-v", f"{_REPO_ROOT}:/repo:ro",
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{_REPO_ROOT}:/repo:ro",
             GITLEAKS_DOCKER_IMAGE,
-            "detect", "--source", "/repo", "--no-banner", "--redact",
+            "detect",
+            "--source",
+            "/repo",
+            "--no-banner",
+            "--redact",
         ],
     ).returncode
 
@@ -93,8 +102,6 @@ def _run_gitleaks_docker() -> int | None:
 def _run_detect_secrets() -> int | None:
     """Run detect-secrets over tracked files. Returns exit code, or None if absent."""
     try:
-        import importlib.util
-
         if importlib.util.find_spec("detect_secrets") is None:
             return None
     except ImportError:
@@ -112,7 +119,6 @@ def _run_detect_secrets() -> int | None:
     if proc.returncode != 0:
         sys.stderr.write(proc.stderr)
         return proc.returncode
-    import json
 
     report = json.loads(proc.stdout or "{}")
     findings = report.get("results", {})
@@ -151,8 +157,6 @@ def _run_builtin() -> int:
 
 
 def main() -> int:
-    import os
-
     # Explicit opt-in to gitleaks-via-Docker (the canonical scanner) when asked.
     if os.environ.get("SUBSTATION_SECRET_SCANNER") == "gitleaks-docker":
         rc = _run_gitleaks_docker()

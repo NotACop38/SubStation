@@ -73,3 +73,23 @@ def test_registry_rejects_malformed_attack_technique_id(tmp_path: Path) -> None:
 
     with pytest.raises(RegistryError, match="techniques\\[0\\].id"):
         load_registry(path)
+
+
+def test_sigma_rule_uuids_are_unique_and_present() -> None:
+    """Every shipped Sigma rule must carry a distinct `id:` UUID.
+
+    Sigma identifies rules by their UUID in SIEM imports and rule references; a
+    copy-pasted rule that keeps its source's UUID would silently collide there
+    even though Substation's own detection IDs (M1, D1, ...) stay distinct.
+    """
+    from substation.detect.sigma_eval import load_rule
+
+    seen: dict[str, str] = {}
+    for det in load_registry():
+        if det.engine != "sigma":
+            continue
+        rule = load_rule(det.rule_path)
+        assert rule.id is not None, f"{det.id}: Sigma rule {det.rule} has no id: UUID"
+        uuid = str(rule.id)
+        assert uuid not in seen, f"{det.id}: Sigma rule UUID {uuid} duplicates {seen[uuid]}'s rule"
+        seen[uuid] = det.id

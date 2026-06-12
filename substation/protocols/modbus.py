@@ -20,13 +20,11 @@ gate). Numeric function codes are Modbus Application Protocol spec v1.1b3 (PRD ย
 
 from __future__ import annotations
 
-import hashlib
-import ipaddress
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from substation.protocols import _common
 from substation.scenarios import Actor, Protocol, Scenario
 
 __all__ = [
@@ -52,8 +50,6 @@ __all__ = [
 DEFAULT_MODBUS_PORT = 502
 # Synthetic outstation turnaround between a request and its response (seconds).
 RESPONSE_DELAY = 0.05
-# IANA dynamic/ephemeral port range start; client ports are assigned from here.
-_EPHEMERAL_BASE = 49152
 
 # Modbus function codes (Modbus Application Protocol Specification v1.1b3, PRD ยง9).
 READ_COILS = 0x01
@@ -235,14 +231,8 @@ class ModbusEvent:
 
 # --- function-name resolution ------------------------------------------------
 
-
-def _normalize_function(name: str) -> str:
-    """Collapse a function label to a comparison token (case/separator-insensitive)."""
-    return re.sub(r"[^a-z0-9]", "", name.lower())
-
-
 _FUNCTION_BY_TOKEN: dict[str, int] = {
-    _normalize_function(label): code for code, label in FUNCTION_NAMES.items()
+    _common.normalize_function(label): code for code, label in FUNCTION_NAMES.items()
 }
 
 
@@ -283,7 +273,7 @@ def resolve_function(function: str) -> int:
     that names no known function, or a code outside the request range, raises
     :class:`ModbusError`.
     """
-    token = _normalize_function(function)
+    token = _common.normalize_function(function)
     if token in _FUNCTION_BY_TOKEN:
         return _FUNCTION_BY_TOKEN[token]
     raw = function.strip().lower()
@@ -332,12 +322,7 @@ def _opt_int(
 
 
 def _check_int(value: object, where: str, lo: int, hi: int) -> int:
-    # bool is an int subclass in Python; a coil/register count is never a bool.
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ModbusError(f"{where}: expected an integer")
-    if not lo <= value <= hi:
-        raise ModbusError(f"{where}: {value} out of range ({lo}-{hi})")
-    return value
+    return _common.check_int(value, where, lo, hi, error=ModbusError)
 
 
 def _req_bit(params: Mapping[str, object], key: str, where: str) -> int:
@@ -469,29 +454,9 @@ def _abnormal_payload(params: Mapping[str, object], where: str) -> _Payload:
 
 # --- connection bookkeeping --------------------------------------------------
 
-_B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-
-def _zeek_uid(key: str) -> str:
-    """Deterministic Zeek-style connection uid (``C`` + 17 base62 chars)."""
-    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=13).digest()
-    n = int.from_bytes(digest, "big")
-    chars: list[str] = []
-    for _ in range(17):
-        n, rem = divmod(n, 62)
-        chars.append(_B62[rem])
-    return "C" + "".join(chars)
-
 
 def _ipv4(host: str, actor_id: str) -> str:
-    try:
-        ipaddress.IPv4Address(host)
-    except ipaddress.AddressValueError:
-        raise ModbusError(
-            f"actor {actor_id!r} host {host!r} is not an IPv4 address "
-            "(Modbus/TCP PCAP emission requires IPv4)"
-        ) from None
-    return host
+    return _common.ipv4_host(host, actor_id, proto="Modbus/TCP", error=ModbusError)
 
 
 @dataclass(slots=True)
@@ -521,11 +486,9 @@ def _connection(conns: dict[tuple[str, str], _Conn], src: Actor, dst: Actor) -> 
         orig_h = _ipv4(src.host, src.id)
         resp_h = _ipv4(dst.host, dst.id)
         resp_p = dst.port if dst.port is not None else DEFAULT_MODBUS_PORT
-        orig_p = _EPHEMERAL_BASE + len(conns)
-        if orig_p > _U16:
-            raise ModbusError("too many distinct connections for the ephemeral port range")
+        orig_p = _common.ephemeral_port(len(conns), error=ModbusError)
         conn = _Conn(
-            uid=_zeek_uid(f"{orig_h}:{orig_p}>{resp_h}:{resp_p}"),
+            uid=_common.zeek_uid(f"{orig_h}:{orig_p}>{resp_h}:{resp_p}"),
             orig_h=orig_h,
             orig_p=orig_p,
             resp_h=resp_h,

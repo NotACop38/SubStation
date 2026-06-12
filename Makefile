@@ -33,37 +33,39 @@ ci: check-python format-check lint type test schema coverage-build coverage-chec
 	@echo "--- security gate (bandit + dep audit + secret scan + SBOM + files-only invariant) ran under 'security'"
 	@echo "ci: OK"
 
+# Every tool runs as `$(PY) -m <tool>` so the gate always checks the interpreter
+# the package is installed in. Bare tool names can resolve to shims bound to a
+# different Python (uv tools, pipx, OS packages) and silently test the wrong env.
 format: ## Auto-format the codebase (ruff)
-	ruff format $(SRC)
+	$(PY) -m ruff format $(SRC)
 
 format-check: ## Verify formatting without writing (ruff)
-	ruff format --check $(SRC)
+	$(PY) -m ruff format --check $(SRC)
 
 lint: ## Lint (ruff)
-	ruff check $(SRC)
+	$(PY) -m ruff check $(SRC)
 
 type: ## Type-check in strict mode (mypy)
-	mypy
+	$(PY) -m mypy
 
-test: ## Run unit tests (pytest)
-	pytest
+test: check-python ## Run unit tests (pytest)
+	$(PY) -m pytest
 
 schema: ## Validate emitted .jsonl events against the frozen event-log JSON Schema
 	$(PY) -m substation.schema
 
 coverage-build: ## Generate the ATT&CK-for-ICS coverage map + Navigator layer (from the registry)
-	$(PY) -m substation.coverage --out coverage
-	$(PY) -m substation.coverage --out docs/coverage   # committed, published snapshot
+	$(PY) -m substation.coverage --out docs/coverage   # the committed, published snapshot
 
 coverage-check: ## Verify the committed coverage snapshot (docs/coverage) matches the registry
 	$(PY) -m substation.coverage --check --out docs/coverage
 
 security: check-python ## Security gate: bandit + dep audit + secret scan + SBOM + files-only invariant
-	bandit -q -r $(PKG)
+	$(PY) -m bandit -q -r $(PKG)
 	$(PY) scripts/security/audit_deps.py
 	$(PY) scripts/security/secret_scan.py
 	$(PY) scripts/security/sbom.py
-	pytest -q tests/test_no_raw_socket_send.py tests/test_files_only.py
+	$(PY) -m pytest -q tests/test_no_raw_socket_send.py tests/test_files_only.py
 
 ## ---------------------------------------------------------------------------
 ## Product targets

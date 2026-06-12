@@ -56,6 +56,11 @@
 @load base/protocols/modbus
 @load base/protocols/dnp3
 @load base/frameworks/notice
+# No @load for the S7 analyzer: the s7comm_header / s7comm_read_szl /
+# s7comm_plus_header events handled below come from the icsnpp-s7comm package,
+# which the Tier-2 container (and any production deployment) loads alongside
+# this script (e.g. `zeek ... icsnpp/s7comm`). The Modbus/DNP3 paths above use
+# base analyzers and work on stock Zeek.
 
 module CrossProtoBaseline;
 

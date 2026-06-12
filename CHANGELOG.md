@@ -9,6 +9,52 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ## [Unreleased]
 
+### Added
+
+- **CLI front door** — `substation --version`; `substation list` (registered
+  detections + bundled scenarios); `substation validate` and `substation
+  coverage` as first-class spellings of the `python -m` entrypoints;
+  `demo --scenario` accepts multiple files; and `demo --strict` exits non-zero
+  unless every scenario's `exercises` contract holds (a one-command smoke test
+  for scenario edits).
+- **Exact-hit Detection Contract net** — every validated Tier-1 fire case now
+  pins the exact event indices its rule must hit
+  (`tests/test_detection_contract.py::_EXPECTED_FIRE_HITS`), so a rule that
+  over-matches but still passes fire/quiet is caught. Plus: Sigma rule `id:`
+  UUIDs must be unique, and scenario names must be globally unique across
+  protocol trees (they are artifact basenames).
+- **Honeypot probe-log rotation** — the probe log rotates to `<log>.1` at
+  `log_max_bytes` (default 50 MiB, `--log-max-bytes`, 0 disables), so a noisy
+  scanner can no longer grow it unboundedly.
+
+### Changed
+
+- `make ci` invokes every tool as `$(PY) -m <tool>` so the gate always checks
+  the interpreter the package is installed in (bare tool names could resolve
+  to shims bound to a different Python and fail or vacuously pass);
+  `make test` gained the same Python-version guard as the other stages;
+  `types-PyYAML` is pinned in the dev extra so the strict YAML loaders
+  type-check for real.
+- Internal dedup, behavior-identical (artifacts verified byte-identical):
+  one shared synthetic-TCP PCAP scaffold (`substation/emit/_tcp.py`), shared
+  protocol helpers (`substation/protocols/_common.py`), one strict YAML loader
+  (`substation/_yaml.py`).
+- Sigma rules are parsed once per process and the demo loads the registry
+  once per run instead of per scenario.
+- `make coverage-build` writes a single output — the committed
+  `docs/coverage/` snapshot — instead of also writing a scratch `coverage/`
+  directory nothing consumed.
+- The DNP3 X1 scenario is renamed `dnp3-anomalous-x1-new-function`, matching
+  its tree's naming convention (file name unchanged).
+
+### Fixed
+
+- `scripts/render-demo-gif.py` probes per-platform font paths instead of
+  hardcoding the Debian DejaVu location, and fails with an actionable hint.
+- The scenario loader rejects a non-string `description` instead of silently
+  stringifying it; piping CLI output into `head` exits quietly instead of
+  dumping a traceback.
+
 ## [0.1.0] - 2026-06-04
 
 ### Added

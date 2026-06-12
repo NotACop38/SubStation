@@ -234,3 +234,17 @@ def test_detection_in_both_fires_and_quiet_rejected(tmp_path: Path) -> None:
     with pytest.raises(ScenarioError) as exc:
         load_scenario(_write(tmp_path, text))
     assert "both" in str(exc.value)
+
+
+def test_scenario_names_are_globally_unique() -> None:
+    """Scenario names are artifact basenames (artifacts/<name>.pcap).
+
+    Two scenarios from different protocol trees sharing a name would silently
+    overwrite each other's artifacts when emitted into one directory (the demo
+    and the Tier-2 runner both do), so names must be unique across ALL of
+    scenarios/, not just within a protocol tree.
+    """
+    scenarios = load_scenarios(Path(__file__).resolve().parent.parent / "scenarios")
+    names = [s.name for s in scenarios]
+    duplicates = sorted({n for n in names if names.count(n) > 1})
+    assert not duplicates, f"duplicate scenario name(s) across protocol trees: {duplicates}"

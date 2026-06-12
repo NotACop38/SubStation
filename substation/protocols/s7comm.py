@@ -22,13 +22,12 @@ never invented from memory (CLAUDE.md VERIFY gate). S7comm/-plus have no open sp
 
 from __future__ import annotations
 
-import hashlib
-import ipaddress
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from substation.protocols import _common
 from substation.scenarios import Actor, ActorRole, Protocol, Scenario
 
 __all__ = [
@@ -50,7 +49,6 @@ __all__ = [
 DEFAULT_S7_PORT = 102  # S7comm/COTP/TPKT well-known TCP port (ICSNPP main.zeek).
 # Synthetic PLC turnaround between a request and its response (seconds).
 RESPONSE_DELAY = 0.05
-_EPHEMERAL_BASE = 49152  # IANA dynamic/ephemeral client-port range start.
 
 # --- verified ICSNPP value tables (consts.zeek; spike 06) --------------------
 
@@ -243,11 +241,6 @@ class S7Event:
 # --- function-name resolution (mirrors dnp3.resolve_function) ----------------
 
 
-def _normalize_function(name: str) -> str:
-    """Collapse a function label to a comparison token (case/separator-insensitive)."""
-    return re.sub(r"[^a-z0-9]", "", name.lower())
-
-
 def resolve_function(function: str) -> str:
     """Resolve a scenario ``function`` string to a supported S7 operation token.
 
@@ -255,7 +248,7 @@ def resolve_function(function: str) -> str:
     Download``, ``Explore``). Raises :class:`S7Error` for anything not in the
     supported vocabulary.
     """
-    token = _normalize_function(function)
+    token = _common.normalize_function(function)
     if token in _JOB_OPS or token in _USERDATA_OPS or token in _PLUS_OPS:
         return token
     supported = sorted({*_JOB_OPS, *_USERDATA_OPS, *_PLUS_OPS})
@@ -268,24 +261,11 @@ def resolve_function(function: str) -> str:
 def _opt_int(
     params: Mapping[str, object], key: str, where: str, lo: int, hi: int, default: int
 ) -> int:
-    if key not in params:
-        return default
-    value = params[key]
-    # bool is an int subclass; an SZL id / index is never a bool.
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise S7Error(f"{where}.{key}: expected an integer")
-    if not lo <= value <= hi:
-        raise S7Error(f"{where}.{key}: {value} out of range ({lo}-{hi})")
-    return value
+    return _common.opt_int(params, key, where, lo, hi, default, error=S7Error)
 
 
 def _opt_str(params: Mapping[str, object], key: str, where: str, default: str) -> str:
-    if key not in params:
-        return default
-    value = params[key]
-    if not isinstance(value, str) or not value:
-        raise S7Error(f"{where}.{key}: expected a non-empty string")
-    return value
+    return _common.opt_str(params, key, where, default, error=S7Error)
 
 
 def _opt_plc_control_service(params: Mapping[str, object], where: str) -> str:
@@ -315,29 +295,9 @@ def _opt_block_number(params: Mapping[str, object], where: str) -> str:
 
 # --- connection bookkeeping (mirrors dnp3) -----------------------------------
 
-_B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-
-def _zeek_uid(key: str) -> str:
-    """Deterministic Zeek-style connection uid (``C`` + 17 base62 chars)."""
-    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=13).digest()
-    n = int.from_bytes(digest, "big")
-    chars: list[str] = []
-    for _ in range(17):
-        n, rem = divmod(n, 62)
-        chars.append(_B62[rem])
-    return "C" + "".join(chars)
-
 
 def _ipv4(host: str, actor_id: str) -> str:
-    try:
-        ipaddress.IPv4Address(host)
-    except ipaddress.AddressValueError:
-        raise S7Error(
-            f"actor {actor_id!r} host {host!r} is not an IPv4 address "
-            "(S7comm/TCP PCAP emission requires IPv4)"
-        ) from None
-    return host
+    return _common.ipv4_host(host, actor_id, proto="S7comm/TCP", error=S7Error)
 
 
 @dataclass(slots=True)
@@ -366,11 +326,9 @@ def _connection(conns: dict[tuple[str, str], _Conn], master: Actor, plc: Actor) 
         orig_h = _ipv4(master.host, master.id)
         resp_h = _ipv4(plc.host, plc.id)
         resp_p = plc.port if plc.port is not None else DEFAULT_S7_PORT
-        orig_p = _EPHEMERAL_BASE + len(conns)
-        if orig_p > _U16:
-            raise S7Error("too many distinct connections for the ephemeral port range")
+        orig_p = _common.ephemeral_port(len(conns), error=S7Error)
         conn = _Conn(
-            uid=_zeek_uid(f"{orig_h}:{orig_p}>{resp_h}:{resp_p}"),
+            uid=_common.zeek_uid(f"{orig_h}:{orig_p}>{resp_h}:{resp_p}"),
             orig_h=orig_h,
             orig_p=orig_p,
             resp_h=resp_h,

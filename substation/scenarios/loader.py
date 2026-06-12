@@ -20,6 +20,8 @@ from types import MappingProxyType
 
 import yaml
 
+from substation._yaml import safe_load_strict
+
 from .model import (
     Actor,
     ActorRole,
@@ -55,40 +57,6 @@ _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 class ScenarioError(ValueError):
     """Raised when a scenario file is malformed or internally inconsistent."""
-
-
-class _StrictLoader(yaml.SafeLoader):
-    """A safe YAML loader that rejects duplicate mapping keys.
-
-    PyYAML's default safe loader silently keeps the *last* value when a key is
-    repeated, so a hand-authored scenario with two ``label:`` (or ``exercises:``)
-    blocks could quietly change the Detection Contract. The strict loader makes
-    that a parse error instead.
-    """
-
-
-def _construct_mapping_no_duplicates(
-    loader: _StrictLoader, node: yaml.nodes.MappingNode, deep: bool = False
-) -> dict[object, object]:
-    loader.flatten_mapping(node)
-    mapping: dict[object, object] = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        if key in mapping:
-            raise yaml.constructor.ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"found duplicate key {key!r}",
-                key_node.start_mark,
-            )
-        mapping[key] = loader.construct_object(value_node, deep=deep)
-    return mapping
-
-
-_StrictLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    _construct_mapping_no_duplicates,
-)
 
 
 def _require_mapping(value: object, where: str) -> dict[str, object]:
@@ -301,6 +269,10 @@ def _parse_scenario(raw: object) -> Scenario:
             "(allowed: letters, digits, '.', '_', '-'; no path separators)"
         )
 
+    description = data.get("description", "")
+    if not isinstance(description, str):
+        raise ScenarioError("scenario.description: expected a string")
+
     return Scenario(
         name=name,
         protocol=protocol,
@@ -309,7 +281,7 @@ def _parse_scenario(raw: object) -> Scenario:
         exchanges=exchanges,
         timing=_parse_timing(data.get("timing")),
         exercises=_parse_exercises(data.get("exercises")),
-        description=str(data.get("description", "")),
+        description=description,
     )
 
 
@@ -321,11 +293,9 @@ def load_scenario(path: str | Path) -> Scenario:
     except OSError as exc:
         raise ScenarioError(f"{p}: cannot read scenario file: {exc}") from exc
     try:
-        # _StrictLoader is a SafeLoader subclass (no arbitrary object construction)
-        # that additionally rejects duplicate mapping keys; this is as safe as
-        # yaml.safe_load. noqa/nosec silence the ruff/bandit yaml.load heuristics,
-        # which only whitelist the loader by name.
-        raw = yaml.load(text, Loader=_StrictLoader)  # noqa: S506  # nosec B506
+        # Strict-safe parse: duplicate mapping keys (e.g. two `label:` blocks
+        # that could quietly change the Detection Contract) are a parse error.
+        raw = safe_load_strict(text)
     except yaml.YAMLError as exc:
         raise ScenarioError(f"{p}: invalid YAML: {exc}") from exc
     if raw is None:

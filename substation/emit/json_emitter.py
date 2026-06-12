@@ -19,7 +19,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from substation.schema import iter_event_errors, load_event_schema
+from substation.schema import SchemaValidationError, iter_event_errors, load_event_schema
 
 __all__ = ["write_jsonl"]
 
@@ -34,8 +34,6 @@ def write_jsonl(
     guarantees no ``NaN``/``Infinity`` barewords (which the schema gate rejects) can
     ever be emitted.
     """
-    from substation.schema import SchemaValidationError
-
     schema: dict[str, Any] | None = load_event_schema() if validate else None
     lines: list[str] = []
     for index, record in enumerate(records):
