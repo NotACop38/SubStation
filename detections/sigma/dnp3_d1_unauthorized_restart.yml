@@ -12,7 +12,7 @@
 # -----------------------------------------------------------------------------
 title: DNP3 Device Restart From Unauthorized Source
 id: 6e2c1f8a-3b4d-4f1e-9a2c-1d7e5b0a9c34
-status: experimental
+status: stable
 description: |
   A DNP3 device-restart function (COLD_RESTART / WARM_RESTART) issued by a source
   that is not the allow-listed master. Substation detection D1 (PRD.md §5.2):

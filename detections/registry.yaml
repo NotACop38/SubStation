@@ -19,7 +19,9 @@
 # Fields (all required unless noted):
 #   id          detection ID, matches scenario `exercises:` entries.
 #   title       short human title.
-#   protocol    modbus | dnp3 | s7comm  (the closed v1 set, PRD.md §5).
+#   protocol    modbus | dnp3 | s7comm | cross
+#               (the closed v1 protocol set, PRD.md §5, plus `cross` for X1 —
+#               the flagship cross-protocol baseline spanning every protocol).
 #   engine      sigma | zeek | suricata  (the authored rule's engine, PRD.md §6.5).
 #   tier        1 = Tier-1 Sigma-over-JSON (the harness evaluates it directly);
 #               2 = Tier-2 (Zeek/Suricata over PCAP; validated by the Tier-2 runner).

@@ -12,7 +12,7 @@
 # -----------------------------------------------------------------------------
 title: DNP3 Disable Unsolicited Responses From Unauthorized Source
 id: 2a9d4c70-8e51-4b3a-9f6d-0c4b2e7a15de
-status: experimental
+status: stable
 description: |
   A DNP3 DISABLE_UNSOLICITED request from a source that is not the allow-listed
   master. Substation detection D2 (PRD.md §5.2): disabling unsolicited responses
