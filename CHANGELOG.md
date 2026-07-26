@@ -11,6 +11,9 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ### Fixed
 
+- Verify fails clearly when every check is skipped; empty-request fidelity is an
+  explicit skip; S7 availability requires a loadable plugin, not a name-only hit.
+
 - M1 quantity/span gap documented with an acceptance scenario + test.
 
 - DNP3 WRITE (and other object-carrying non-READ verbs) no longer silently drop
@@ -18,6 +21,12 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
   the X1 DNP3 scenario; unknown params rejected.
 
 ### Added
+
+- **X1 baseline token parity** — `_x1_baseline_redef` includes the S7 benign
+  baseline and emits Zeek-matching `rosctr`/`szl`/`s7comm-plus` tokens
+  (`substation/detect/x1_tokens.py` + unit tests).
+- **S7 Tier-2 enablement docs** — `docs/verify-s7.md` + optional
+  `SUBSTATION_ZEEK_S7_IMAGE`.
 
 - **Sigma range modifiers** — Tier-1 evaluator supports `|gte` / `|lte` / `|gt` /
   `|lt` / `|neq`; M1 setpoint band uses ranges instead of an enumerated list.
