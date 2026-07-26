@@ -79,7 +79,8 @@ OT/ICS detection content is scarce and hard to validate. Most defenders don’t 
 
 - 100% of shipped detections have: a passing fire-on-anomaly test, a passing quiet-on-benign test, an ATT&CK mapping, and a documented false-positive profile (the **Detection Contract**, §6.6).
 - Every ATT&CK mapping cites a verified technique ID from the live matrix (§7, **VERIFY**).
-- CI is green on every merge and runs the full generate→detect→report loop.
+- Local CI (`make ci`) is green before every push and runs the full
+  generate→detect→report loop (no cloud CI — see §6.9).
 
 **Extensibility**
 
@@ -261,12 +262,12 @@ substation/
   detections/
     sigma/  zeek/  suricata/
   tests/                     # pytest harness (Detection Contract)
-  coverage/                  # generated coverage map + Navigator layer
   docs/
+    coverage/                # committed coverage map + Navigator layer snapshot
     schema.md                # event-log JSON schema (the contract everything binds to)
     adding-a-protocol.md
     adding-a-detection.md
-  .github/workflows/         # CI: generate -> detect -> report (+ Tier 2)
+  # CI is LOCAL only: `make ci` / `make verify` (NO `.github/workflows/`, ever)
 ```
 
 ### 6.10 Optional honeypot (research-only, last)
@@ -330,7 +331,7 @@ Full task breakdown, exit criteria, and the per-detection contract are in **`ENG
 
 1. **Decisions + skeleton** — lock §7 decisions; repo layout; scenario format; one-command stub; Phase-0 verification spikes.
 1. **Modbus vertical slice** — schema frozen for Modbus; simulator (benign + anomalous, PCAP + JSON); ≥3 Modbus detections incl. ≥1 Sigma and ≥1 Zeek; harness green; first coverage-map row.
-1. **Harden + CI + demo + docs** — GitHub Actions full loop; one-command demo; `docs/schema.md`; README.
+1. **Harden + CI + demo + docs** — local `make ci` / `make verify` full loop; one-command demo; `docs/schema.md`; README.
 1. **DNP3** — on the proven pattern.
 1. **S7** — hardest; isolated phase.
 1. **Coverage polish + contributor guides + optional honeypot.**

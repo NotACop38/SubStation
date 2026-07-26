@@ -45,12 +45,13 @@ overrides the GitHub-Actions references in PRD §6.9 / checklist Phase 2.)
 
 ## Canonical commands
 
-- `make ci` — format-check, lint, type-check, unit tests (+ later: detection
-  harness, security, coverage-build). The gate.
-- `make demo` — Tier-1 one-command demo.
-- `make verify` — Tier-2 fidelity validation.
-- `make release` — cut a local release.
-- `make hooks` — install the pre-push gate. `make security` — bandit + pip-audit.
+- `make ci` — format-check, lint, type-check, unit tests, detection harness,
+  schema, coverage-build/check, and `make security`. The gate.
+- `make demo` — Tier-1 one-command demo (generate → detect → coverage map).
+- `make verify` — Tier-2 fidelity + Zeek/Suricata validation (Docker).
+- `make release` — cut a local release (gate → build → artifacts → tag).
+- `make hooks` — install the pre-push gate.
+- `make security` — bandit, scoped dep audit, secret scan, SBOM, files-only.
 
 ## Validation cadence
 

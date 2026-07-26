@@ -9,6 +9,14 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ## [Unreleased]
 
+### Changed
+
+- Constitution docs (PRD / AGENTS / CLAUDE / checklist / CONTRIBUTING) synced to
+  local-CI reality; orphan root `coverage/` artifacts removed.
+- Sigma rule `status:` aligned to `stable` for validated Tier-1 rules (except M1,
+  which lands with the range-modifier change).
+
+
 ### Added
 
 - **CLI front door** — `substation --version`; `substation list` (registered

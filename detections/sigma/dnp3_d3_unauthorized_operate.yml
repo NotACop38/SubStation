@@ -12,7 +12,7 @@
 # -----------------------------------------------------------------------------
 title: DNP3 Output Control From Unauthorized Source
 id: 7f3b1d29-6a8c-4e52-b0d4-9c1e83f6a2b7
-status: experimental
+status: stable
 description: |
   A DNP3 output-control request (SELECT / OPERATE / DIRECT_OPERATE) — typically a
   Control-Relay-Output-Block driving a breaker or setpoint — from a master that is

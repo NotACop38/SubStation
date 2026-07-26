@@ -13,7 +13,7 @@
 # -----------------------------------------------------------------------------
 title: S7 PLC Run-State Change From Unauthorized Source
 id: 4c5b9e21-7a3d-4e8f-9b1c-2d6f0a8e5c14
-status: experimental
+status: stable
 description: |
   An S7comm run-state change (PLC Stop, or PLC Control / P_PROGRAM = PLC Start/Stop)
   issued by a source that is not the allow-listed engineering workstation.
