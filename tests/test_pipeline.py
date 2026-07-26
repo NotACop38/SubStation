@@ -58,6 +58,19 @@ def test_coverage_map_marks_fired() -> None:
     assert "FIRED" in fired_line
 
 
+def test_coverage_map_marks_tier2_as_not_run_not_quiet() -> None:
+    # benign-baseline lists M3/X1 under exercises.quiet, but Tier-1 never evaluates
+    # them — the map must show not-run, not a misleading "quiet".
+    scenario = load_scenario(_REPO_ROOT / "scenarios" / "modbus" / "benign-baseline.yaml")
+    out = render_coverage_map([scenario], [])
+    m3 = next(line for line in out.splitlines() if line.strip().startswith("M3"))
+    x1 = next(line for line in out.splitlines() if line.strip().startswith("X1"))
+    assert "not-run" in m3 and "quiet" not in m3
+    assert "not-run" in x1 and "quiet" not in x1
+    m1 = next(line for line in out.splitlines() if line.strip().startswith("M1"))
+    assert "quiet" in m1
+
+
 def test_demo_single_scenario_runs_end_to_end(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     rc = cli.main(["demo", "--scenario", str(_EXAMPLE), "--artifacts", str(tmp_path)])
     assert rc == 0
@@ -70,13 +83,14 @@ def test_demo_single_scenario_runs_end_to_end(tmp_path: Path, capsys) -> None:  
 
 def test_demo_default_set_shows_quiet_and_fire(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     # The bundled demo set (no --scenario) must stay quiet on the benign baseline
-    # AND fire real detections on the anomalies — the headline "hits + coverage map".
+    # AND fire real detections on the anomalies — Modbus + DNP3 (≥2 protocols).
     rc = cli.main(["demo", "--artifacts", str(tmp_path)])
     assert rc == 0
     out = capsys.readouterr().out
     assert "quiet (no hits)" in out  # benign baseline stays quiet
     assert "● FIRED" in out  # at least one detection fired this run
-    assert "fired 2 detection(s)" in out
+    assert "anomalous-d1-restart" in out  # multi-protocol demo includes DNP3
+    assert "fired 3 detection(s)" in out  # M1, M2, D1
 
 
 def test_demo_bad_scenario_returns_error(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]

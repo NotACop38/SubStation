@@ -50,6 +50,10 @@ def render_coverage_map(
     for s in scenarios:
         exercised.update(s.exercises.fires)
         exercised.update(s.exercises.quiet)
+    # Tier-1 Sigma is what this process evaluates. Tier-2 Zeek/Suricata detections
+    # may appear in exercises (contract linkage) but were NOT run here — never
+    # report them as "quiet" (Bugbot: that implied a successful quiet evaluation).
+    tier1_ids = {d.id for d in registry if d.engine == "sigma" and d.tier == 1}
 
     rows: list[str] = []
     techniques: set[str] = set()
@@ -59,6 +63,9 @@ def render_coverage_map(
         tactics.add(det.attack.tactic_id)
         if det.id in fired:
             run = "● FIRED"
+        elif det.id not in tier1_ids:
+            # Not evaluated in this Tier-1 process (Zeek/Suricata / tier 2).
+            run = "◇ not-run" if det.id in exercised else " ·"
         elif det.id in exercised:
             run = "○ quiet"
         else:

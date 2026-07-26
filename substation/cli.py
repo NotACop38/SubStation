@@ -42,11 +42,12 @@ _ARTIFACTS_DIR = Path("artifacts")
 
 
 def _demo_scenarios() -> list[Path]:
-    """Bundled demo set: Modbus quiet baseline plus M1/M2 fire scenarios."""
+    """Bundled demo set: Modbus quiet+fire plus one DNP3 fire (≥2 protocols)."""
     return [
         content_path("scenarios", "modbus", "benign-baseline.yaml"),
         content_path("scenarios", "modbus", "anomalous-m1-unauthorized-write.yaml"),
         content_path("scenarios", "modbus", "anomalous-m2-illegal-function.yaml"),
+        content_path("scenarios", "dnp3", "anomalous-d1-restart.yaml"),
     ]
 
 
