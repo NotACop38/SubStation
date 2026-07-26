@@ -145,15 +145,23 @@ def test_content_commands_explain_missing_registry(
     capsys: pytest.CaptureFixture[str],
     command: list[str],
 ) -> None:
-    """Outside a checkout (plain wheel install) the registry file doesn't exist;
-    content-driven commands must say 'run from a checkout', not dump a bare
-    file-not-found path under site-packages."""
-    monkeypatch.setattr(cli, "REGISTRY_PATH", tmp_path / "absent" / "registry.yaml")
+    """When packaged/checkout content is missing, commands must explain how to fix it."""
+    from substation.content import ContentError
+
+    def _missing() -> Path:
+        raise ContentError("cannot locate Substation detections/scenarios content")
+
+    monkeypatch.setattr("substation.content.content_root", _missing)
+    monkeypatch.setattr("substation.detect.registry.content_root", _missing)
+    monkeypatch.setattr(
+        "substation.detect.registry.content_path",
+        lambda *parts: (_ for _ in ()).throw(ContentError("missing")),
+    )
     rc = cli.main([*command, "--artifacts", str(tmp_path)] if command == ["demo"] else command)
     assert rc == 1
     err = capsys.readouterr().err
-    assert "detection registry not found" in err
-    assert "repo checkout" in err
+    assert "error:" in err
+    assert "wheel" in err or "checkout" in err
 
 
 def test_validate_defaults_to_golden_events(capsys) -> None:  # type: ignore[no-untyped-def]

@@ -21,6 +21,7 @@ from pathlib import Path
 import yaml
 
 from substation._yaml import safe_load_strict
+from substation.content import ContentError, content_path, content_root
 
 __all__ = [
     "RegistryError",
@@ -29,13 +30,25 @@ __all__ = [
     "Detection",
     "REGISTRY_PATH",
     "REPO_ROOT",
+    "CONTENT_ROOT",
     "load_registry",
 ]
 
-# substation/detect/registry.py -> parents[2] is the repo root. detections/ and
-# scenarios/ live outside the package (PRD.md §6.9), so they resolve from here.
+# Repo root (checkout) — used for docs/coverage defaults and similar checkout-
+# relative paths. Detection/scenario *content* resolves via CONTENT_ROOT so a
+# wheel install (packaged under substation.content) works without a checkout.
 REPO_ROOT = Path(__file__).resolve().parents[2]
-REGISTRY_PATH = REPO_ROOT / "detections" / "registry.yaml"
+
+
+def _content_root() -> Path:
+    try:
+        return content_root()
+    except ContentError:
+        return REPO_ROOT
+
+
+CONTENT_ROOT = _content_root()
+REGISTRY_PATH = CONTENT_ROOT / "detections" / "registry.yaml"
 
 _ENGINES = {"sigma", "zeek", "suricata"}
 _TIERS = {1, 2}
@@ -114,12 +127,18 @@ class Detection:
     @property
     def rule_path(self) -> Path:
         """Absolute path to the authored rule file."""
-        return REPO_ROOT / self.rule
+        try:
+            return content_path(*Path(self.rule).parts)
+        except ContentError:
+            return CONTENT_ROOT / self.rule
 
     @property
     def doc_path(self) -> Path:
         """Absolute path to the Detection Contract doc."""
-        return REPO_ROOT / self.doc
+        try:
+            return content_path(*Path(self.doc).parts)
+        except ContentError:
+            return CONTENT_ROOT / self.doc
 
 
 def _require_mapping(value: object, where: str) -> dict[str, object]:
@@ -211,9 +230,15 @@ def _parse_detection(raw: object, where: str) -> Detection:
     )
 
 
-def load_registry(path: str | Path = REGISTRY_PATH) -> list[Detection]:
+def load_registry(path: str | Path | None = None) -> list[Detection]:
     """Load and validate the detection registry, preserving file order."""
-    p = Path(path)
+    if path is None:
+        try:
+            p = content_path("detections", "registry.yaml")
+        except ContentError as exc:
+            raise RegistryError(str(exc)) from exc
+    else:
+        p = Path(path)
     try:
         text = p.read_text(encoding="utf-8")
     except OSError as exc:

@@ -51,6 +51,10 @@ include = ["substation*"]
 # Ship the machine-readable event-log JSON Schema with the package so the
 # validator (and external tools) can load it from an installed distribution.
 "substation.schema" = ["*.json"]
+# detections/ + scenarios/ are copied under substation.content/ by setup.py's
+# build_py hook so wheels work without a git checkout; this glob covers any
+# residual packaged files next to the content resolver.
+"substation.content" = ["detections/**/*", "scenarios/**/*"]
 
 [tool.ruff]
 target-version = "py311"
