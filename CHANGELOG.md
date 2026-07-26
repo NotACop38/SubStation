@@ -9,61 +9,23 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ## [Unreleased]
 
-### Fixed
-
-- README Safety: do not replay PCAPs against live OT.
-
-- Verify fails clearly when every check is skipped; empty-request fidelity is an
-  explicit skip; S7 availability requires a loadable plugin, not a name-only hit.
-
-- M1 quantity/span gap documented with an acceptance scenario + test.
-
-- DNP3 WRITE (and other object-carrying non-READ verbs) no longer silently drop
-  object params; `16-Bit Analog Output Block` verified from ICSNPP and used by
-  the X1 DNP3 scenario; unknown params rejected.
-
 ### Added
 
+- **Packaged content** — `detections/` and `scenarios/` ship in the wheel under
+  `substation.content` (setuptools `build_py` hook); CLI/registry resolve via
+  `importlib.resources`-compatible paths with checkout fallback.
+- **Sigma range modifiers** — Tier-1 evaluator supports `|gte` / `|lte` / `|gt` /
+  `|lt` / `|neq`; M1 setpoint band uses ranges instead of an enumerated list.
+- **X1 baseline token parity** — `_x1_baseline_redef` includes the S7 benign
+  baseline and emits Zeek-matching `rosctr`/`szl`/`s7comm-plus` tokens
+  (`substation/detect/x1_tokens.py` + unit tests).
 - **Dependency lockfile** — committed `requirements.lock`; `make security`
   prefers it for the scoped audit when present.
 - **Honeypot external-bind confirmation** — `--allow-external` also requires
   `SUBSTATION_HONEYPOT_I_UNDERSTAND=1`.
 - **Local DoS caps** — JSONL load line/byte caps; scenario exchange-count cap.
-
-- **X1 baseline token parity** — `_x1_baseline_redef` includes the S7 benign
-  baseline and emits Zeek-matching `rosctr`/`szl`/`s7comm-plus` tokens
-  (`substation/detect/x1_tokens.py` + unit tests).
 - **S7 Tier-2 enablement docs** — `docs/verify-s7.md` + optional
   `SUBSTATION_ZEEK_S7_IMAGE`.
-
-- **Sigma range modifiers** — Tier-1 evaluator supports `|gte` / `|lte` / `|gt` /
-  `|lt` / `|neq`; M1 setpoint band uses ranges instead of an enumerated list.
-
-- **Packaged content** — `detections/` and `scenarios/` ship in the wheel under
-  `substation.content` (setuptools `build_py` hook); CLI/registry resolve via
-  `importlib.resources`-compatible paths with checkout fallback.
-
-### Changed
-
-- Demo default set includes a DNP3 anomaly (≥2 protocols); coverage map marks
-  Tier-2 detections as `◇ not-run` when not evaluated (never misleading `quiet`).
-
-- Tier-1 `detect` package docstring clarifies Zeek/Suricata run out-of-package.
-
-- `make security` also bandit-scans `scripts/` (B603/B607 skipped for fixed
-  subprocess argv lists).
-- Release staging uses an explicit path allowlist (optional `--allow-dirty`
-  product trees).
-- Pillow pinned in the `dev` extra for `make demo-gif`.
-
-- Constitution docs (PRD / AGENTS / CLAUDE / checklist / CONTRIBUTING) synced to
-  local-CI reality; orphan root `coverage/` artifacts removed.
-- Sigma rule `status:` aligned to `stable` for validated Tier-1 rules (except M1,
-  which lands with the range-modifier change).
-
-
-### Added
-
 - **CLI front door** — `substation --version`; `substation list` (registered
   detections + bundled scenarios); `substation validate` and `substation
   coverage` as first-class spellings of the `python -m` entrypoints;
@@ -82,6 +44,17 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ### Changed
 
+- Demo default set includes a DNP3 anomaly (≥2 protocols); coverage map marks
+  Tier-2 detections as `◇ not-run` when not evaluated (never misleading `quiet`).
+- `make security` also bandit-scans `scripts/` (B603/B607 skipped for fixed
+  subprocess argv lists).
+- Release staging uses an explicit path allowlist (optional `--allow-dirty`
+  product trees).
+- Constitution docs (PRD / AGENTS / CLAUDE / checklist / CONTRIBUTING) synced to
+  local-CI reality; orphan root `coverage/` artifacts removed.
+- Sigma rule `status:` aligned to `stable` for validated Tier-1 rules.
+- Pillow pinned in the `dev` extra for `make demo-gif`.
+- Tier-1 `detect` package docstring clarifies Zeek/Suricata run out-of-package.
 - `make ci` invokes every tool as `$(PY) -m <tool>` so the gate always checks
   the interpreter the package is installed in (bare tool names could resolve
   to shims bound to a different Python and fail or vacuously pass);
@@ -102,6 +75,13 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ### Fixed
 
+- DNP3 WRITE (and other object-carrying non-READ verbs) no longer silently drop
+  object params; `16-Bit Analog Output Block` verified from ICSNPP and used by
+  the X1 DNP3 scenario; unknown params rejected.
+- Verify fails clearly when every check is skipped; empty-request fidelity is an
+  explicit skip; S7 availability requires a loadable plugin, not a name-only hit.
+- README Safety: do not replay PCAPs against live OT.
+- M1 quantity/span gap documented with an acceptance scenario + test.
 - `scripts/render-demo-gif.py` probes per-platform font paths instead of
   hardcoding the Debian DejaVu location, and fails with an actionable hint.
 - The scenario loader rejects a non-string `description` instead of silently
