@@ -9,6 +9,12 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ## [Unreleased]
 
+### Added
+
+- **Packaged content** — `detections/` and `scenarios/` ship in the wheel under
+  `substation.content` (setuptools `build_py` hook); CLI/registry resolve via
+  `importlib.resources`-compatible paths with checkout fallback.
+
 ### Changed
 
 - Constitution docs (PRD / AGENTS / CLAUDE / checklist / CONTRIBUTING) synced to

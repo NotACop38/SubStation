@@ -26,9 +26,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from substation import __version__
+from substation.content import ContentError, content_path
 from substation.coverage import render_coverage_map
 from substation.detect import Hit, run_detections
-from substation.detect.registry import REGISTRY_PATH, Detection, RegistryError, load_registry
+from substation.detect.registry import Detection, RegistryError, load_registry
 from substation.emit import EmitError, write_artifacts
 from substation.protocols.dnp3 import Dnp3Error
 from substation.protocols.modbus import ModbusError
@@ -37,16 +38,16 @@ from substation.scenarios import Scenario, ScenarioError, load_scenario, load_sc
 
 __all__ = ["main"]
 
-# Repo-root-relative defaults for the demo.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-_ARTIFACTS_DIR = _REPO_ROOT / "artifacts"
-# The bundled demo tells the whole story in one command: a benign baseline that
-# stays QUIET (low false positives), then anomalies that FIRE real detections.
-_DEMO_SCENARIOS = [
-    _REPO_ROOT / "scenarios" / "modbus" / "benign-baseline.yaml",
-    _REPO_ROOT / "scenarios" / "modbus" / "anomalous-m1-unauthorized-write.yaml",
-    _REPO_ROOT / "scenarios" / "modbus" / "anomalous-m2-illegal-function.yaml",
-]
+_ARTIFACTS_DIR = Path("artifacts")
+
+
+def _demo_scenarios() -> list[Path]:
+    """Bundled demo set: Modbus quiet baseline plus M1/M2 fire scenarios."""
+    return [
+        content_path("scenarios", "modbus", "benign-baseline.yaml"),
+        content_path("scenarios", "modbus", "anomalous-m1-unauthorized-write.yaml"),
+        content_path("scenarios", "modbus", "anomalous-m2-illegal-function.yaml"),
+    ]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -123,9 +124,18 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     artifacts_dir: Path = args.artifacts
     # An explicit --scenario runs just those files; otherwise run the bundled
     # benign+anomalous set so one command shows quiet-on-benign AND fire-on-anomaly.
-    scenario_paths: list[Path] = (
-        list(args.scenario) if args.scenario is not None else _DEMO_SCENARIOS
-    )
+    try:
+        scenario_paths: list[Path] = (
+            list(args.scenario) if args.scenario is not None else _demo_scenarios()
+        )
+    except ContentError as exc:
+        print(
+            f"error: {exc}\n"
+            "Detection content should be available from a wheel install "
+            "(packaged under substation.content) or a repo checkout.",
+            file=sys.stderr,
+        )
+        return 1
 
     print("substation demo · Tier-1 loop: generate -> detect -> report (pure Python)\n")
 
@@ -146,7 +156,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         if not scenario_path.exists():
             print(
                 f"error: scenario not found at {scenario_path}.\n"
-                "Run `make demo` from a repo checkout, or pass --scenario PATH.",
+                "Pass --scenario PATH, or reinstall so packaged scenarios are present.",
                 file=sys.stderr,
             )
             return 1
@@ -248,26 +258,16 @@ def _contract_failures(
 
 
 def _load_registry_or_explain() -> list[Detection] | None:
-    """Load the detection registry, printing an actionable error when it can't be.
-
-    Substation's detection content (``detections/``, ``scenarios/``) deliberately
-    ships in the repo tree, NOT inside the installed package (PRD §6.9), so the
-    content-driven commands need a checkout — say so instead of surfacing a bare
-    file-not-found path under site-packages.
-    """
-    if not REGISTRY_PATH.exists():
-        print(
-            f"error: detection registry not found at {REGISTRY_PATH}.\n"
-            "Substation's detection content (detections/, scenarios/) ships in the "
-            "repo tree, not the installed package, so this command needs a repo "
-            "checkout: git clone https://github.com/notacop38/substation && cd substation",
-            file=sys.stderr,
-        )
-        return None
+    """Load the detection registry, printing an actionable error when it can't be."""
     try:
         return load_registry()
-    except RegistryError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    except (RegistryError, ContentError) as exc:
+        print(
+            f"error: {exc}\n"
+            "Detection content should be available from a wheel install "
+            "(packaged under substation.content) or a repo checkout.",
+            file=sys.stderr,
+        )
         return None
 
 
@@ -284,12 +284,10 @@ def _cmd_list(_args: argparse.Namespace) -> int:
             f"{det.title} [{techniques}]"
         )
 
-    scenario_dir = _REPO_ROOT / "scenarios"
-    if not scenario_dir.is_dir():
-        print(
-            "\nScenarios: none found (scenarios/ ships in the repo tree, not the "
-            "installed package — run from a checkout)."
-        )
+    try:
+        scenario_dir = content_path("scenarios")
+    except ContentError as exc:
+        print(f"\nScenarios: none found ({exc})")
         return 0
     try:
         scenarios = load_scenarios(scenario_dir)
