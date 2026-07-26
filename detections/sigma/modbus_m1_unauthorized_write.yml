@@ -14,7 +14,7 @@
 # -----------------------------------------------------------------------------
 title: Modbus Write From Unauthorized Source
 id: ecee7c3a-9d40-4ca2-92c1-7df770ed84d7
-status: experimental
+status: stable
 description: |
   A Modbus write-class event that is not an in-policy setpoint write. The Tier-1
   simulator validates write single/multiple coils or registers; parser-fed
@@ -56,20 +56,11 @@ detection:
       - '10.0.0.10' # hmi-1 — operator HMI
       - '10.0.0.11' # ews-1 — engineering workstation
     detail.unit: 1 # plc-1's permitted unit id
-    # Writable setpoint registers 40–49 (holding-register space). Enumerated as
-    # values, not a range modifier, so the Tier-1 offline evaluator (spike 03)
-    # matches it today; identical semantics for this contiguous range.
-    detail.address:
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 45
-      - 46
-      - 47
-      - 48
-      - 49
+    # Writable setpoint registers 40–49 (holding-register space). Range modifiers
+    # are supported by the Tier-1 evaluator (gte/lte); identical semantics to the
+    # former enumerated list.
+    detail.address|gte: 40
+    detail.address|lte: 49
   condition: modbus_write_request and not in_policy_write
 fields:
   - conn.orig_h

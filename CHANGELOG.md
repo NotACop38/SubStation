@@ -11,11 +11,16 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ### Fixed
 
+- M1 quantity/span gap documented with an acceptance scenario + test.
+
 - DNP3 WRITE (and other object-carrying non-READ verbs) no longer silently drop
   object params; `16-Bit Analog Output Block` verified from ICSNPP and used by
   the X1 DNP3 scenario; unknown params rejected.
 
 ### Added
+
+- **Sigma range modifiers** — Tier-1 evaluator supports `|gte` / `|lte` / `|gt` /
+  `|lt` / `|neq`; M1 setpoint band uses ranges instead of an enumerated list.
 
 - **Packaged content** — `detections/` and `scenarios/` ship in the wheel under
   `substation.content` (setuptools `build_py` hook); CLI/registry resolve via

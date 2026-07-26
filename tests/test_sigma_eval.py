@@ -81,6 +81,28 @@ def test_boolean_field_not_matched_by_string_token() -> None:
     assert matching_indices(rule, [_event(is_exception=1, error="ILLEGAL_FUNCTION")]) == []
 
 
+def test_numeric_range_modifiers() -> None:
+    rule = parse_rule(
+        """
+title: setpoint band
+id: 00000000-0000-0000-0000-000000000004
+logsource: {product: ot, service: modbus}
+detection:
+    band:
+        detail.address|gte: 40
+        detail.address|lte: 49
+    condition: band
+"""
+    )
+    events = [
+        _event(detail={"address": 39}),
+        _event(detail={"address": 40}),
+        _event(detail={"address": 49}),
+        _event(detail={"address": 50}),
+    ]
+    assert matching_indices(rule, events) == [1, 2]
+
+
 def test_unsupported_wildcard_raises() -> None:
     rule = parse_rule(
         """

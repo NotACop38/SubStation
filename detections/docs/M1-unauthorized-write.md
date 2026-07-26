@@ -129,12 +129,13 @@ What benign behavior could trip this, and why it does not here:
 **Unit/register policy (implemented).** M1 enforces all three dimensions of
 `PRD.md` §5.1 — source, unit, and register — so an allow-listed source straying to
 an out-of-policy unit/register fires, not just a rogue source. The register set is
-written as explicit values so the Tier-1 evaluator matches it today (no
-range-modifier dependency). Two known modelling simplifications, neither exercised
-as a false positive by the current scenarios: (1) the register set is the
+written with Sigma `|gte` / `|lte` range modifiers (Tier-1 evaluator supports
+them). Two known modelling simplifications: (1) the register set is the
 **holding-register setpoint** space — the demo policy sanctions no coil writes, so
 coil writes are out-of-policy by design; (2) the check is on the **starting**
 `detail.address`, so a write that starts in-policy but spans past register 49 (via
 a large `quantity`) is not caught by a field-match rule — durable span arithmetic
-is a Zeek-class concern. Policy values (writers, unit, register set) are
+is a Zeek-class concern. That span gap is an **accepted** Tier-1 limitation,
+locked by `scenarios/modbus/anomalous-m1-span-beyond-policy.yaml` and
+`tests/test_m1_span_gap.py`. Policy values (writers, unit, register set) are
 demo-scenario specifics, meant to be edited per environment.

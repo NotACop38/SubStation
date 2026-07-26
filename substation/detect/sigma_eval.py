@@ -8,13 +8,13 @@ that tree over each JSON event. Zero SIEM, in-process, pure-Python — exactly t
 Tier-1 headline path (PRD.md §6.2). The *same* rule compiles to a production SIEM
 via stock pySigma backends, so detections transfer unchanged (PRD.md §6.5).
 
-Scope: plain field equality with dotted-path lookup into the normalized envelope
-(``conn.orig_h``, ``detail.unit``, …), with multi-value fields expanded by pySigma
-into an OR of leaves. This covers the Modbus Sigma slice (M1, M2). Anything the
-walk does not understand — value wildcards/modifiers, keyword-only searches,
+Scope: plain field equality and numeric compare modifiers (``|gt`` / ``|gte`` /
+``|lt`` / ``|lte`` / ``|neq``) with dotted-path lookup into the normalized
+envelope (``conn.orig_h``, ``detail.unit``, …). Multi-value fields expand by
+pySigma into an OR of leaves. This covers the Modbus/DNP3/S7 Sigma slice.
+Anything the walk does not understand — value wildcards, keyword-only searches,
 correlation rules — raises :class:`SigmaEvalError` rather than silently
-mis-evaluating; those are tracked extensions of the same AST walk, not a different
-mechanism (spike 03 "Scope / follow-ups").
+mis-evaluating (spike 03 "Scope / follow-ups").
 """
 
 from __future__ import annotations
@@ -30,9 +30,11 @@ from sigma.conditions import (
     ConditionNOT,
     ConditionOR,
 )
-from sigma.types import SigmaBool, SigmaNumber, SigmaString
+from sigma.types import SigmaBool, SigmaCompareExpression, SigmaNumber, SigmaString
 
 __all__ = ["SigmaEvalError", "load_rule", "parse_rule", "matching_indices"]
+
+_COMPARE_OPS = SigmaCompareExpression.CompareOperators
 
 
 class SigmaEvalError(ValueError):
@@ -73,12 +75,44 @@ def _lookup(event: dict[str, Any], dotted: str) -> Any:
     return cur
 
 
+def _numeric_actual(actual: Any) -> int | float | None:
+    """Return a non-bool number from ``actual``, else ``None``."""
+    if isinstance(actual, bool) or not isinstance(actual, (int, float)):
+        return None
+    return int(actual) if isinstance(actual, int) else float(actual)
+
+
+def _compare_matches(actual: Any, expr: SigmaCompareExpression) -> bool:
+    """Evaluate a Sigma numeric compare modifier (``|gte``, ``|lte``, …)."""
+    number = _numeric_actual(actual)
+    if number is None:
+        return False
+    bound_raw = expr.number.to_plain()
+    if isinstance(bound_raw, bool) or not isinstance(bound_raw, (int, float)):
+        raise SigmaEvalError(f"compare modifier bound is not numeric: {bound_raw!r}")
+    bound: int | float = bound_raw
+    op = expr.op
+    if op is _COMPARE_OPS.GTE:
+        return bool(number >= bound)
+    if op is _COMPARE_OPS.LTE:
+        return bool(number <= bound)
+    if op is _COMPARE_OPS.GT:
+        return bool(number > bound)
+    if op is _COMPARE_OPS.LT:
+        return bool(number < bound)
+    if op is _COMPARE_OPS.NEQ:
+        return bool(number != bound)
+    raise SigmaEvalError(f"unsupported compare operator {op!r}")
+
+
 def _leaf_matches(node: Any, event: dict[str, Any]) -> bool:
-    """Evaluate a single ``field == value`` leaf against one event."""
+    """Evaluate a single ``field == value`` (or compare-modifier) leaf."""
     actual = _lookup(event, node.field)
     if actual is None:
         return False
     value = node.value
+    if isinstance(value, SigmaCompareExpression):
+        return _compare_matches(actual, value)
     if isinstance(value, SigmaBool):
         # bool is an int subclass; require an actual boolean on both sides so a
         # 0/1 integer field never matches a true/false rule value by coincidence.

@@ -1,0 +1,49 @@
+# =============================================================================
+# Anomalous (M1 modelling gap) — in-policy START address, span past register 49
+# =============================================================================
+# Documents the accepted Tier-1 limitation described in
+# detections/docs/M1-unauthorized-write.md: M1 keys on the starting
+# detail.address (40–49), so a WriteMultipleRegisters that starts at 45 with
+# quantity 10 (ending at 54) is NOT caught by the field-match rule. This
+# scenario is NOT listed under exercises.fires for M1 — tests/test_m1_span_gap.py
+# asserts the current non-fire behaviour as the accepted gap.
+# -----------------------------------------------------------------------------
+
+name: anomalous-m1-span-beyond-policy
+description: >-
+  An allow-listed EWS issues WriteMultipleRegisters starting at setpoint
+  register 45 with quantity 10 (span ends past policy register 49). Documents
+  the accepted M1 quantity/span gap; M1 does not fire on starting-address match
+  alone.
+
+protocol: modbus
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 2.0
+
+actors:
+  - id: ews-1
+    role: ews
+    host: 10.0.0.11
+  - id: plc-1
+    role: plc
+    host: 10.0.0.50
+    port: 502
+
+exchanges:
+  - source: ews-1
+    target: plc-1
+    function: WriteMultipleRegisters
+    offset: 0.0
+    params:
+      unit_id: 1
+      address: 45
+      values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+exercises:
+  # Intentionally empty fires: M1 does not catch this span case today.
+  quiet:
+    - M2
+    - M3
