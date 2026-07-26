@@ -182,8 +182,39 @@ OBJECT_TYPES: dict[str, tuple[int, int, int]] = {
     "16-Bit Binary Counter": (0x14, 0x02, 3),  # 0x1402 with flag: flag(1)+u16(2)
     "32-Bit Analog Input": (0x1E, 0x01, 5),  # 0x1E01 with flag: flag(1)+i32(4)
     "16-Bit Analog Input": (0x1E, 0x02, 3),  # 0x1E02 with flag: flag(1)+i16(2)
+    # WRITE object headers (ICSNPP consts.zeek dnp3_objects, verified 2026-07-26):
+    "16-Bit Analog Output Block": (0x29, 0x02, 2),  # 0x2902
+    "32-Bit Analog Output Block": (0x29, 0x01, 4),  # 0x2901
 }
 _DEFAULT_OBJECT_TYPE = "Binary Input With Status"
+# Request functions that carry a DNP3 object header (ICSNPP dnp3_objects.log covers
+# READ; WRITE and class-assignment / unsolicited-config also carry object headers
+# on the wire — silently dropping their params hid scenario typos).
+_OBJECT_REQUEST_FUNCS = {
+    READ,
+    WRITE,
+    ENABLE_UNSOLICITED,
+    DISABLE_UNSOLICITED,
+    0x16,  # ASSIGN_CLASS
+}
+# Params accepted on object-carrying exchanges (request + optional response range).
+_OBJECT_PARAM_KEYS = {
+    "object_type",
+    "object_count",
+    "range_low",
+    "range_high",
+    "iin",
+}
+_CONTROL_PARAM_KEYS = {
+    "operation_type",
+    "trip_control_code",
+    "clear_bit",
+    "index_number",
+    "execute_count",
+    "on_time",
+    "off_time",
+    "iin",
+}
 
 _U16 = 0xFFFF
 _U8 = 0xFF
@@ -340,13 +371,20 @@ def _control_detail(params: Mapping[str, object], func_name: str, where: str) ->
     }
 
 
+def _reject_unknown_params(params: Mapping[str, object], allowed: set[str], where: str) -> None:
+    unknown = sorted(set(params) - allowed)
+    if unknown:
+        raise Dnp3Error(f"{where}: unknown/unused param(s) {unknown}; allowed: {sorted(allowed)}")
+
+
 def _objects_detail(
     params: Mapping[str, object], func_name: str, where: str, *, is_response: bool
 ) -> dict[str, Any]:
     """Build the detail.objects sub-object (ICSNPP ``dnp3_objects.log``, spike 04).
 
-    On a READ request only ``function_code`` + ``object_type`` are populated; the
-    range/count are populated on the RESPONSE — exactly as ICSNPP logs them.
+    On an object-carrying *request* (READ/WRITE/…) only ``function_code`` +
+    ``object_type`` are populated; the range/count are populated on the RESPONSE
+    — exactly as ICSNPP logs READ (and as we model other object-carrying verbs).
 
     ``object_type`` must be a known DNP3 object type (``OBJECT_TYPES``) so the PCAP
     encoder can emit the matching group/variation and the JSON string and PCAP bytes
@@ -514,16 +552,21 @@ def build_events(scenario: Scenario) -> list[Dnp3Event]:
             raise Dnp3Error(f"{where}: request {func_name} must originate from the master")
 
         action_class = ACTION_CLASS.get(code, "other")
-        control = (
-            _control_detail(exchange.params, func_name, where)
-            if code in _CONTROL_BLOCK_FUNCS
-            else None
-        )
-        req_objects = (
-            _objects_detail(exchange.params, func_name, where, is_response=False)
-            if code == READ
-            else None
-        )
+        if code in _CONTROL_BLOCK_FUNCS:
+            _reject_unknown_params(exchange.params, _CONTROL_PARAM_KEYS, where)
+            control = _control_detail(exchange.params, func_name, where)
+        else:
+            control = None
+        if code in _OBJECT_REQUEST_FUNCS:
+            _reject_unknown_params(exchange.params, _OBJECT_PARAM_KEYS, where)
+            req_objects = _objects_detail(exchange.params, func_name, where, is_response=False)
+        else:
+            if exchange.params and code not in _CONTROL_BLOCK_FUNCS:
+                # Non-object, non-control requests should not carry params (or only iin
+                # on the synthetic response path below). Reject typos loudly.
+                allowed = {"iin"}
+                _reject_unknown_params(exchange.params, allowed, where)
+            req_objects = None
         events.append(
             _make_event(
                 conn,
@@ -540,6 +583,9 @@ def build_events(scenario: Scenario) -> list[Dnp3Event]:
         last_ts = msg_ts
         if code not in _NO_RESPONSE:
             resp_ts = msg_ts + RESPONSE_DELAY
+            # Only READ synthesizes a data-bearing RESPONSE with object range fields
+            # from the request params (ICSNPP dnp3_objects.log pattern). WRITE and
+            # unsolicited-config verbs get a bare RESPONSE (fc_reply only).
             resp_objects = (
                 _objects_detail(exchange.params, "RESPONSE", where, is_response=True)
                 if code == READ

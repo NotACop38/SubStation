@@ -9,6 +9,12 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ## [Unreleased]
 
+### Fixed
+
+- DNP3 WRITE (and other object-carrying non-READ verbs) no longer silently drop
+  object params; `16-Bit Analog Output Block` verified from ICSNPP and used by
+  the X1 DNP3 scenario; unknown params rejected.
+
 ### Added
 
 - **Packaged content** — `detections/` and `scenarios/` ship in the wheel under

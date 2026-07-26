@@ -222,7 +222,8 @@ per the parser):
 > verified ICSNPP `dnp3_objects` device-type names the simulator supports
 > (`substation.protocols.dnp3.OBJECT_TYPES`: `Binary Input With Status`,
 > `Binary Output`, `16-Bit Binary Counter`, `32-Bit Analog Input`,
-> `16-Bit Analog Input`). The simulator derives the DNP3 object **group/variation**
+> `16-Bit Analog Input`, `16-Bit Analog Output Block`, `32-Bit Analog Output Block`).
+> The simulator derives the DNP3 object **group/variation**
 > for the PCAP from that same string, so a Zeek decode of the PCAP resolves the
 > identical `object_type` — the JSON and PCAP cannot drift (PRD §6.1). On a response
 > `object_count` **must equal** the range span (`range_high − range_low + 1`); an
