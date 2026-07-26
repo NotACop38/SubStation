@@ -42,6 +42,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
 from substation.detect.registry import Detection, load_registry  # noqa: E402
+from substation.detect.x1_tokens import x1_norm_func  # noqa: E402
 from substation.emit import write_artifacts  # noqa: E402
 from substation.scenarios import Scenario, load_scenario  # noqa: E402
 
@@ -75,7 +76,10 @@ _NOTICE_TOKEN = {
     "S3": "S7Enum::Enumeration",
     "X1": "CrossProtoBaseline::BaselineDeviation",
 }
-_NEEDS_S7 = {"S3"}  # X1 runs over Modbus/DNP3; its S7 path is inert without the plugin.
+_NEEDS_S7 = {"S3"}  # X1 runs over Modbus/DNP3; its S7 path is skipped per-scenario without the plugin.
+# Optional local image with icsnpp-s7comm built in (see docs/verify-s7.md). When set
+# and pullable, verify prefers it over the stock ZEEK_IMAGE for S7-capable runs.
+_S7_ZEEK_IMAGE_ENV = "SUBSTATION_ZEEK_S7_IMAGE"
 
 
 # --- result bookkeeping ------------------------------------------------------
@@ -262,9 +266,11 @@ def fidelity_check(proto: str, results: Results) -> None:
     """Diff emitted JSON vs real Zeek/ICSNPP logs for every scenario of a protocol."""
     if proto not in _ICSNPP:
         # Only Modbus/DNP3 have vendored ICSNPP *script* packages; S7comm fidelity
-        # would need the compiled icsnpp-s7comm plugin AND a fidelity mapping that is
-        # not yet wired, so skip explicitly rather than KeyError on _ICSNPP[proto].
-        results.skip(f"fidelity[{proto}]: no vendored ICSNPP scripts / fidelity mapping (not wired)")
+        # needs the compiled plugin + a fidelity mapping (see docs/verify-s7.md).
+        results.skip(
+            f"fidelity[{proto}]: no vendored ICSNPP scripts / fidelity mapping "
+            f"(enable via docs/verify-s7.md when using an icsnpp-s7comm image)"
+        )
         return
     scripts = ensure_icsnpp(proto)
     if scripts is None:
@@ -275,12 +281,16 @@ def fidelity_check(proto: str, results: Results) -> None:
     log_tuples = _modbus_log_tuples if proto == "modbus" else _dnp3_log_tuples
 
     proto_dir = _SCENARIOS / ("modbus" if proto == "modbus" else proto)
+    compared = 0
     for scenario_file in sorted(proto_dir.glob("*.yaml")):
         with tempfile.TemporaryDirectory() as td:
             pcap, events = emit(scenario_file, Path(td))
             want = _json_request_tuples(events)
             if not want:
-                continue  # empty scenario, nothing to compare
+                results.skip(
+                    f"fidelity[{proto}] {scenario_file.name}: no request events to compare"
+                )
+                continue
             try:
                 logs = run_zeek(pcap, loads, mounts)
             except RuntimeError as exc:
@@ -288,6 +298,7 @@ def fidelity_check(proto: str, results: Results) -> None:
                 continue
             got = log_tuples(logs)
             shutil.rmtree(logs, ignore_errors=True)
+            compared += 1
             # Per-message fidelity: the (src,dst,func) request *counts* must match
             # between our JSON and what real ICSNPP/Zeek decoded from our PCAP, so a
             # dropped or duplicated repeated message is caught (Counter, not set).
@@ -305,6 +316,8 @@ def fidelity_check(proto: str, results: Results) -> None:
                 )
                 detail = ", ".join(f"{t}: json={w} zeek={g}" for t, w, g in deltas)
                 results.fail(f"fidelity[{proto}] {scenario_file.name}: count mismatch — {detail}")
+    if compared == 0 and proto in _ICSNPP:
+        results.fail(f"fidelity[{proto}]: no scenarios produced comparable request events")
 
 
 # --- detection checks --------------------------------------------------------
@@ -328,31 +341,32 @@ def _count_notices(logdir: Path, token: str) -> int:
 def _x1_baseline_redef(outdir: Path) -> Path:
     """Derive X1's learned baseline from the benign scenarios; write a redef file.
 
-    Mirrors X1's norm_func: a request event becomes the token ``<proto>:<func_code>``
-    for Modbus/DNP3 (the protocols X1 observes without the S7 plugin). Injecting the
-    known-good allow-set is exactly the mechanism detections/docs/X1 describes.
+    Tokens are produced by :func:`substation.detect.x1_tokens.x1_norm_func`, which
+    mirrors ``detections/zeek/x1_cross_protocol_baseline.zeek`` (Modbus/DNP3 numeric
+    codes plus S7 ``rosctr``/``function``/``szl``/``s7comm-plus`` forms). Including
+    the S7 benign baseline keeps X1's S7 quiet path honest when the plugin is present.
     """
     talkers: set[str] = set()
     pairs: set[tuple[str, str]] = set()
     funcs: set[tuple[str, str, str]] = set()
-    for proto in ("modbus", "dnp3"):
+    for proto in ("modbus", "dnp3", "s7"):
         benign = _SCENARIOS / proto / "benign-baseline.yaml"
         if not benign.exists():
             continue
         with tempfile.TemporaryDirectory() as td:
             _, events = emit(benign, Path(td))
         for e in events:
-            if not e.get("is_orig"):
+            token = x1_norm_func(e)  # type: ignore[arg-type]
+            if token is None:
                 continue
             conn = e["conn"]  # type: ignore[index]
             src, dst = conn["orig_h"], conn["resp_h"]  # type: ignore[index]
-            token = f"{proto}:{e['func_code']}"
-            talkers.add(src)
-            pairs.add((src, dst))
-            funcs.add((src, dst, token))
+            talkers.add(str(src))
+            pairs.add((str(src), str(dst)))
+            funcs.add((str(src), str(dst), token))
 
     lines = ["redef CrossProtoBaseline::known_talkers += {"]
-    lines += [f'\t{t},' for t in sorted(talkers)]
+    lines += [f"\t{t}," for t in sorted(talkers)]
     lines.append("};")
     lines.append("redef CrossProtoBaseline::known_pairs += {")
     lines += [f"\t[{s}, {d}]," for s, d in sorted(pairs)]
@@ -365,7 +379,9 @@ def _x1_baseline_redef(outdir: Path) -> Path:
     return path
 
 
-def detection_check(det: Detection, s7_available: bool, results: Results) -> None:
+def detection_check(
+    det: Detection, s7_available: bool, results: Results, *, s7_loads: list[str] | None = None
+) -> None:
     token = _NOTICE_TOKEN.get(det.id)
     if token is None:
         results.skip(f"detection[{det.id}]: no Tier-2 notice mapping")
@@ -373,7 +389,7 @@ def detection_check(det: Detection, s7_available: bool, results: Results) -> Non
     if det.id in _NEEDS_S7 and not s7_available:
         results.skip(
             f"detection[{det.id}]: needs the icsnpp-s7comm C++ plugin (not built in "
-            f"{ZEEK_IMAGE}); run on a Zeek image with a build toolchain to enable"
+            f"{ZEEK_IMAGE}); see docs/verify-s7.md to enable"
         )
         return
 
@@ -385,25 +401,31 @@ def detection_check(det: Detection, s7_available: bool, results: Results) -> Non
         results.fail(f"detection[{det.id}]: missing fire/quiet scenarios")
         return
 
+    ran = 0
     for label, scenario_files, want_fire in (("fire", fires, True), ("quiet", quiet, False)):
         for scenario_file in scenario_files:
-            # X1's S7-only quiet scenario (s7 benign) can't be observed without the
-            # plugin; skip just that one rather than misreport it.
-            if det.id == "X1" and not s7_available and scenario_file.parent.name == "s7":
-                results.skip(f"detection[X1] {scenario_file.name}: S7 path needs the s7comm plugin")
+            needs_s7_path = scenario_file.parent.name == "s7"
+            if needs_s7_path and not s7_available:
+                results.skip(
+                    f"detection[{det.id}] {scenario_file.name}: S7 path needs the "
+                    "s7comm plugin (docs/verify-s7.md)"
+                )
                 continue
             with tempfile.TemporaryDirectory() as td:
                 tdp = Path(td)
                 pcap, _ = emit(scenario_file, tdp)
                 loads = [rule_container]
+                mounts_run = list(mounts)
+                if needs_s7_path and s7_loads:
+                    # Load the S7 analyzer before the detection script so events exist.
+                    loads = [*s7_loads, rule_container]
                 if det.id == "X1":
                     _x1_baseline_redef(tdp)
-                    mounts_run = [*mounts, (tdp, "/x1")]
+                    mounts_run = [*mounts_run, (tdp, "/x1")]
                     # The rule must load FIRST so its &redef-able sets exist before
-                    # the injected baseline redefs them.
-                    loads = [rule_container, "/x1/x1_baseline.zeek"]
-                else:
-                    mounts_run = mounts
+                    # the injected baseline redefs them (S7 loads still precede).
+                    prefix = list(s7_loads or []) if needs_s7_path else []
+                    loads = [*prefix, rule_container, "/x1/x1_baseline.zeek"]
                 try:
                     logs = run_zeek(pcap, loads, mounts_run)
                 except RuntimeError as exc:
@@ -411,6 +433,7 @@ def detection_check(det: Detection, s7_available: bool, results: Results) -> Non
                     continue
                 hits = _count_notices(logs, token)
                 shutil.rmtree(logs, ignore_errors=True)
+            ran += 1
             if want_fire and hits >= 1:
                 results.ok(f"detection[{det.id}] FIRE on {scenario_file.name} ({hits} notice)")
             elif not want_fire and hits == 0:
@@ -420,6 +443,10 @@ def detection_check(det: Detection, s7_available: bool, results: Results) -> Non
                     f"detection[{det.id}] {label} on {scenario_file.name}: "
                     f"expected {'>=1' if want_fire else '0'} notices, got {hits}"
                 )
+    if ran == 0:
+        results.fail(
+            f"detection[{det.id}]: every fire/quiet scenario was skipped — nothing evaluated"
+        )
 
 
 def suricata_check(results: Results) -> None:
@@ -438,18 +465,74 @@ def suricata_check(results: Results) -> None:
 # --- s7 plugin probe ---------------------------------------------------------
 
 
-def _s7_plugin_available() -> bool:
-    """True only if a Zeek with the ICSNPP s7comm analyzer is reachable.
+def _active_zeek_image() -> str:
+    """Return the Zeek image to use (optional S7-capable override via env)."""
+    import os
 
-    The runtime zeek image ships no build toolchain, so this is normally False; we
-    detect it honestly rather than assume.
+    override = os.environ.get(_S7_ZEEK_IMAGE_ENV, "").strip()
+    return override or ZEEK_IMAGE
+
+
+def _s7_plugin_probe(image: str) -> tuple[bool, list[str]]:
+    """Probe ``image`` for a usable icsnpp-s7comm analyzer.
+
+    Returns ``(available, load_args)``. Availability requires both the plugin
+    appearing in ``zeek -N`` *and* a loadable script path — claiming "available"
+    without usable scripts caused silent empty S7 runs.
     """
-    probe = subprocess.run(
-        ["docker", "run", "--rm", ZEEK_IMAGE, "bash", "-c",
-         "zeek -N 2>/dev/null | grep -qi s7comm && echo yes || echo no"],
-        capture_output=True, text=True,
+    probe = subprocess.run(  # noqa: S603
+        [
+            "docker",
+            "run",
+            "--rm",
+            image,
+            "bash",
+            "-c",
+            "zeek -N 2>/dev/null | grep -qi s7comm && "
+            "ls /usr/local/zeek/share/zeek/site/icsnpp/s7comm 2>/dev/null || "
+            "ls /usr/local/zeek/share/zeek/site/icsnpp-s7comm 2>/dev/null || "
+            "true",
+        ],
+        capture_output=True,
+        text=True,
     )
-    return probe.stdout.strip() == "yes"
+    out = (probe.stdout or "") + (probe.stderr or "")
+    if "s7comm" not in out.lower() and probe.returncode != 0:
+        # Second probe: plugin name only (scripts may live under a package name).
+        name_only = subprocess.run(  # noqa: S603
+            [
+                "docker",
+                "run",
+                "--rm",
+                image,
+                "bash",
+                "-c",
+                "zeek -N 2>/dev/null | grep -i s7comm || true",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if "s7comm" not in (name_only.stdout or "").lower():
+            return False, []
+    # Prefer the conventional ICSNPP package load path.
+    loads = ["icsnpp/s7comm"]
+    load_ok = subprocess.run(  # noqa: S603
+        [
+            "docker",
+            "run",
+            "--rm",
+            image,
+            "bash",
+            "-c",
+            "zeek -e '@load icsnpp/s7comm' 2>&1 | tail -n 5",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    combined = (load_ok.stdout or "") + (load_ok.stderr or "")
+    if load_ok.returncode != 0 or "error" in combined.lower():
+        return False, []
+    return True, loads
 
 
 # --- main --------------------------------------------------------------------
@@ -465,13 +548,20 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    global ZEEK_IMAGE
+    ZEEK_IMAGE = _active_zeek_image()
     if not _image_present():
         print(f"verify: could not obtain {ZEEK_IMAGE}", file=sys.stderr)
         return 2
 
     results = Results()
-    s7_available = _s7_plugin_available()
+    s7_available, s7_loads = _s7_plugin_probe(ZEEK_IMAGE)
     print(f"verify: Zeek image {ZEEK_IMAGE}; icsnpp-s7comm available: {s7_available}\n")
+    if not s7_available:
+        print(
+            "verify: S7 Tier-2 path disabled — see docs/verify-s7.md "
+            f"(optional {_S7_ZEEK_IMAGE_ENV}=...)\n"
+        )
 
     print("== Fidelity (emitted JSON vs real Zeek/ICSNPP) ==")
     fidelity_check("modbus", results)
@@ -479,13 +569,16 @@ def main() -> int:
     if s7_available:
         fidelity_check("s7comm", results)
     else:
-        results.skip("fidelity[s7comm]: needs the icsnpp-s7comm C++ plugin (not built)")
+        results.skip(
+            "fidelity[s7comm]: needs a Zeek image with a loadable icsnpp-s7comm "
+            "plugin (docs/verify-s7.md)"
+        )
 
     print("\n== Zeek detections (real engine, fire/quiet) ==")
     registry = load_registry(_REGISTRY)
     for det in registry:
         if det.engine == "zeek" and det.tier == 2:
-            detection_check(det, s7_available, results)
+            detection_check(det, s7_available, results, s7_loads=s7_loads)
 
     print("\n== Suricata detections ==")
     suricata_check(results)
@@ -496,6 +589,13 @@ def main() -> int:
     print(f"  failed:  {len(results.failed)}")
     if results.failed:
         print("\nverify: FAILED")
+        return 1
+    if not results.passed:
+        print(
+            "\nverify: FAILED — every check was skipped; nothing was evaluated. "
+            "Check Docker/image availability and re-run.",
+            file=sys.stderr,
+        )
         return 1
     print("\nverify: OK (Tier-2 fidelity + Zeek detections; skips are explicit above)")
     return 0
