@@ -12,7 +12,8 @@ Safety posture (non-negotiable — see ``substation/honeypot/README.md``):
   **never** calls ``connect()`` / initiates an outbound connection, and never
   touches real OT equipment.
 - **Isolated by default.** It binds **loopback only** unless the operator passes an
-  explicit ``allow_external`` opt-in, so a careless run cannot be reached off-box.
+  explicit ``allow_external`` opt-in **and** sets
+  ``SUBSTATION_HONEYPOT_I_UNDERSTAND=1``, so a careless run cannot be reached off-box.
 - **Out of the headline path.** Nothing in the demo/CLI imports this; it is opt-in.
 
 Design: the protocol logic is a **pure function** (:func:`process_frame`) that maps
@@ -27,6 +28,7 @@ logs cannot drift from the contract the detections bind to (``docs/schema.md``).
 from __future__ import annotations
 
 import json
+import os
 import socket
 import struct
 import time
@@ -518,14 +520,21 @@ def process_frame(
 # --- socket server -----------------------------------------------------------
 
 
+# Required alongside ``--allow-external`` so a casual flag alone cannot expose
+# the honeypot on a routable interface.
+_ALLOW_EXTERNAL_ENV = "SUBSTATION_HONEYPOT_I_UNDERSTAND"
+_ALLOW_EXTERNAL_ENV_VALUE = "1"
+
+
 @dataclass(slots=True)
 class HoneypotConfig:
     """Honeypot runtime configuration. Loopback-only unless ``allow_external``.
 
     ``bind_host`` defaults to loopback so a careless run cannot be reached off-box.
     Binding any non-loopback address (to actually capture remote probes on an
-    isolated research segment) requires ``allow_external=True`` as a deliberate
-    opt-in — anything else raises :class:`HoneypotConfigError`.
+    isolated research segment) requires ``allow_external=True`` **and**
+    ``SUBSTATION_HONEYPOT_I_UNDERSTAND=1`` — anything else raises
+    :class:`HoneypotConfigError`.
 
     ``log_max_bytes`` bounds the probe log: when a write would push the log past
     it, the log rotates to ``<log_path>.1`` (one generation, replacing any
@@ -552,6 +561,12 @@ class HoneypotConfig:
                 "allow_external=True. The honeypot must be deployed network-isolated "
                 "(see substation/honeypot/README.md); set the opt-in only on an "
                 "isolated research segment."
+            )
+        if self.allow_external and os.environ.get(_ALLOW_EXTERNAL_ENV) != _ALLOW_EXTERNAL_ENV_VALUE:
+            raise HoneypotConfigError(
+                f"refusing --allow-external without {_ALLOW_EXTERNAL_ENV}="
+                f"{_ALLOW_EXTERNAL_ENV_VALUE}. Confirm you are on an isolated "
+                "research segment, then export that env var and re-run."
             )
 
 

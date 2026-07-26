@@ -36,6 +36,7 @@ dev = [
     "pip-audit==2.10.0",
     "detect-secrets==1.5.0",  # secret scan in `make security` (gitleaks-via-Docker preferred when present).
     "build==1.5.0",  # sdist + wheel builder for `make release` (PyPA build).
+    "Pillow==12.3.0",  # optional: `make demo-gif` headless GIF render.
 ]
 
 [project.scripts]
@@ -104,5 +105,8 @@ addopts = "-ra -q"
 testpaths = ["tests"]
 
 [tool.bandit]
-# Tests are allowed asserts/fixtures; scan only shipped code by default.
-exclude_dirs = ["tests", ".git", ".venv"]
+# Tests are allowed asserts/fixtures; scan shipped package + scripts.
+exclude_dirs = ["tests", ".git", ".venv", ".verify-cache", "dist", "build"]
+# B603/B607: scripts intentionally invoke fixed docker/git/tool argv lists
+# (no shell, no untrusted interpolation). Skipped for the scripts tree only via
+# the Makefile `security` target; the package scan keeps the full rule set.

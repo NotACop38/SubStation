@@ -36,16 +36,20 @@ _IGNORED: dict[str, str] = {
     # attacker to already have WRITE access to the on-disk cache directory. It is
     # unfixed upstream (no release addresses it). Substation only uses pySigma to
     # PARSE rules (substation/detect/sigma_eval.py walks the parsed AST) and never
-    # exercises the disk-cache code path; the Tier-1 build is local, single-user
-    # and single-process, so the exploit precondition (a shared/untrusted cache
-    # dir) does not hold. Re-evaluate if pySigma ships a fix or we start caching.
+    # exercises the disk-cache code path — asserted by
+    # tests/test_diskcache_unused.py. The Tier-1 build is local, single-user and
+    # single-process, so the exploit precondition (a shared/untrusted cache dir)
+    # does not hold. Re-evaluate if pySigma ships a fix or we start caching.
     "CVE-2025-69872": (
-        "transitive (pysigma->diskcache); unfixed upstream; cache path unused; "
-        "local single-user build"
+        "transitive (pysigma->diskcache); unfixed upstream; cache path unused "
+        "(tests/test_diskcache_unused.py); local single-user build"
     ),
     "GHSA-w8v5-vhqr-4h9v": "same advisory as CVE-2025-69872 (GHSA alias)",
     "PYSEC-2025-69872": "same advisory as CVE-2025-69872 (PYSEC alias)",
 }
+
+# Prefer a committed lockfile when present so the audit matches the locked closure.
+_LOCKFILE = _REPO_ROOT / "requirements.lock"
 
 
 def _pinned_requirements() -> list[str]:
@@ -142,36 +146,56 @@ def main() -> int:
         resolved_req_file = Path(tmpdir) / "resolved-requirements.txt"
         _write_requirements(declared_req_file, reqs)
 
-        resolver_cmd = [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--dry-run",
-            "--ignore-installed",
-            "--no-input",
-            "--keyring-provider=subprocess",
-            "--report",
-            str(resolver_report),
-            "-r",
-            str(declared_req_file),
-        ]
-        resolver = _run(resolver_cmd)
-        if resolver.returncode != 0:
-            _report_resolver_failure(resolver)
-            return resolver.returncode
+        if _LOCKFILE.is_file():
+            # Prefer the committed lockfile's resolved pins when available.
+            locked = [
+                line.split("#", 1)[0].strip()
+                for line in _LOCKFILE.read_text(encoding="utf-8").splitlines()
+                if line.split("#", 1)[0].strip() and not line.startswith("-")
+            ]
+            if locked:
+                _write_requirements(resolved_req_file, locked)
+                print(
+                    f"audit_deps: using committed {_LOCKFILE.name} "
+                    f"({len(locked)} locked package(s))"
+                )
+            else:
+                locked = []
+        else:
+            locked = []
 
-        try:
-            resolved = _read_resolver_report(resolver_report)
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            print(
-                f"audit_deps: FAILED — dependency resolver produced an unreadable report: {exc}",
-                file=sys.stderr,
-            )
-            return 2
+        if not locked:
+            resolver_cmd = [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--dry-run",
+                "--ignore-installed",
+                "--no-input",
+                "--keyring-provider=subprocess",
+                "--report",
+                str(resolver_report),
+                "-r",
+                str(declared_req_file),
+            ]
+            resolver = _run(resolver_cmd)
+            if resolver.returncode != 0:
+                _report_resolver_failure(resolver)
+                return resolver.returncode
 
-        _write_requirements(resolved_req_file, resolved)
-        print(f"audit_deps: resolved {len(resolved)} packages in the declared closure")
+            try:
+                resolved = _read_resolver_report(resolver_report)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                print(
+                    f"audit_deps: FAILED — dependency resolver produced an "
+                    f"unreadable report: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+
+            _write_requirements(resolved_req_file, resolved)
+            print(f"audit_deps: resolved {len(resolved)} packages in the declared closure")
 
         cmd = _add_ignored(
             [

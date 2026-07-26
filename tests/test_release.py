@@ -26,15 +26,20 @@ def test_release_scans_staged_tree_before_commit(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(release, "_run", fake_run)
     monkeypatch.setattr(release, "_git", fake_git)
 
-    release._commit_and_tag("1.2.3", argparse.Namespace(dry_run=False), already_released=False)
+    release._commit_and_tag(
+        "1.2.3", argparse.Namespace(dry_run=False, allow_dirty=False), already_released=False
+    )
 
-    assert calls == [
-        ("git", "add", "-A"),
-        (sys.executable, "scripts/security/secret_scan.py"),
-        ("git", "diff", "--cached", "--name-only"),
-        ("git", "commit", "-m", "Release v1.2.3"),
-        ("git", "tag", "-a", "v1.2.3", "-m", "Substation v1.2.3"),
-    ]
+    assert ("git", "add", "-A") not in calls
+    assert any(c[:3] == ("git", "add", "--") for c in calls)
+    assert (sys.executable, "scripts/security/secret_scan.py") in calls
+    assert ("git", "diff", "--cached", "--name-only") in calls
+    assert ("git", "commit", "-m", "Release v1.2.3") in calls
+    assert ("git", "tag", "-a", "v1.2.3", "-m", "Substation v1.2.3") in calls
+    # Secret scan must run after staging and before commit.
+    scan_i = calls.index((sys.executable, "scripts/security/secret_scan.py"))
+    commit_i = calls.index(("git", "commit", "-m", "Release v1.2.3"))
+    assert scan_i < commit_i
 
 
 def test_release_aborts_if_staged_secret_scan_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -48,9 +53,10 @@ def test_release_aborts_if_staged_secret_scan_fails(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(release, "_run", fake_run)
 
     with pytest.raises(release.ReleaseError, match="secret scan"):
-        release._commit_and_tag("1.2.3", argparse.Namespace(dry_run=False), already_released=False)
+        release._commit_and_tag(
+            "1.2.3", argparse.Namespace(dry_run=False, allow_dirty=False), already_released=False
+        )
 
-    assert calls == [
-        ("git", "add", "-A"),
-        (sys.executable, "scripts/security/secret_scan.py"),
-    ]
+    assert ("git", "add", "-A") not in calls
+    assert any(c[:3] == ("git", "add", "--") for c in calls)
+    assert calls[-1] == (sys.executable, "scripts/security/secret_scan.py")

@@ -55,13 +55,14 @@ To capture probes from other hosts **on an isolated research segment only**, opt
 explicitly:
 
 ```sh
+export SUBSTATION_HONEYPOT_I_UNDERSTAND=1
 python -m substation.honeypot --bind 10.99.0.5 --port 502 \
     --log honeypot-probes.jsonl --allow-external
 ```
 
 Options: `--bind` (default `127.0.0.1`), `--port` (default `502`), `--log`
 (default `./honeypot-probes.jsonl`), `--allow-external` (opt in to a non-loopback
-bind).
+bind; also requires `SUBSTATION_HONEYPOT_I_UNDERSTAND=1`).
 
 ## The logs conform to the event-log schema
 
