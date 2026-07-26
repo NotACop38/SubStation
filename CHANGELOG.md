@@ -45,6 +45,9 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ### Changed
 
+- Demo default set includes a DNP3 anomaly (≥2 protocols); coverage map marks
+  Tier-2 detections as `◇ not-run` when not evaluated (never misleading `quiet`).
+
 - Tier-1 `detect` package docstring clarifies Zeek/Suricata run out-of-package.
 
 - `make security` also bandit-scans `scripts/` (B603/B607 skipped for fixed
