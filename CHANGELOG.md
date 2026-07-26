@@ -11,6 +11,8 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ### Fixed
 
+- README Safety: do not replay PCAPs against live OT.
+
 - Verify fails clearly when every check is skipped; empty-request fidelity is an
   explicit skip; S7 availability requires a loadable plugin, not a name-only hit.
 
@@ -21,6 +23,12 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
   the X1 DNP3 scenario; unknown params rejected.
 
 ### Added
+
+- **Dependency lockfile** — committed `requirements.lock`; `make security`
+  prefers it for the scoped audit when present.
+- **Honeypot external-bind confirmation** — `--allow-external` also requires
+  `SUBSTATION_HONEYPOT_I_UNDERSTAND=1`.
+- **Local DoS caps** — JSONL load line/byte caps; scenario exchange-count cap.
 
 - **X1 baseline token parity** — `_x1_baseline_redef` includes the S7 benign
   baseline and emits Zeek-matching `rosctr`/`szl`/`s7comm-plus` tokens
@@ -36,6 +44,14 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
   `importlib.resources`-compatible paths with checkout fallback.
 
 ### Changed
+
+- Tier-1 `detect` package docstring clarifies Zeek/Suricata run out-of-package.
+
+- `make security` also bandit-scans `scripts/` (B603/B607 skipped for fixed
+  subprocess argv lists).
+- Release staging uses an explicit path allowlist (optional `--allow-dirty`
+  product trees).
+- Pillow pinned in the `dev` extra for `make demo-gif`.
 
 - Constitution docs (PRD / AGENTS / CLAUDE / checklist / CONTRIBUTING) synced to
   local-CI reality; orphan root `coverage/` artifacts removed.

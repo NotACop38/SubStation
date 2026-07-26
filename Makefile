@@ -62,6 +62,8 @@ coverage-check: ## Verify the committed coverage snapshot (docs/coverage) matche
 
 security: check-python ## Security gate: bandit + dep audit + secret scan + SBOM + files-only invariant
 	$(PY) -m bandit -q -r $(PKG)
+	# scripts/: skip B404/B603/B607 (intentional subprocess to docker/git/tools; no shell).
+	$(PY) -m bandit -q -r scripts --skip B404,B603,B607
 	$(PY) scripts/security/audit_deps.py
 	$(PY) scripts/security/secret_scan.py
 	$(PY) scripts/security/sbom.py

@@ -1,11 +1,13 @@
-"""Sigma evaluation, Zeek runner, Suricata runner.
+"""Tier-1 Sigma evaluation over JSON event logs.
 
 Tier 1 (the headline path, PRD.md §6.2) is implemented here: :func:`run_detections`
 evaluates every registered **Tier-1 Sigma** detection directly over the ``.jsonl``
 event log via the offline evaluator (:mod:`substation.detect.sigma_eval`), the
-mechanism confirmed in ``docs/spikes/03-sigma-offline-evaluation.md``. Tier-2
-Zeek/Suricata detections (PRD.md §6.5) execute in the Tier-2 runner over PCAP and
-are skipped here.
+mechanism confirmed in ``docs/spikes/03-sigma-offline-evaluation.md``.
+
+Tier-2 Zeek/Suricata detections (PRD.md §6.5) are **not** executed in this
+package — they run in the out-of-package Tier-2 runner (``scripts/verify/run.py``
+/ ``make verify``) over PCAP and are skipped by :func:`run_detections`.
 
 The per-detection metadata (which engine, which tier, which rule file) comes from
 the detection registry (:mod:`substation.detect.registry`), so adding a Sigma
@@ -22,7 +24,11 @@ from typing import Any
 from .registry import Detection, load_registry
 from .sigma_eval import load_rule, matching_indices
 
-__all__ = ["Hit", "run_detections", "load_events"]
+__all__ = ["Hit", "run_detections", "load_events", "MAX_JSONL_LINES", "MAX_JSONL_BYTES"]
+
+# Local DoS hardening: refuse unbounded event logs from a careless/hostile file.
+MAX_JSONL_LINES = 100_000
+MAX_JSONL_BYTES = 64 * 1024 * 1024  # 64 MiB
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,14 +45,25 @@ def load_events(events_path: str | Path) -> list[dict[str, Any]]:
     A *missing* log is an error, not an empty input: silently treating it as
     "no events" would let the pipeline (and the Detection Contract checks) report
     quiet/green even though the detector never consumed any telemetry.
+
+    Caps :data:`MAX_JSONL_BYTES` / :data:`MAX_JSONL_LINES` guard local DoS from an
+    accidentally huge or hostile input file.
     """
     path = Path(events_path)
     if not path.exists():
         raise FileNotFoundError(f"event log not found: {path} (was the generate stage run?)")
+    size = path.stat().st_size
+    if size > MAX_JSONL_BYTES:
+        raise ValueError(
+            f"event log {path} is {size} bytes; exceeds the {MAX_JSONL_BYTES} byte load cap"
+        )
     events: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            events.append(json.loads(line))
+    with path.open(encoding="utf-8") as fh:
+        for line_no, line in enumerate(fh, start=1):
+            if line_no > MAX_JSONL_LINES:
+                raise ValueError(f"event log {path} exceeds the {MAX_JSONL_LINES} line load cap")
+            if line.strip():
+                events.append(json.loads(line))
     return events
 
 

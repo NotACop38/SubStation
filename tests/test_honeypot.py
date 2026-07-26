@@ -181,7 +181,12 @@ def test_config_allows_loopback_by_default() -> None:
     assert HoneypotConfig(log_path=Path("x.jsonl")).bind_host == "127.0.0.1"
 
 
-def test_config_allows_external_with_optin() -> None:
+def test_config_allows_external_with_optin(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(HoneypotConfigError, match="SUBSTATION_HONEYPOT_I_UNDERSTAND"):
+        HoneypotConfig(
+            log_path=Path("x.jsonl"), bind_host="10.99.0.5", allow_external=True
+        ).validate()
+    monkeypatch.setenv("SUBSTATION_HONEYPOT_I_UNDERSTAND", "1")
     HoneypotConfig(log_path=Path("x.jsonl"), bind_host="10.99.0.5", allow_external=True).validate()
 
 

@@ -55,7 +55,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--allow-external",
         action="store_true",
-        help="Opt in to binding a NON-loopback address. Only on an isolated research segment.",
+        help=(
+            "Opt in to binding a NON-loopback address. Also requires "
+            "SUBSTATION_HONEYPOT_I_UNDERSTAND=1. Only on an isolated research segment."
+        ),
     )
     parser.add_argument(
         "--log-max-bytes",

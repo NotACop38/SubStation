@@ -261,12 +261,16 @@ here and enforced in code and tests.
   connect/transmit primitive raise during emission), asserted in tests
   (`tests/test_files_only.py`), and enforced by a codebase-wide static scan
   (`tests/test_no_raw_socket_send.py`) under `make ci`.
+- ⛔ **Do not replay PCAPs against live OT.** Generated captures are for offline
+  detection development and validation only. Replaying them toward real PLCs,
+  RTUs, or plant networks is out of scope and unsafe.
 - 🧭 **Defensive-only.** We model the *network signature* of malicious behavior so it
   can be **detected**. There is **no exploit code, no weaponization, and no payloads**
   intended to manipulate or damage real equipment.
 - 🧪 **Passive, isolated honeypot (optional).** The included Modbus probe-logger is
   opt-in, binds loopback by default, network-isolated, research-only, and out of the
-  headline path, never part of `make demo`.
+  headline path, never part of `make demo`. Binding a non-loopback address requires
+  both `--allow-external` and `SUBSTATION_HONEYPOT_I_UNDERSTAND=1`.
 
 Substation is **not** a SIEM, a packet-capture appliance, or a substitute for a real
 OT monitoring product.

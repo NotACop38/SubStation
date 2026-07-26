@@ -43,6 +43,7 @@ def test_audit_deps_resolves_closure_before_auditing_without_pip_fallback(
         )
 
     monkeypatch.setattr(audit_deps, "_pinned_requirements", lambda: ["PyYAML==6.0.3"])
+    monkeypatch.setattr(audit_deps, "_LOCKFILE", Path("/nonexistent/requirements.lock"))
     monkeypatch.setattr(audit_deps, "_run", fake_run)
 
     assert audit_deps.main() == 0
@@ -72,6 +73,7 @@ def test_audit_deps_fails_closed_when_dependency_resolver_crashes(
         return subprocess.CompletedProcess(cmd, 2, stdout="", stderr="Traceback: ensurepip died")
 
     monkeypatch.setattr(audit_deps, "_pinned_requirements", lambda: ["PyYAML==6.0.3"])
+    monkeypatch.setattr(audit_deps, "_LOCKFILE", Path("/nonexistent/requirements.lock"))
     monkeypatch.setattr(audit_deps, "_run", fake_run)
 
     assert audit_deps.main() == 2
@@ -83,3 +85,26 @@ def test_audit_deps_fails_closed_when_dependency_resolver_crashes(
     assert "dependency resolver could not complete" in captured.err
     assert "fallback" not in captured.out
     assert "fallback" not in captured.err
+
+
+def test_audit_deps_prefers_committed_lockfile(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    lock = tmp_path / "requirements.lock"
+    lock.write_text("PyYAML==6.0.3\ntyping_extensions==4.15.0\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout="No known vulnerabilities found", stderr=""
+        )
+
+    monkeypatch.setattr(audit_deps, "_pinned_requirements", lambda: ["PyYAML==6.0.3"])
+    monkeypatch.setattr(audit_deps, "_LOCKFILE", lock)
+    monkeypatch.setattr(audit_deps, "_run", fake_run)
+
+    assert audit_deps.main() == 0
+    assert len(calls) == 1
+    assert calls[0][1:3] == ["-m", "pip_audit"]
+    assert "using committed requirements.lock" in capsys.readouterr().out

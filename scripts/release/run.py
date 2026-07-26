@@ -238,6 +238,44 @@ def _working_tree_dirty() -> bool:
     return bool(_git("status", "--porcelain"))
 
 
+# Paths the release pipeline itself regenerates / bumps. Always stage these.
+_RELEASE_ARTIFACT_PATHS = (
+    "docs/coverage/coverage.md",
+    "docs/coverage/coverage.json",
+    "docs/coverage/navigator-layer.json",
+    "docs/demo-output.txt",
+    "CHANGELOG.md",
+    "pyproject.toml",
+)
+# Tracked trees that may be included when cutting a release with --allow-dirty.
+_RELEASE_SOURCE_TREES = (
+    "substation",
+    "detections",
+    "scenarios",
+    "tests",
+    "scripts",
+    "docs",
+    "Makefile",
+    "README.md",
+    "PRD.md",
+    "ENGINEERING_CHECKLIST.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CONTRIBUTING.md",
+    "setup.py",
+    "requirements.lock",
+)
+
+
+def _stage_release_paths(*, allow_dirty: bool, dry_run: bool) -> None:
+    """Stage only the release allowlist (plus optional tracked product trees)."""
+    for path in _RELEASE_ARTIFACT_PATHS:
+        _run(["git", "add", "--", path], dry_run=dry_run)
+    if allow_dirty:
+        for path in _RELEASE_SOURCE_TREES:
+            _run(["git", "add", "-u", "--", path], dry_run=dry_run)
+
+
 def _scan_staged_tree(*, dry_run: bool) -> None:
     """Re-run the secret scanner after staging the exact tree to be committed."""
     _run([sys.executable, "scripts/security/secret_scan.py"], dry_run=dry_run)
@@ -263,11 +301,12 @@ def _commit_and_tag(version: str, args: argparse.Namespace, already_released: bo
         print(f"release: tag {tag} left in place (idempotent; NOT pushed).")
         return
 
-    # A real release: stage the FULL intended tree (the regenerated artifacts plus
-    # any --allow-dirty source changes that were just gated, built, and tested) so
-    # the tagged commit is self-consistent with the wheel/sdist. dist/ and other
-    # generated outputs stay out via .gitignore.
-    _run(["git", "add", "-A"], dry_run=args.dry_run)
+    # Stage an explicit allowlist (release artifacts + version/changelog) so a
+    # dirty worktree cannot accidentally commit secrets or unrelated junk.
+    # With --allow-dirty, also stage tracked updates under the product trees.
+    _stage_release_paths(
+        allow_dirty=bool(getattr(args, "allow_dirty", False)), dry_run=args.dry_run
+    )
     _scan_staged_tree(dry_run=args.dry_run)
     staged = _git("diff", "--cached", "--name-only")
     if not staged and not args.dry_run:

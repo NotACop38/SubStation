@@ -33,7 +33,11 @@ from .model import (
     Timing,
 )
 
-__all__ = ["ScenarioError", "load_scenario", "load_scenarios"]
+__all__ = ["ScenarioError", "load_scenario", "load_scenarios", "MAX_EXCHANGES"]
+
+# Local DoS hardening: a scenario with an absurd exchange list can exhaust memory
+# during emit; keep authored scenarios small and reject runaway inputs early.
+MAX_EXCHANGES = 10_000
 
 _SCENARIO_KEYS = {
     "name",
@@ -255,6 +259,11 @@ def _parse_scenario(raw: object) -> Scenario:
     exchanges_raw = data.get("exchanges")
     if not isinstance(exchanges_raw, list):
         raise ScenarioError("scenario.exchanges: expected a list")
+    if len(exchanges_raw) > MAX_EXCHANGES:
+        raise ScenarioError(
+            f"scenario.exchanges: {len(exchanges_raw)} exchanges exceeds the "
+            f"{MAX_EXCHANGES} exchange cap"
+        )
     exchanges = tuple(_parse_exchange(e, f"exchanges[{i}]") for i, e in enumerate(exchanges_raw))
     for i, ex in enumerate(exchanges):
         if ex.source not in actor_ids:
