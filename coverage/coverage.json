@@ -1,0 +1,322 @@
+{
+  "schema": "substation-coverage/v1",
+  "generated_by": "python -m substation.coverage",
+  "domain": "ics-attack",
+  "detection_count": 11,
+  "tactics_total": 12,
+  "tactics_covered": 5,
+  "detections": [
+    {
+      "id": "M1",
+      "title": "Unauthorized register/coil write",
+      "protocol": "modbus",
+      "engine": "sigma",
+      "tier": 1,
+      "status": "validated",
+      "rule": "detections/sigma/modbus_m1_unauthorized_write.yml",
+      "doc": "detections/docs/M1-unauthorized-write.md",
+      "tactic": "Impair Process Control",
+      "tactic_id": "TA0106",
+      "techniques": [
+        {
+          "id": "T1692.001",
+          "name": "Unauthorized Message: Command Message"
+        },
+        {
+          "id": "T0836",
+          "name": "Modify Parameter"
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "title": "Illegal / abnormal function code",
+      "protocol": "modbus",
+      "engine": "sigma",
+      "tier": 1,
+      "status": "validated",
+      "rule": "detections/sigma/modbus_m2_illegal_function_code.yml",
+      "doc": "detections/docs/M2-illegal-function-code.md",
+      "tactic": "Discovery",
+      "tactic_id": "TA0102",
+      "techniques": [
+        {
+          "id": "T0888",
+          "name": "Remote System Information Discovery"
+        }
+      ]
+    },
+    {
+      "id": "M3",
+      "title": "Function-code / unit-ID sweep",
+      "protocol": "modbus",
+      "engine": "zeek",
+      "tier": 2,
+      "status": "tier2",
+      "rule": "detections/zeek/modbus_m3_unit_function_sweep.zeek",
+      "doc": "detections/docs/M3-unit-function-sweep.md",
+      "tactic": "Discovery",
+      "tactic_id": "TA0102",
+      "techniques": [
+        {
+          "id": "T0846",
+          "name": "Remote System Discovery"
+        },
+        {
+          "id": "T0888",
+          "name": "Remote System Information Discovery"
+        }
+      ]
+    },
+    {
+      "id": "D1",
+      "title": "Cold/warm restart from unexpected source",
+      "protocol": "dnp3",
+      "engine": "sigma",
+      "tier": 1,
+      "status": "validated",
+      "rule": "detections/sigma/dnp3_d1_unauthorized_restart.yml",
+      "doc": "detections/docs/D1-unauthorized-restart.md",
+      "tactic": "Inhibit Response Function",
+      "tactic_id": "TA0107",
+      "techniques": [
+        {
+          "id": "T0816",
+          "name": "Device Restart/Shutdown"
+        },
+        {
+          "id": "T0814",
+          "name": "Denial of Service"
+        }
+      ]
+    },
+    {
+      "id": "D2",
+      "title": "Disable unsolicited responses",
+      "protocol": "dnp3",
+      "engine": "sigma",
+      "tier": 1,
+      "status": "validated",
+      "rule": "detections/sigma/dnp3_d2_disable_unsolicited.yml",
+      "doc": "detections/docs/D2-disable-unsolicited.md",
+      "tactic": "Inhibit Response Function",
+      "tactic_id": "TA0107",
+      "techniques": [
+        {
+          "id": "T1691.002",
+          "name": "Block Operational Technology Message: Reporting Message"
+        },
+        {
+          "id": "T0878",
+          "name": "Alarm Suppression"
+        }
+      ]
+    },
+    {
+      "id": "D3",
+      "title": "Unauthorized control (operate/direct-operate)",
+      "protocol": "dnp3",
+      "engine": "sigma",
+      "tier": 1,
+      "status": "validated",
+      "rule": "detections/sigma/dnp3_d3_unauthorized_operate.yml",
+      "doc": "detections/docs/D3-unauthorized-operate.md",
+      "tactic": "Impair Process Control",
+      "tactic_id": "TA0106",
+      "techniques": [
+        {
+          "id": "T1692.001",
+          "name": "Unauthorized Message: Command Message"
+        }
+      ]
+    },
+    {
+      "id": "D4",
+      "title": "Function-code enumeration / scanning",
+      "protocol": "dnp3",
+      "engine": "zeek",
+      "tier": 2,
+      "status": "tier2",
+      "rule": "detections/zeek/dnp3_d4_function_enumeration.zeek",
+      "doc": "detections/docs/D4-function-enumeration.md",
+      "tactic": "Discovery",
+      "tactic_id": "TA0102",
+      "techniques": [
+        {
+          "id": "T0888",
+          "name": "Remote System Information Discovery"
+        },
+        {
+          "id": "T0846",
+          "name": "Remote System Discovery"
+        }
+      ]
+    },
+    {
+      "id": "S1",
+      "title": "CPU stop/start from unexpected source",
+      "protocol": "s7comm",
+      "engine": "sigma",
+      "tier": 1,
+      "status": "validated",
+      "rule": "detections/sigma/s7comm_s1_cpu_stop_start.yml",
+      "doc": "detections/docs/S1-cpu-stop-start.md",
+      "tactic": "Execution",
+      "tactic_id": "TA0104",
+      "techniques": [
+        {
+          "id": "T0858",
+          "name": "Change Operating Mode"
+        }
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "Program / data-block write or download",
+      "protocol": "s7comm",
+      "engine": "sigma",
+      "tier": 1,
+      "status": "validated",
+      "rule": "detections/sigma/s7comm_s2_program_write_download.yml",
+      "doc": "detections/docs/S2-program-write-download.md",
+      "tactic": "Lateral Movement",
+      "tactic_id": "TA0109",
+      "techniques": [
+        {
+          "id": "T0843",
+          "name": "Program Download"
+        }
+      ]
+    },
+    {
+      "id": "S3",
+      "title": "Enumeration / module-info reads",
+      "protocol": "s7comm",
+      "engine": "zeek",
+      "tier": 2,
+      "status": "tier2",
+      "rule": "detections/zeek/s7comm_s3_enumeration.zeek",
+      "doc": "detections/docs/S3-enumeration.md",
+      "tactic": "Discovery",
+      "tactic_id": "TA0102",
+      "techniques": [
+        {
+          "id": "T0888",
+          "name": "Remote System Information Discovery"
+        },
+        {
+          "id": "T0846",
+          "name": "Remote System Discovery"
+        }
+      ]
+    },
+    {
+      "id": "X1",
+      "title": "Cross-protocol baseline deviation (new talker / asset pair / function)",
+      "protocol": "cross",
+      "engine": "zeek",
+      "tier": 2,
+      "status": "tier2",
+      "rule": "detections/zeek/x1_cross_protocol_baseline.zeek",
+      "doc": "detections/docs/X1-cross-protocol-baseline.md",
+      "tactic": "Discovery",
+      "tactic_id": "TA0102",
+      "techniques": [
+        {
+          "id": "T0846",
+          "name": "Remote System Discovery"
+        }
+      ]
+    }
+  ],
+  "tactic_coverage": [
+    {
+      "tactic": "Initial Access",
+      "tactic_id": "TA0108",
+      "covered": false,
+      "detections": []
+    },
+    {
+      "tactic": "Execution",
+      "tactic_id": "TA0104",
+      "covered": true,
+      "detections": [
+        "S1"
+      ]
+    },
+    {
+      "tactic": "Persistence",
+      "tactic_id": "TA0110",
+      "covered": false,
+      "detections": []
+    },
+    {
+      "tactic": "Privilege Escalation",
+      "tactic_id": "TA0111",
+      "covered": false,
+      "detections": []
+    },
+    {
+      "tactic": "Evasion",
+      "tactic_id": "TA0103",
+      "covered": false,
+      "detections": []
+    },
+    {
+      "tactic": "Discovery",
+      "tactic_id": "TA0102",
+      "covered": true,
+      "detections": [
+        "M2",
+        "M3",
+        "D4",
+        "S3",
+        "X1"
+      ]
+    },
+    {
+      "tactic": "Lateral Movement",
+      "tactic_id": "TA0109",
+      "covered": true,
+      "detections": [
+        "S2"
+      ]
+    },
+    {
+      "tactic": "Collection",
+      "tactic_id": "TA0100",
+      "covered": false,
+      "detections": []
+    },
+    {
+      "tactic": "Command and Control",
+      "tactic_id": "TA0101",
+      "covered": false,
+      "detections": []
+    },
+    {
+      "tactic": "Inhibit Response Function",
+      "tactic_id": "TA0107",
+      "covered": true,
+      "detections": [
+        "D1",
+        "D2"
+      ]
+    },
+    {
+      "tactic": "Impair Process Control",
+      "tactic_id": "TA0106",
+      "covered": true,
+      "detections": [
+        "M1",
+        "D3"
+      ]
+    },
+    {
+      "tactic": "Impact",
+      "tactic_id": "TA0105",
+      "covered": false,
+      "detections": []
+    }
+  ]
+}
