@@ -19,7 +19,6 @@ from pathlib import Path
 from substation.emit import _tcp
 from substation.protocols.dnp3 import (
     OBJECT_TYPES,
-    READ,
     RESPONSE,
     UNSOLICITED_RESPONSE,
     Dnp3Event,
@@ -126,12 +125,14 @@ def _app_bytes(event: Dnp3Event) -> bytes:
     out = bytes([app_control, event.func_code])
     if not event.is_orig:  # responses (RESPONSE / UNSOLICITED_RESPONSE) carry IIN.
         out += int(event.iin or 0).to_bytes(2, "little")
-    if event.is_orig and event.func_code == READ:
+    if event.is_orig and event.control is not None:
+        out += _crob_objects(event)
+    elif event.is_orig and event.objects is not None:
+        # READ/WRITE/unsolicited-config requests: object header from the shared
+        # OBJECT_TYPES mapping (same string the JSON detail carries).
         out += _read_request_objects(event)
     elif event.func_code in (RESPONSE, UNSOLICITED_RESPONSE) and event.objects:
         out += _range_objects(event)
-    elif event.is_orig and event.control is not None:
-        out += _crob_objects(event)
     return out
 
 
