@@ -1,37 +1,30 @@
 ---
 name: "source-command-release"
-description: "Cut a local Substation release (gate -> build -> artifacts -> bump -> tag)."
+description: "Use when the user requests a local Substation release or retries an interrupted release."
 ---
 
 # source-command-release
 
-Use this skill when the user asks to run the migrated source command `release`.
+This includes the migrated source command `release`.
 
 ## Command Template
 
-Cut a release for Substation. Releases are **local and Codex-driven** — there is
-no GitHub Actions / cloud release pipeline (AGENTS.md). `make release` is the
-pipeline; it is idempotent and repeatable.
+Releases are **local and Codex-driven**, with no cloud release pipeline.
+`scripts/release/run.py` is authoritative for the pipeline and step order.
 
-The pipeline (see `scripts/release/run.py`):
-
-1. **Gate** — re-run `make ci` (Tier 1) and `make verify` (Tier 2). A release
-   only happens over a green gate.
-2. **Build** — sdist + wheel into `dist/`.
-3. **Regenerate + commit** the coverage map + ATT&CK Navigator layer snapshot
-   (`docs/coverage/`) and the demo transcript (`docs/demo-output.txt`).
-4. **Bump** the version in `pyproject.toml` and promote `CHANGELOG.md`'s
-   `[Unreleased]` section to the new version.
-5. **Commit + tag** the release locally (the tag is **not** pushed).
-
-Steps:
-
-1. Run `make release` (defaults to a minor bump). To target a specific version
-   pass args, e.g. `make release RELEASE_ARGS="--version 0.2.0"`, or a different
-   bump with `RELEASE_ARGS="--bump patch"`. In an environment without Docker, add
-   `--no-verify` to drop only the Tier-2 gate.
-2. If a gate fails, show the failing output, diagnose, fix, and re-run — do not
-   tag over a red gate.
-3. On success, report the new version, the tag, and the regenerated artifacts.
-   Re-running for an already-released version is a safe no-op (re-syncs
-   artifacts, creates no duplicate commit/tag/changelog entry).
+1. Inspect the current version, local tags and worktree. Resolve the requested
+   version or bump **once**, before running the pipeline; the default bump is
+   minor. Record that target and use it for every attempt:
+   `make release RELEASE_ARGS="--version <target>"`.
+2. Preserve the dirty-tree check and both release gates: `make ci` (Tier 1) and
+   `make verify` (Tier 2). If Docker is unavailable, the existing `--no-verify`
+   exception skips only Tier 2; report it as **unverified**, not passed.
+3. After a failure, timeout or uncertain result, inspect the current version,
+   worktree, release commit and target tag before retrying. Reconcile partial
+   release edits while preserving unrelated work. Reuse the recorded target:
+   rerunning the default bump can create another release. An existing target
+   tag is left in place, but artifact regeneration can still change the worktree.
+4. Diagnose failed gates and fix causes within the authorized release scope.
+   Report any unresolved blocker; do not tag over a failed required gate.
+5. Report the target version, local tag, regenerated artifacts and each gate's
+   result. **Do not push the tag** as part of this local release command.

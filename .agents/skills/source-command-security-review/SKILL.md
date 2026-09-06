@@ -1,11 +1,11 @@
 ---
 name: "source-command-security-review"
-description: "Audit the working tree for vulnerabilities, unsafe network/socket calls, and secrets."
+description: "Use when the user requests a security review of the Substation working tree."
 ---
 
 # source-command-security-review
 
-Use this skill when the user asks to run the migrated source command `security-review`.
+This includes the migrated source command `security-review`.
 
 ## Command Template
 
@@ -17,10 +17,18 @@ Do all of the following and produce a concise findings report (severity, file:li
 why it matters, recommended fix). Prioritize anything that violates the safety
 invariants in `AGENTS.md`.
 
-1. **Static analysis (code):** run `bandit -q -r substation` and summarize real
-   findings (filter obvious false positives, but explain why).
-2. **Dependency vulnerabilities:** run `pip-audit` and report any vulnerable pins
-   in `pyproject.toml`.
+Use the same Python executable selected by the Makefile's `PY` variable
+(`python3` in the activated project environment by default). Use that executable
+in place of `<python>` below; bare tool commands can use an unrelated environment.
+
+1. **Static analysis (code):** run `<python> -m bandit -q -r substation` and
+   `<python> -m bandit -q -r scripts --skip B404,B603,B607`, matching
+   `make security`. The scripts-only exclusions cover intentional subprocess
+   calls. Summarize real findings and explain any false-positive dispositions.
+2. **Dependency vulnerabilities:** run
+   `<python> scripts/security/audit_deps.py` and report project-scoped advisories.
+   This uses the declared dependency closure and documented exceptions; bare
+   `pip-audit` instead scans whatever is installed in the ambient environment.
 3. **Unsafe network / socket calls (safety-invariant check):** search the tree for
    outbound/transmitting calls that would break the files-only invariant —
    e.g. `socket.socket`, `.connect(`, `.send(`, `.sendto(`, `sendp(`, `srp(`,
