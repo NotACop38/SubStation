@@ -25,7 +25,8 @@ dev: check-python ## Install the package with dev tooling (pinned)
 	$(PY) -m pip install -e ".[dev]"
 
 ## ---------------------------------------------------------------------------
-## CI — the local gate. Run this after any change; it must pass before "done".
+## CI — the local gate at batch completion and before every push.
+## Use focused checks during edits; an explicit gate request runs it immediately.
 ## ---------------------------------------------------------------------------
 ci: check-python format-check lint type test schema coverage-build coverage-check security ## Run the full local CI gate
 	@echo "--- detection harness (Tier 1 generate->detect->report) runs under 'test'"

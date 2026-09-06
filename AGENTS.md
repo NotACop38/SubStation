@@ -55,8 +55,9 @@ overrides the GitHub-Actions references in PRD §6.9 / checklist Phase 2.)
 
 ## Validation cadence
 
-Build and commit **per step**. Do **not** run `make ci` / `make verify` after every
-change — they remain defined but are invoked as **one large validation at the end**
-of a work batch, not continuously. There is no automated per-edit or per-stop CI
-(see `.Codex/settings.json`: the heavy PostToolUse and Stop hooks are disabled).
+Build and commit **per step**. Run focused checks during edits, then `make ci`
+and applicable `make verify` checks at the end of the work batch. An explicit
+request to run a gate runs it immediately; the pre-push `make ci` gate remains
+required. When diagnosing automatic CI runs, inspect the active harness's current
+hook configuration instead of assuming which hooks are enabled.
 Still **no GitHub Actions, ever.**
