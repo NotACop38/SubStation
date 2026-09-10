@@ -108,3 +108,12 @@ def test_audit_deps_prefers_committed_lockfile(
     assert len(calls) == 1
     assert calls[0][1:3] == ["-m", "pip_audit"]
     assert "using committed requirements.lock" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "locked",
+    [["PyYAML==6.0.2"], ["unrelated==1.0"], ["PyYAML>=6"], ["PyYAML==6.0.3", "pyyaml==6.0.3"]],
+)
+def test_dependency_audit_rejects_lock_drift(locked: list[str]) -> None:
+    with pytest.raises(ValueError):
+        audit_deps._check_locked_requirements(["PyYAML==6.0.3"], locked)

@@ -36,6 +36,8 @@ dev = [
     "pip-audit==2.10.0",
     "detect-secrets==1.5.0",  # secret scan in `make security` (gitleaks-via-Docker preferred when present).
     "build==1.5.0",  # sdist + wheel builder for `make release` (PyPA build).
+    "setuptools==84.0.0",  # release uses --no-isolation; install the backend explicitly.
+    "wheel==0.48.0",
     "Pillow==12.3.0",  # optional: `make demo-gif` headless GIF render.
 ]
 

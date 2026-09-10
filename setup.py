@@ -16,6 +16,7 @@ from setuptools.command.build_py import build_py
 
 _ROOT = Path(__file__).resolve().parent
 _CONTENT_NAMES = ("detections", "scenarios")
+_CONTENT_SUFFIXES = {".yaml", ".yml", ".md", ".zeek", ".rules", ".suricata"}
 
 
 class BuildPyWithContent(build_py):
@@ -35,11 +36,17 @@ class BuildPyWithContent(build_py):
                     shutil.rmtree(dest)
                 else:
                     dest.unlink()
-            shutil.copytree(
-                src,
-                dest,
-                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"),
-            )
+            for source in sorted(src.rglob("*")):
+                relative = source.relative_to(src)
+                if any(part.startswith(".") for part in relative.parts):
+                    continue
+                if source.suffix not in _CONTENT_SUFFIXES or not source.is_file():
+                    continue
+                if source.is_symlink():
+                    raise RuntimeError(f"build_py: symlink content is unsupported: {source}")
+                target = dest / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
 
 
 setup(cmdclass={"build_py": BuildPyWithContent})

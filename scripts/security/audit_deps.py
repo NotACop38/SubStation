@@ -23,6 +23,9 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
@@ -134,6 +137,34 @@ def _report_failure(result: subprocess.CompletedProcess[str]) -> None:
     )
 
 
+def _check_locked_requirements(declared: list[str], locked: list[str]) -> None:
+    """Reject lock drift before auditing a different dependency set than declared."""
+    pins = {}
+    for line in locked:
+        req = Requirement(line)
+        specs = list(req.specifier)
+        if (
+            req.url
+            or req.marker
+            or req.extras
+            or len(specs) != 1
+            or specs[0].operator != "=="
+            or "*" in specs[0].version
+        ):
+            raise ValueError(f"lock entry must be an unconditional exact pin: {line}")
+        name = canonicalize_name(req.name)
+        if name in pins:
+            raise ValueError(f"duplicate locked dependency: {name}")
+        pins[name] = specs[0].version
+    for line in declared:
+        req = Requirement(line)
+        if req.marker and not req.marker.evaluate():
+            continue
+        version = pins.get(canonicalize_name(req.name))
+        if version is None or version not in req.specifier:
+            raise ValueError(f"requirements.lock does not satisfy {line}; regenerate the lock")
+
+
 def main() -> int:
     reqs = _pinned_requirements()
     print(
@@ -154,6 +185,11 @@ def main() -> int:
                 if line.split("#", 1)[0].strip() and not line.startswith("-")
             ]
             if locked:
+                try:
+                    _check_locked_requirements(reqs, locked)
+                except ValueError as exc:
+                    print(f"audit_deps: FAILED — {exc}", file=sys.stderr)
+                    return 2
                 _write_requirements(resolved_req_file, locked)
                 print(
                     f"audit_deps: using committed {_LOCKFILE.name} "
