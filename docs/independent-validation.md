@@ -110,8 +110,36 @@ positives under a deny-policy counterfactual; M2 has one exception indicator.
 This is deliberately small test evidence. It does not measure production rates,
 validate DNP3/S7 imports or provide an external corpus for stateful Zeek rules.
 Eight core Modbus scenarios receive field comparisons; the illegal-function
-scenario and DNP3/S7 remain explicitly scoped to request tuple/count comparisons.
+scenario and S7 remain explicitly scoped to request tuple/count comparisons.
+DNP3 now has message and detail comparisons, described below.
 Packet timing, all protocol extensions and actual device behavior remain unqualified.
+
+## DNP3 fixture fidelity
+
+`make verify` observes individual Zeek parser events for every bundled DNP3
+scenario and two dedicated boundary fixtures. It compares both directions,
+connection addresses and ports, message order within each connection, function
+codes/names, response IIN, object types/ranges/counts and CROB control fields.
+Details stay attached to their message; dropped, duplicated, reordered or changed
+observations fail, as do decoder diagnostics. Unsolicited responses and consecutive
+no-response requests are included.
+
+This uses a verification observer because the standard `dnp3.log` can overwrite
+consecutive requests and omits direction. ICSNPP's object log also filters out
+unsolicited responses and most request functions. A general DNP3 importer cannot
+recover information absent from these logs. The observer is a fixture oracle,
+not a supported sensor import format.
+
+Boundary fixtures cover packed binary outputs, all seven supported object types,
+16-bit ranges/indices, 32-bit control times, nonzero IIN, and single-frame limits.
+These checks caught and corrected operation-label, IIN and point-width mismatches.
+New JSON uses ICSNPP's spaced operation names (`Latch On`, for example); scenario
+input continues to accept underscore spellings. `iin` follows Zeek's numeric
+representation: `0x0102` corresponds to wire octets `01 02`.
+
+The comparison does not qualify timing, application/transport sequence semantics,
+point values, all function-specific payload requirements, real equipment behavior
+or detection effectiveness. See the [source and regression record](spikes/08-dnp3-message-fidelity.md).
 
 ## Dependency evidence
 

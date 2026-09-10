@@ -9,6 +9,14 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ## [Unreleased]
 
+### DNP3 field fidelity
+
+- Replaced request-count checks with independent per-message header and object/control comparisons, including responses, ports, direction and connection order.
+- Added boundary fixtures and checks for lost/duplicated/reordered observations and decoder diagnostics.
+- Corrected ICSNPP operation labels, Zeek IIN representation, packed binary output sizes and analog-output status octets.
+- Removed fabricated CONFIRM responses and rejected unused response parameters on no-response and request-only operations.
+- Kept input operation aliases compatible; new JSON emits spaced ICSNPP labels. Timing, unmodeled payload semantics and general sensor import remain unqualified.
+
 ### Independent validation and site policies
 
 - Added strict ICSNPP Modbus JSON/TSV import with transaction provenance and supported-field comparisons against real Zeek.

@@ -2,8 +2,8 @@
 
 :func:`build_events` turns a loaded :class:`~substation.scenarios.Scenario` into an
 ordered list of :class:`Dnp3Event` — the **single intermediate model both emitters
-consume**, so the PCAP and JSON artifacts cannot drift (the LOCKED core design
-principle, PRD §6.1). This mirrors ``substation.protocols.modbus`` exactly; only the
+consume**, with independent parser checks for agreement (PRD §6.1).
+This mirrors ``substation.protocols.modbus``; only the
 protocol semantics differ.
 
 This module is pure Python and protocol-semantic only. :func:`event_to_dict` maps an
@@ -38,6 +38,7 @@ __all__ = [
     "DEFAULT_DNP3_PORT",
     "RESPONSE_DELAY",
     "dnp3_crc",
+    "object_payload_size",
 ]
 
 DEFAULT_DNP3_PORT = 20000  # DNP3/TCP well-known port (Zeek base/protocols/dnp3).
@@ -137,7 +138,7 @@ ACTION_CLASS: dict[int, str] = {
 _RESPONSE_CODES = {RESPONSE, UNSOLICITED_RESPONSE, 0x83}
 # Request functions a compliant outstation does NOT answer with a RESPONSE — the
 # ``*_NR`` ("no response") variants (Zeek consts.zeek, spike 04).
-_NO_RESPONSE = {DIRECT_OPERATE_NR, 0x06, 0x08, 0x0A, 0x0C, 0x21}
+_NO_RESPONSE = {CONFIRM, DIRECT_OPERATE_NR, 0x08, 0x0A, 0x0C, 0x21}
 # Functions whose request carries a Control-Relay-Output-Block (detail.control).
 _CONTROL_BLOCK_FUNCS = {SELECT, OPERATE, DIRECT_OPERATE, DIRECT_OPERATE_NR}
 
@@ -157,9 +158,9 @@ _TRIP_CODES = {  # trip_control_code string -> top two bits of control_code.
     "CLOSE": 1,
     "TRIP": 2,
 }
-# ICSNPP logs these Title_Case spellings; we accept any case in scenarios and emit
-# the canonical form so JSON detail matches dnp3_control.log exactly.
-_OPERATION_LABEL = {0: "Nul", 1: "Pulse_On", 2: "Pulse_Off", 3: "Latch_On", 4: "Latch_Off"}
+# ICSNPP consts.zeek uses spaces (its README previously showed underscores).
+# Scenario input accepts either spelling; output follows the parser's table.
+_OPERATION_LABEL = {0: "Nul", 1: "Pulse On", 2: "Pulse Off", 3: "Latch On", 4: "Latch Off"}
 _TRIP_LABEL = {0: "Nul", 1: "Close", 2: "Trip"}
 
 # DNP3 object groups/variations for the object types our scenarios use. Keyed by the
@@ -178,14 +179,24 @@ _TRIP_LABEL = {0: "Nul", 1: "Close", 2: "Trip"}
 # name -> (group, variation, point_size)
 OBJECT_TYPES: dict[str, tuple[int, int, int]] = {
     "Binary Input With Status": (0x01, 0x02, 1),  # 0x0102 (flags octet)
-    "Binary Output": (0x0A, 0x01, 1),  # 0x0A01
+    "Binary Output": (0x0A, 0x01, 1),  # packed bits; see object_payload_size
     "16-Bit Binary Counter": (0x14, 0x02, 3),  # 0x1402 with flag: flag(1)+u16(2)
     "32-Bit Analog Input": (0x1E, 0x01, 5),  # 0x1E01 with flag: flag(1)+i32(4)
     "16-Bit Analog Input": (0x1E, 0x02, 3),  # 0x1E02 with flag: flag(1)+i16(2)
     # WRITE object headers (ICSNPP consts.zeek dnp3_objects, verified 2026-07-26):
-    "16-Bit Analog Output Block": (0x29, 0x02, 2),  # 0x2902
-    "32-Bit Analog Output Block": (0x29, 0x01, 4),  # 0x2901
+    "16-Bit Analog Output Block": (0x29, 0x02, 3),  # value(2) + status(1)
+    "32-Bit Analog Output Block": (0x29, 0x01, 5),  # value(4) + status(1)
 }
+
+
+def object_payload_size(object_type: str, count: int) -> int:
+    """Encoded size of zero-valued fixture points, including packed/status data."""
+    group, variation, width = OBJECT_TYPES[object_type]
+    if (group, variation) == (0x0A, 0x01):
+        return (count + 7) // 8
+    return count * width
+
+
 _DEFAULT_OBJECT_TYPE = "Binary Input With Status"
 # Request functions that carry a DNP3 object header (ICSNPP dnp3_objects.log covers
 # READ; WRITE and class-assignment / unsolicited-config also carry object headers
@@ -240,8 +251,8 @@ class Dnp3Event:
 
     A solicited exchange expands to two events (master request then outstation
     RESPONSE) sharing a connection (``uid`` + 4-tuple); an unsolicited response is a
-    single outstation-originated event. Both emitters read the very same objects,
-    which is what guarantees PCAP and JSON cannot drift.
+    single outstation-originated event. Both emitters read the same objects;
+    Tier 2 independently checks message identity and supported details.
     """
 
     ts: float
@@ -336,7 +347,7 @@ def _opt_bool(params: Mapping[str, object], key: str, where: str, default: bool)
 
 
 def _enum(value: str, table: dict[str, int], where: str) -> int:
-    key = value.strip().upper()
+    key = value.strip().upper().replace(" ", "_")
     if key not in table:
         raise Dnp3Error(f"{where}: unknown value {value!r}; valid: {', '.join(sorted(table))}")
     return table[key]
@@ -415,12 +426,11 @@ def _objects_detail(
                 f"range_high - range_low + 1 = {span}; the PCAP object body is derived "
                 "from the range, so an inconsistent count cannot be emitted"
             )
-        point_size = OBJECT_TYPES[object_type][2]
-        max_span = _DNP3_RESPONSE_MAX_POINT_BYTES // point_size
-        if span > max_span:
+        if object_payload_size(object_type, span) > _DNP3_RESPONSE_MAX_POINT_BYTES:
             raise Dnp3Error(
                 f"{where}: range span {span} point(s) for {object_type!r} exceeds "
-                f"the single-frame DNP3 PCAP limit of {max_span} point(s); split "
+                f"the single-frame DNP3 PCAP limit of {_DNP3_RESPONSE_MAX_POINT_BYTES} "
+                "point payload bytes; split "
                 "the response into smaller ranges"
             )
         obj["object_count"] = object_count
@@ -551,6 +561,8 @@ def build_events(scenario: Scenario) -> list[Dnp3Event]:
             )
         if not src_is_master:
             raise Dnp3Error(f"{where}: request {func_name} must originate from the master")
+        if code in _NO_RESPONSE and "iin" in exchange.params:
+            raise Dnp3Error(f"{where}: iin is unused by a function with no response")
 
         action_class = ACTION_CLASS.get(code, "other")
         if code in _CONTROL_BLOCK_FUNCS:
@@ -559,7 +571,8 @@ def build_events(scenario: Scenario) -> list[Dnp3Event]:
         else:
             control = None
         if code in _OBJECT_REQUEST_FUNCS:
-            _reject_unknown_params(exchange.params, _OBJECT_PARAM_KEYS, where)
+            allowed_objects = _OBJECT_PARAM_KEYS if code == READ else {"object_type", "iin"}
+            _reject_unknown_params(exchange.params, allowed_objects, where)
             req_objects = _objects_detail(exchange.params, func_name, where, is_response=False)
         else:
             if exchange.params and code not in _CONTROL_BLOCK_FUNCS:

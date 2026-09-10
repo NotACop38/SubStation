@@ -227,7 +227,7 @@
         "function_code": { "type": "string", "description": "Function code string for this control row (function_code: SELECT/OPERATE/RESPONSE)." },
         "index_number": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Object index number (index_number)." },
         "trip_control_code": { "type": "string", "description": "Nul, Close, or Trip (trip_control_code)." },
-        "operation_type": { "type": "string", "description": "Nul, Pulse_On, Pulse_Off, Latch_On, or Latch_Off (operation_type)." },
+        "operation_type": { "type": "string", "description": "Nul, Pulse On, Pulse Off, Latch On, or Latch Off (operation_type)." },
         "clear_bit": { "type": "boolean", "description": "Control-code clear bit set/unset (clear_bit)." },
         "execute_count": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Number of times to execute (execute_count)." },
         "on_time": { "type": "integer", "minimum": 0, "maximum": 4294967295, "description": "On time in ms (on_time)." },

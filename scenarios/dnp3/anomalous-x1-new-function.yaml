@@ -70,11 +70,12 @@ exchanges:
   # --- the new function (X1): a verb never seen for this known pair ----------
   # WRITE from the allow-listed master: in-policy for D1/D2/D3, but this pair has
   # only ever read/operated in the baseline, so the verb itself is the deviation.
+  # This models the function/object header only, without a data-write payload.
   - source: master-1
     target: rtu-1
     function: Write
     offset: 4.0
-    params: { object_type: 16-Bit Analog Output Block, range_low: 1, range_high: 1, object_count: 1 }
+    params: { object_type: 16-Bit Analog Output Block }
 
 exercises:
   fires:

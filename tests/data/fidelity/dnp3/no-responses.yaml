@@ -1,0 +1,27 @@
+# Offline parser qualification fixture; not a Detection Contract scenario.
+name: dnp3-fidelity-no-responses
+description: Synthetic decoder regression fixture; labels do not measure device behavior
+  or detection effectiveness.
+protocol: dnp3
+label: benign
+timing:
+  start: 1.0
+  default_interval: 1.0
+actors:
+- id: master
+  role: master
+  host: 192.0.2.10
+- id: outstation
+  role: outstation
+  host: 192.0.2.50
+  port: 20000
+exchanges:
+- source: master
+  target: outstation
+  function: DirectOperateNR
+- source: master
+  target: outstation
+  function: DirectOperateNR
+- source: master
+  target: outstation
+  function: Confirm

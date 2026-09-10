@@ -1,13 +1,13 @@
 # Substation — Engineering Checklist
 
 **Status:** Draft v0.1 (source of truth) · Companion to `PRD.md`
-**Last updated:** 2026-09-09
+**Last updated:** 2026-09-10
 
 > Phased, incremental plan. We build **one piece at a time** in this order; the lead approves each piece before we start it. `[ ]` = todo, `[~]` = in progress, `[x]` = done. **VERIFY** gates must be satisfied before the dependent item is frozen.
 
 -----
 
-## Current qualification (2026-09-09)
+## Current qualification (2026-09-10)
 
 Historical phase notes below describe the implementation sequence. The
 [current review](docs/reviews/2026-09-09-codebase-review.md) records the corrected
@@ -27,7 +27,8 @@ evidence and takes precedence over earlier launch claims.
 - [ ] Qualify DNP3/S7 sensor normalization and SIEM backend equivalence.
 - [ ] Measure behavior on independent, representative benign traffic and boundary cases beyond the synthetic catalogue.
 - [x] Compare core Modbus transaction spans, values and exception outcomes with real ICSNPP, including the external corpus.
-- [ ] Extend field/response comparisons beyond supported core Modbus functions; qualify timing.
+- [x] Compare DNP3 per-message direction, connection order, functions, IIN and object/control fields; include unsolicited/no-response and encoding boundaries ([evidence](docs/spikes/08-dnp3-message-fidelity.md)).
+- [ ] Extend field/response comparisons to remaining Modbus/S7 details; qualify timing and unmodeled DNP3 payload semantics.
 - [ ] Reproduce the complete S7 run with a pinned Docker image; the September review used native Zeek.
 
 ## How to read this
