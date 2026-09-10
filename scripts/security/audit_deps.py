@@ -27,6 +27,9 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_REPO_ROOT))
+from scripts.security.lockfile import parse_lock
+
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
 # Advisories accepted with justification. Each entry MUST explain why it is safe
@@ -179,11 +182,12 @@ def main() -> int:
 
         if _LOCKFILE.is_file():
             # Prefer the committed lockfile's resolved pins when available.
-            locked = [
-                line.split("#", 1)[0].strip()
-                for line in _LOCKFILE.read_text(encoding="utf-8").splitlines()
-                if line.split("#", 1)[0].strip() and not line.startswith("-")
-            ]
+            try:
+                pins = parse_lock(_LOCKFILE.read_text(encoding="utf-8"))
+                locked = [f"{name}=={pin['version']}" for name, pin in pins.items()]
+            except ValueError as exc:
+                print(f"audit_deps: FAILED — {exc}", file=sys.stderr)
+                return 2
             if locked:
                 try:
                     _check_locked_requirements(reqs, locked)

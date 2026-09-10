@@ -285,7 +285,8 @@ def _json_request_tuples(events: list[dict[str, object]]) -> Counter[tuple[str, 
 def _modbus_log_tuples(logdir: Path) -> Counter[tuple[str, str, str]]:
     c: Counter[tuple[str, str, str]] = Counter()
     for row in read_zeek_log(logdir, "modbus_detailed.log"):
-        # modbus_detailed logs one row per request; func mirrors our func_name.
+        # Core rows describe transactions. Unhandled-function rows omit direction;
+        # this fallback compares non-exception observation counts only.
         # Skip exception-RESPONSE rows: a compliant outstation answers an undefined
         # request code 0x42 with a 0xC2 exception PDU, which ICSNPP cannot fold back
         # onto the (unhandled) request and logs as a separate `unknown-194` row with
@@ -315,6 +316,40 @@ def _s7_log_tuples(logdir: Path) -> Counter[tuple[str, str, str]]:
         for row in read_zeek_log(logdir, name)
         if row.get("is_orig") == "T"
     )
+
+
+def corpus_check(results: Results) -> None:
+    """Reparse independent captures and compare the committed sensor observations."""
+    from substation.corpus import evaluate_corpus
+    from substation.detect import load_events
+    from substation.ingest.modbus import compare_modbus_events, load_modbus_log
+
+    root = _REPO_ROOT / "tests/data/corpus/modbus"
+    scripts = ensure_icsnpp("modbus")
+    if scripts is None:
+        results.fail("corpus[modbus]: could not obtain ICSNPP scripts")
+        return
+    try:
+        if not evaluate_corpus(root)["passed"]:
+            results.fail("corpus[modbus]: labeled detection regression")
+            return
+        for name in ("core", "exception"):
+            logs = run_zeek(
+                root / f"{name}.pcap", ["/icsnpp-modbus"], [(scripts, "/icsnpp-modbus")]
+            )
+            try:
+                differences = compare_modbus_events(
+                    load_events(root / f"{name}.jsonl"),
+                    load_modbus_log(logs / "modbus_detailed.log"),
+                )
+                if differences:
+                    results.fail(f"corpus[modbus] {name}: " + "; ".join(differences[:8]))
+                else:
+                    results.ok(f"corpus[modbus] {name}: external payload fields and outcomes match")
+            finally:
+                shutil.rmtree(logs, ignore_errors=True)
+    except (OSError, ValueError, RuntimeError) as exc:
+        results.fail(f"corpus[modbus]: {exc}")
 
 
 def fidelity_check(proto: str, results: Results) -> None:
@@ -356,7 +391,13 @@ def fidelity_check(proto: str, results: Results) -> None:
             except RuntimeError as exc:
                 results.fail(f"fidelity[{proto}] {scenario_file.name}: {exc}")
                 continue
-            if proto == "modbus":
+            from substation.protocols.modbus import FUNCTION_NAMES
+
+            core_modbus = proto == "modbus" and all(
+                str(event["func_name"]).removesuffix("_EXCEPTION") in FUNCTION_NAMES.values()
+                for event in events
+            )
+            if core_modbus:
                 from substation.ingest.modbus import compare_modbus_events, load_modbus_log
 
                 try:
@@ -387,7 +428,7 @@ def fidelity_check(proto: str, results: Results) -> None:
                 results.ok(
                     f"fidelity[{proto}] {scenario_file.name}: "
                     f"{sum(want.values())} request message(s) match real Zeek "
-                    f"({len(want)} distinct tuple(s))"
+                    f"({len(want)} distinct tuple(s)); counts only, no field/direction fidelity"
                 )
             else:
                 deltas = sorted(
@@ -623,8 +664,9 @@ def main() -> int:
             f"(optional {_S7_ZEEK_IMAGE_ENV}=...)\n"
         )
 
-    print("== Request identity/count parity (JSON vs real Zeek/ICSNPP) ==")
+    print("== Modbus fields; DNP3/S7 request identity/count parity ==")
     fidelity_check("modbus", results)
+    corpus_check(results)
     fidelity_check("dnp3", results)
     if s7_available:
         fidelity_check("s7comm", results)
@@ -658,7 +700,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print("\nverify: OK (request parity + Zeek detections; skips are explicit above)")
+    print("\nverify: OK (protocol comparisons + external corpus + Zeek detections; skips above)")
     return 0
 
 

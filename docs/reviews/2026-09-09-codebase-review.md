@@ -1,3 +1,5 @@
+> Follow-up implementation: [sensor import, site policies, external corpus and dependency evidence](../independent-validation.md). The review below records its earlier scope and findings.
+
 # Substation project and code review — 2026-09-09
 
 ## Assessment

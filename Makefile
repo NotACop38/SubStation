@@ -11,7 +11,7 @@ SRC := substation tests
 .DEFAULT_GOAL := help
 
 .PHONY: help check-python dev ci format format-check lint type test schema coverage-build \
-        coverage-check security demo demo-gif demo-cast verify release hooks clean
+        coverage-check security demo demo-gif demo-cast verify release hooks clean corpus lock
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -22,8 +22,12 @@ check-python: ## Verify PY points to Python 3.11+
 	@$(PY) -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "python >=3.11 required; set PY=python3.11 or activate a 3.11+ venv")'
 
 dev: check-python ## Install the package with dev tooling (pinned)
-	$(PY) -m pip install -r requirements.lock
-	$(PY) -m pip install --no-deps -e ".[dev]"
+	$(PY) -m pip install --only-binary=:all: --require-hashes -r requirements.lock
+	$(PY) -m pip install --no-deps --no-build-isolation -e ".[dev]"
+	$(PY) -m pip check
+
+lock: check-python ## Refresh existing pins with PyPI artifact hashes and verified wheel metadata
+	$(PY) scripts/security/lock.py
 
 ## ---------------------------------------------------------------------------
 ## CI — the local gate at batch completion and before every push.
@@ -76,6 +80,9 @@ security: check-python ## Security gate: bandit + dep audit + secret scan + SBOM
 ## ---------------------------------------------------------------------------
 demo: check-python ## Tier-1 one-command demo: generate -> detect -> report (Python-only)
 	$(PY) -m substation.cli demo
+
+corpus: check-python ## Check attributed corpus hashes and labeled detection metrics
+	$(PY) -m substation.cli evaluate-corpus tests/data/corpus/modbus
 
 demo-gif: ## Render the embedded demo GIF headlessly (deterministic; no TTY needed)
 	$(PY) scripts/render-demo-gif.py

@@ -91,7 +91,11 @@ def test_audit_deps_prefers_committed_lockfile(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     lock = tmp_path / "requirements.lock"
-    lock.write_text("PyYAML==6.0.3\ntyping_extensions==4.15.0\n", encoding="utf-8")
+    lock.write_text(
+        "PyYAML==6.0.3 --hash=sha256:" + "a" * 64 + "\n"
+        "typing_extensions==4.15.0 --hash=sha256:" + "b" * 64 + "\n",
+        encoding="utf-8",
+    )
     calls: list[list[str]] = []
 
     def fake_run(cmd: list[str]) -> subprocess.CompletedProcess[str]:

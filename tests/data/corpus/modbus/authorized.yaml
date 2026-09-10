@@ -1,0 +1,30 @@
+schema: substation-site-policy/v1
+name: external-corpus-authorized
+modbus:
+  writes:
+  - sources:
+    - 192.0.2.10
+    destination: 192.0.2.50
+    port: 502
+    units:
+    - 7
+    address_space: holding-register
+    ranges:
+    - start: 1
+      end: 1
+  - sources:
+    - 192.0.2.10
+    destination: 192.0.2.50
+    port: 502
+    units:
+    - 6
+    address_space: coil
+    ranges:
+    - start: 1
+      end: 1
+channels:
+  D1: []
+  D2: []
+  D3: []
+  S1: []
+  S2: []

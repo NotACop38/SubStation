@@ -92,12 +92,24 @@ def _build_parser() -> argparse.ArgumentParser:
     detect = sub.add_parser("detect", help="Run Tier-1 rules on normalized .jsonl event logs.")
     detect.add_argument("paths", nargs="+", type=Path, help="Substation-schema JSONL files.")
     detect.add_argument("--detection", nargs="+", help="Tier-1 detection IDs (default: all).")
+    detect.add_argument("--policy", type=Path, help="Explicit site authorization profile.")
     detect.set_defaults(func=_cmd_detect)
 
     importer = sub.add_parser("import-modbus", help="Normalize ICSNPP Modbus JSON/TSV logs.")
     importer.add_argument("paths", nargs="+", type=Path)
     importer.add_argument("--out", type=Path, help="Atomic JSONL output (default: stdout).")
     importer.set_defaults(func=_cmd_import_modbus)
+
+    policy = sub.add_parser("policy", help="Compile a site profile into portable Sigma.")
+    policy_sub = policy.add_subparsers(dest="policy_command", required=True)
+    compile_cmd = policy_sub.add_parser("compile")
+    compile_cmd.add_argument("path", type=Path)
+    compile_cmd.add_argument("--out", type=Path, required=True, help="New export directory.")
+    compile_cmd.set_defaults(func=_cmd_policy)
+
+    corpus = sub.add_parser("evaluate-corpus", help="Verify a labeled corpus and report metrics.")
+    corpus.add_argument("path", type=Path)
+    corpus.set_defaults(func=_cmd_corpus)
 
     validate = sub.add_parser(
         "validate",
@@ -345,7 +357,10 @@ def _cmd_detect(args: argparse.Namespace) -> int:
     detections = [eligible[det_id] for det_id in dict.fromkeys(requested)]
     # Validate and evaluate every input before publishing results. A malformed
     # later file must not leave apparently successful, partial machine output.
-    results = [(path, run_detections(path, detections)) for path in args.paths]
+    from substation.policy import load_policy
+
+    policy = load_policy(args.policy) if args.policy is not None else None
+    results = [(path, run_detections(path, detections, policy=policy)) for path in args.paths]
     for path, hits in results:
         for hit in hits:
             print(
@@ -390,6 +405,22 @@ def _cmd_import_modbus(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 0
+
+
+def _cmd_policy(args: argparse.Namespace) -> int:
+    from substation.policy import export_policy, load_policy
+
+    export_policy(load_policy(args.path), args.out)
+    print(f"policy: exported seven Tier-1 rules and provenance to {args.out}")
+    return 0
+
+
+def _cmd_corpus(args: argparse.Namespace) -> int:
+    from substation.corpus import evaluate_corpus
+
+    report = evaluate_corpus(args.path)
+    print(json.dumps(report, indent=2))
+    return 0 if report["passed"] else 1
 
 
 def _cmd_coverage(args: argparse.Namespace) -> int:

@@ -1,8 +1,8 @@
 """Import ICSNPP Modbus detailed transactions, with explicit projection provenance.
 
-The eight core functions require a matched transaction. Unknown raw function
-codes are message observations: their high bit identifies exception responses.
-Never infer packet timestamps from the transaction timestamp.
+The eight core functions require a matched transaction. Unknown/unmatched rows
+omit direction in upstream logs and are rejected. Never infer packet timestamps
+from the transaction timestamp.
 """
 
 from __future__ import annotations
@@ -105,49 +105,35 @@ def _project(row: Any, line: int) -> list[dict[str, Any]]:
         conn[field] = str(ipaddress.ip_address(conn[field]))
     func = row["func"]
     code = _CODES.get(func)
-    is_transaction = code is not None
-    if code is not None:
-        if row.get("matched") is not True:
-            raise ValueError("unmatched core transaction: request/response direction is ambiguous")
-        if not {"address", "quantity"} <= row.keys():
-            raise ValueError("core transaction requires address and quantity")
-        quantity = row["quantity"]
-        if code in {5, 6} and quantity != 1:
-            raise ValueError("single write requires quantity 1")
-        is_error = bool(row.get("exception_code"))
-        if code in {1, 2, 3, 4} and row.get("request_values"):
-            raise ValueError("read request cannot contain write values")
-        if code in {5, 6, 15, 16} and len(row.get("request_values", [])) != quantity:
-            raise ValueError("request_values length differs from quantity")
-        if (
-            not is_error
-            and code in {1, 2, 3, 4, 5, 6}
-            and (not quantity or len(row.get("response_values", [])) != quantity)
-        ):
-            raise ValueError("response_values length differs from quantity")
-        if (is_error or code in {15, 16}) and row.get("response_values"):
-            raise ValueError("exception/multiple-write ACK cannot contain response_values")
-        if code in {1, 2, 5, 15}:
-            for key in ("request_values", "response_values"):
-                if any(v not in {0, 1} for v in row.get(key, [])):
-                    raise ValueError("coil/discrete values must be 0 or 1")
-        directions = [True, False]
-    else:
-        unknown = re.fullmatch(r"unknown-([0-9]+)", func)
-        if unknown is None:
-            raise ValueError(
-                f"unsupported function {func!r}; only eight core functions and unknown codes"
-            )
-        code = _integer(int(unknown[1]), 255, "function code")
-        if not zeek_function_name(code & 127).startswith("unknown-"):
-            raise ValueError("known function mislabeled unknown")
-        if any(key in row for key in ("address", "quantity", "request_values", "response_values")):
-            raise ValueError("unknown function has unsupported decoded fields")
-        if bool(code & 128) != bool(row.get("exception_code")):
-            raise ValueError("unknown function high bit and exception outcome disagree")
-        directions = [not bool(code & 128)]
+    if code is None:
+        raise ValueError(f"unsupported function {func!r}; only eight matched core families")
+    if row.get("matched") is not True:
+        raise ValueError("unmatched core transaction: request/response direction is ambiguous")
+    if not {"address", "quantity"} <= row.keys():
+        raise ValueError("core transaction requires address and quantity")
+    quantity = row["quantity"]
+    if code in {5, 6} and quantity != 1:
+        raise ValueError("single write requires quantity 1")
+    is_error = bool(row.get("exception_code"))
+    if code in {1, 2, 3, 4} and row.get("request_values"):
+        raise ValueError("read request cannot contain write values")
+    if code in {5, 6, 15, 16} and len(row.get("request_values", [])) != quantity:
+        raise ValueError("request_values length differs from quantity")
+    if (
+        not is_error
+        and code in {1, 2, 3, 4, 5, 6}
+        and (not quantity or len(row.get("response_values", [])) != quantity)
+    ):
+        raise ValueError("response_values length differs from quantity")
+    if (is_error or code in {15, 16}) and row.get("response_values"):
+        raise ValueError("exception/multiple-write ACK cannot contain response_values")
+    if code in {1, 2, 5, 15}:
+        for key in ("request_values", "response_values"):
+            if any(v not in {0, 1} for v in row.get(key, [])):
+                raise ValueError("coil/discrete values must be 0 or 1")
+
     events: list[dict[str, Any]] = []
-    for is_orig in directions:
+    for is_orig in (True, False):
         exception = not is_orig and bool(row.get("exception_code"))
         raw_code = code | 128 if exception else code
         name = zeek_function_name(code & 127) + ("_EXCEPTION" if exception else "")
@@ -158,7 +144,7 @@ def _project(row: Any, line: int) -> list[dict[str, Any]]:
         values = "request_values" if is_orig else "response_values"
         if row.get(values):
             detail[values] = row[values]
-        if not is_orig and is_transaction:
+        if not is_orig:
             detail["matched"] = True
         if exception:
             detail["exception_code"] = row["exception_code"]
@@ -177,8 +163,8 @@ def _project(row: Any, line: int) -> list[dict[str, Any]]:
             "observation": {
                 "source": "icsnpp-modbus",
                 "line": line,
-                "kind": "transaction_projection" if is_transaction else "message",
-                "timestamp": "transaction" if is_transaction else "message",
+                "kind": "transaction_projection",
+                "timestamp": "transaction",
             },
         }
         if exception:

@@ -1,0 +1,10 @@
+schema: substation-site-policy/v1
+name: external-corpus-denied
+modbus:
+  writes: []
+channels:
+  D1: []
+  D2: []
+  D3: []
+  S1: []
+  S2: []

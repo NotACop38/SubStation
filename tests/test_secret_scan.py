@@ -63,3 +63,27 @@ def test_missing_scanners_cannot_report_success(
     monkeypatch.setattr(secret_scan, "_run_gitleaks_native", lambda _root: None)
     monkeypatch.setattr(secret_scan, "_run_detect_secrets", lambda _root: None)
     assert secret_scan.main([]) == 2
+
+
+def test_reviewed_hash_is_bound_to_exact_line_path_and_detector(tmp_path: Path) -> None:
+    import hashlib
+    import json
+
+    from scripts.security.secret_scan import _unreviewed_findings
+
+    source = tmp_path / "evidence.json"
+    line = '"sha256": "' + "0123456789abcdef" * 4 + '"'
+    source.write_text(line + "\n")
+    digest = hashlib.sha256(line.encode()).hexdigest()
+    directory = tmp_path / "scripts/security"
+    directory.mkdir(parents=True)
+    (directory / "reviewed-hash-lines.json").write_text(
+        json.dumps({"evidence.json": [":".join(digest[i : i + 16] for i in range(0, 64, 16))]})
+    )
+    findings = {"evidence.json": [{"line_number": 1, "type": "Hex High Entropy String"}]}
+    assert not _unreviewed_findings(tmp_path, findings)
+    source.write_text(line + ', "extra": "unreviewed"\n')
+    assert _unreviewed_findings(tmp_path, findings) == findings
+    source.write_text(line + "\n")
+    findings["evidence.json"][0]["type"] = "Secret Keyword"
+    assert _unreviewed_findings(tmp_path, findings) == findings

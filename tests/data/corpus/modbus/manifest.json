@@ -1,0 +1,71 @@
+{
+  "schema": "substation-corpus/v1",
+  "source": {
+    "repository": "https://github.com/cisagov/icsnpp-modbus",
+    "revision": "27f22b41fd9839c0bad1b98df9c6289e578fd02a",
+    "path": "testing/traces/modbus_example.pcap",
+    "sha256": "a84656f9af62b2c948200ec288d51b81f03037c277a31a40efee0cfb244f1e30",
+    "license": "BSD-3-Clause",
+    "notice": "NOTICE.txt"
+  },
+  "derivation": {
+    "script": "scripts/corpus/derive_modbus.py",
+    "network": "Rebuilt Ethernet/IP/TCP metadata; documentation addresses, fixed ports/MACs, relative sequences, no TCP options, timestamps shifted to 1 while preserving intervals.",
+    "payload": "All selected TCP application payloads unchanged; packet indices and per-payload SHA-256 in provenance files.",
+    "normalization": "Native ICSNPP transaction projections; UIDs replaced with fixture IDs. Packet timing/order equivalence is not asserted.",
+    "scope": "Upstream analyzer test traffic, not operational telemetry or confirmed attacks. The deny profile is a labeled policy counterfactual."
+  },
+  "artifacts": {
+    "LICENSE.txt": "4c66ca6036dae3010138952138e8df3a7d037cf05a9643a108f20f05c794e98d",
+    "NOTICE.txt": "c7eb1119dae7e30614835c8af7af024b284fb9f78d8c9e1f1431d03c7c638bcf",
+    "authorized.yaml": "1ac38e56884a7a8ea3bdcb93b9b4df8e63b84ffd40e2cc23fe83980e192a7138",
+    "core.jsonl": "451956e0667ec3ccab00907f46bcb6d13f57976ecd9acd7735896c61c205fe28",
+    "core.pcap": "68e949025a4b7febb15a069c7db77cc32f32128df664582928ad4e792d3fa463",
+    "core.provenance.json": "142728d7bfe42a448e722daf3dafbe47987cccc085415672966ddd47e1faca3a",
+    "denied.yaml": "a5a66ecfd5570b6c17a035dc85ee01012a8b696a4ddde95bced2a8ce53c95ba5",
+    "exception.jsonl": "0c1d348841edee8d40ff77269f0701ecab6e678e70bbbe9e3b3cc691b8be998b",
+    "exception.pcap": "c9bf082b91ee0a23ade3468093f793d2ad79dcf1a68ddda02dfef1afe30ba4b7",
+    "exception.provenance.json": "b89ead904cd3ab4ddd24921913cbd24fb3b3f1ac5277351b91cf68a6fc0cf2ee",
+    "README.md": "f28e1e49937d867de27188df59006b31448a7a3fd36b3195c810612c55a50783"
+  },
+  "cases": [
+    {
+      "id": "upstream-core-authorized",
+      "events": "core.jsonl",
+      "capture": "core.pcap",
+      "policy": "authorized.yaml",
+      "positive": {
+        "M1": [],
+        "M2": []
+      },
+      "label_basis": "Eight reads and two writes permitted by this explicit fixture policy; no exception indicators."
+    },
+    {
+      "id": "upstream-core-policy-counterfactual",
+      "events": "core.jsonl",
+      "capture": "core.pcap",
+      "policy": "denied.yaml",
+      "positive": {
+        "M1": [
+          16,
+          18
+        ],
+        "M2": []
+      },
+      "label_basis": "Same upstream bytes under a deny-all write policy. Two write requests are unauthorized by construction, not claimed malicious activity."
+    },
+    {
+      "id": "upstream-exception-indicator",
+      "events": "exception.jsonl",
+      "capture": "exception.pcap",
+      "policy": "authorized.yaml",
+      "positive": {
+        "M1": [],
+        "M2": [
+          1
+        ]
+      },
+      "label_basis": "Upstream ILLEGAL_DATA_ADDRESS response meets M2 anomaly indicator; no assertion of malicious intent."
+    }
+  ]
+}

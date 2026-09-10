@@ -10,6 +10,7 @@ scan. Missing scanners and unreadable input fail the gate.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -20,6 +21,7 @@ import sys
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 GITLEAKS_DOCKER_IMAGE = (
@@ -123,6 +125,44 @@ def _run_gitleaks_docker(root: Path = _REPO_ROOT) -> int | None:
     ).returncode
 
 
+def _unreviewed_findings(root: Path, findings: dict[str, Any]) -> dict[str, Any]:
+    """Exclude only reviewed digest lines, bound to exact path, bytes and detector.
+
+    Fingerprints are grouped in colon-separated chunks so the allowlist is not
+    itself mistaken for secret material. No path, field or hash-pattern exclusions.
+    """
+    allowlist = root / "scripts/security/reviewed-hash-lines.json"
+    approved = json.loads(allowlist.read_text(encoding="utf-8")) if allowlist.exists() else {}
+    if not isinstance(approved, dict) or any(
+        not isinstance(path, str)
+        or not isinstance(values, list)
+        or any(
+            not isinstance(v, str) or not re.fullmatch(r"[a-f0-9]{16}(?::[a-f0-9]{16}){3}", v)
+            for v in values
+        )
+        for path, values in approved.items()
+    ):
+        raise ValueError("invalid reviewed hash-line fingerprints")
+    remaining = {}
+    for path, entries in findings.items():
+        source = root / path
+        if not source.resolve().is_relative_to(root.resolve()):
+            raise ValueError("scanner returned an invalid path")
+        lines = source.read_text(encoding="utf-8").splitlines()
+        unreviewed = []
+        for entry in entries:
+            line = lines[entry["line_number"] - 1]
+            digest = hashlib.sha256(line.encode()).hexdigest()
+            fingerprint = ":".join(digest[i : i + 16] for i in range(0, 64, 16))
+            if entry["type"] != "Hex High Entropy String" or fingerprint not in approved.get(
+                path, []
+            ):
+                unreviewed.append(entry)
+        if unreviewed:
+            remaining[path] = unreviewed
+    return remaining
+
+
 def _run_detect_secrets(root: Path) -> int | None:
     """Run detect-secrets over tracked files. Returns exit code, or None if absent."""
     try:
@@ -142,7 +182,7 @@ def _run_detect_secrets(root: Path) -> int | None:
         return proc.returncode
 
     report = json.loads(proc.stdout or "{}")
-    findings = report.get("results", {})
+    findings = _unreviewed_findings(root, report.get("results", {}))
     if findings:
         print("secret_scan: detect-secrets flagged potential secrets in:")
         for path in findings:

@@ -9,6 +9,14 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ## [Unreleased]
 
+### Independent validation and site policies
+
+- Added strict ICSNPP Modbus JSON/TSV import with transaction provenance and supported-field comparisons against real Zeek.
+- Added versioned site permissions, portable Sigma export, and `detect --policy` using the same compiler.
+- Added attributed, sanitized external Modbus captures and per-event confusion metrics, with explicit counterfactual-policy labels.
+- Added artifact-hashed dependency installation, verified wheel metadata, and offline transitive CycloneDX dependency graphs.
+- Bound reviewed secret-scanner digest exceptions to exact source lines and paths.
+
 ### September 2026 project review
 
 - Corrected M1 full-span and target policy, DNP3/S7 target scoping, and S1 PLC Control service discrimination.

@@ -173,7 +173,7 @@ def test_malformed_sensor_inputs_fail(tmp_path: Path, body: str) -> None:
         load_modbus_log(source)
 
 
-def test_unknown_functions_keep_observed_direction(tmp_path: Path) -> None:
+def test_unknown_functions_without_direction_are_rejected(tmp_path: Path) -> None:
     from substation.ingest.modbus import load_modbus_log
 
     request = sensor_record(func="unknown-66")
@@ -182,7 +182,5 @@ def test_unknown_functions_keep_observed_direction(tmp_path: Path) -> None:
     response = {**request, "func": "unknown-194", "exception_code": "ILLEGAL_FUNCTION"}
     source = tmp_path / "sensor.log"
     source.write_text("\n".join(map(json.dumps, [request, response])))
-    a, b = load_modbus_log(source)
-    assert a["is_orig"] is True and b["is_orig"] is False
-    assert b["func_code"] == 194 and b["func_name"] == "unknown-66_EXCEPTION"
-    assert a["observation"]["kind"] == "message"
+    with pytest.raises(SchemaValidationError, match="unsupported function"):
+        load_modbus_log(source)
