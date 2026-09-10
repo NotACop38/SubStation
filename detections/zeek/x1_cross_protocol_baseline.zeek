@@ -15,16 +15,13 @@
 ##! Only the HIGHEST-precedence novelty is reported per observation: a brand-new
 ##! talker is reported as NEW TALKER (not also as a new pair / new function),
 ##! because the talker itself is the headline. Each distinct novel tuple alerts
-##! at most once (it is folded into the baseline after alerting), so a sustained
-##! anomalous flow is one notice, not a storm.
+##! at most once per notice_interval without changing the trusted baseline.
+##! Sustained anomalous traffic remains detectable after suppression expires.
 ##!
-##! Engine: Zeek (PRD.md §6.5). This is the canonical reason the engine policy
-##! reserves Zeek for "real state": X1 needs durable LEARNED STATE (the baseline
-##! sets) plus SET-MEMBERSHIP tests across protocols — neither expressible as a
-##! stateless Sigma field-match. It is also the flagship justification for the
-##! normalized envelope (PRD.md §6.3): the per-protocol Zeek/ICSNPP logs are not
-##! uniformly shaped, so X1 normalizes every protocol event down to one
-##! (orig_h, resp_h, func) tuple and runs ONE baseline over all three.
+##! Engine: Zeek (PRD.md §6.5). X1 retains baseline sets across connections
+##! within one Zeek process and tests tuple membership across protocols. It
+##! consumes native events, independently of Substation's JSON envelope.
+##! Reinject the trusted baseline after restarting Zeek.
 ##!
 ##! Learned state: the baseline is a set of known talkers / pairs / functions. It
 ##! is supplied two ways (use either or both):
@@ -33,10 +30,10 @@
 ##!     learning period (e.g. Substation's benign baseline scenarios). This is the
 ##!     "learned state" of PRD.md §5.4 — computed once offline, then enforced.
 ##!   * SELF-LEARN (optional, standalone): set `learn_period` > 0; every tuple
-##!     observed within `learn_period` of the first packet seeds the baseline,
+##!     observed within `learn_period` of the first observed request seeds the baseline,
 ##!     and only deviations AFTER the window alert. Default is 0secs (off) so the
 ##!     detection relies on the injected baseline and never silently "learns away"
-##!     an attacker that is present from the first packet.
+##!     an attacker that is present from the first observed request.
 ##!
 ##! ATT&CK for ICS: T0846 Remote System Discovery (tactic: Discovery, TA0102) — a
 ##! new talker / new asset pair is the network signature of an actor discovering
@@ -89,6 +86,10 @@ export {
 	## the first observed packet, every tuple seeds the baseline instead of
 	## alerting. Default 0secs = rely on the injected baseline only.
 	const learn_period = 0secs &redef;
+
+	## Re-alert on a still-unapproved tuple after this interval. Suppression is
+	## separate from authorization; observing traffic never grants trust.
+	const notice_interval = 5min &redef;
 }
 
 # Normalize a per-protocol function/command code into one cross-protocol token.
@@ -107,7 +108,8 @@ function norm_func(proto: string, code: string): string
 function norm_s7comm_header_func(rosctr: count, function_code: count, subfunction: count, plc_control: string): string
 	{
 	local func = fmt("rosctr=0x%02x,function=0x%02x", rosctr, function_code);
-	if ( subfunction != 0 )
+	# ICSNPP uses 0xff for an absent subfunction on Job/ACK headers.
+	if ( subfunction != 0 && subfunction != 0xff )
 		func = fmt("%s,subfunction=0x%02x", func, subfunction);
 	if ( plc_control != "" )
 		func = fmt("%s,plc_control=%s", func, plc_control);
@@ -116,17 +118,22 @@ function norm_s7comm_header_func(rosctr: count, function_code: count, subfunctio
 
 # Set on the first observation; gates the optional self-learning window.
 global first_seen: time = double_to_time(0);
+global started: bool = F;
+global reported: table[addr, addr, string] of time &create_expire = notice_interval;
 
 # Core normalizer: every protocol event funnels here with its (src, dst, func).
 # Decides learn-vs-detect, classifies the highest-precedence novelty, alerts once
-# per novel tuple, and folds the tuple into the baseline so it never re-alerts.
+# per novel tuple and suppression interval; post-training observations never expand trust.
 function observe(c: connection, func: string)
 	{
 	local src = c$id$orig_h;
 	local dst = c$id$resp_h;
 
-	if ( first_seen == double_to_time(0) )
+	if ( ! started )
+		{
 		first_seen = network_time();
+		started = T;
+		}
 
 	# Self-learning window: seed the baseline, do not alert.
 	local learning = learn_period > 0secs && network_time() <= first_seen + learn_period;
@@ -135,18 +142,23 @@ function observe(c: connection, func: string)
 	local new_pair = [src, dst] !in known_pairs;
 	local new_func = [src, dst, func] !in known_funcs;
 
-	# Always extend the baseline with what we just saw (learning or post-learning):
-	# this both seeds the window and de-dups alerts (each novel tuple fires once).
-	add known_talkers[src];
-	add known_pairs[src, dst];
-	add known_funcs[src, dst, func];
-
 	if ( learning )
+		{
+		add known_talkers[src];
+		add known_pairs[src, dst];
+		add known_funcs[src, dst, func];
 		return;
+		}
 
 	# Nothing novel — legitimate, baselined traffic. Stay quiet.
 	if ( ! new_talker && ! new_pair && ! new_func )
 		return;
+
+	# Explicit time comparison keeps the boundary exact even when Zeek expires
+	# tables lazily. Repeated anomalous traffic cannot extend its suppression.
+	if ( [src, dst, func] in reported && network_time() < reported[src, dst, func] + notice_interval )
+		return;
+	reported[src, dst, func] = network_time();
 
 	# Report only the highest-precedence novelty (talker > pair > function).
 	local deviation: string;
@@ -157,7 +169,7 @@ function observe(c: connection, func: string)
 	else
 		deviation = fmt("new function %s for pair %s -> %s", func, src, dst);
 
-	# No $identifier: the per-tuple baseline fold above is the sole dedup, so the
+	# No $identifier: the bounded per-tuple table above is the sole dedup, so the
 	# Notice framework's hour-long default suppression cannot mask a genuinely
 	# different deviation that arrives shortly after.
 	NOTICE([$note = BaselineDeviation,

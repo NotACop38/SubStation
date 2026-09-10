@@ -41,7 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     files = _gather(targets)
     if not files:
         print("schema: no .jsonl files to validate", file=sys.stderr)
-        return 0
+        return 1
 
     schema = load_event_schema()
     total_errors = 0

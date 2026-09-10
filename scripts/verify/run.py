@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
-"""Tier-2 fidelity + detection validation (real Zeek/ICSNPP in Docker).
+"""Tier-2 request parity + detection validation (real Zeek/ICSNPP).
 
 This is the Tier-2 half of the two-tier execution model (PRD §6.5, §6.8). Where
 Tier 1 evaluates Sigma over the emitted ``.jsonl`` in-process, Tier 2 runs the
 **real** engines against the emitted PCAPs:
 
-  1. **Fidelity golden test.** Every Modbus/DNP3 scenario's PCAP is parsed by real
-     Zeek + the real ICSNPP script analyzers; the per-message protocol semantics
-     in the resulting logs are diffed against our emitted ``.jsonl``. If our
-     hand-built/scapy packets do not parse to the same events a production sensor
-     would see, that is a fidelity bug.
+  1. **Request identity/count parity.** Every supported scenario's PCAP is parsed
+     by Zeek/ICSNPP. Counts of (source, destination, function) requests must match
+     the JSON model. This detects dropped/duplicated messages and function errors;
+     it does not establish address/value, response, timing or full session parity.
   2. **Zeek detections in their real engine.** Every Tier-2 Zeek detection in the
      registry is executed by real Zeek over its fire and quiet scenarios; the
      runner asserts the SAME fire/quiet behavior the Tier-1 contract asserts for
      Sigma rules. X1's learned baseline is derived from the benign scenarios and
      injected via ``redef`` (exactly the mechanism the X1 doc describes).
-  3. **Suricata detections.** Executed in real Suricata if any are shipped.
+  3. **Suricata.** None shipped. Adding rules without a runner fails validation.
 
 Honest scoping: the ICSNPP **S7comm** analyzer is a compiled C++ Zeek plugin, so
 anything that needs it (S3, X1's S7 path, S7 fidelity) requires a Zeek image with
-a build toolchain. When that plugin is unavailable the runner SKIPS those checks
+a compiled plugin and loadable scripts. When that plugin is unavailable the runner SKIPS those checks
 with a loud, explicit reason — it never silently passes them. Likewise Suricata is
 reported as "no rules" when the repo ships none (``detections/suricata`` empty).
 
-Run: ``make verify`` (or ``python scripts/verify/run.py``). Requires Docker.
+Run: ``make verify`` with Docker, or ``make verify VERIFY_ARGS=--native``.
+Use --require-complete for qualification; missing shipped checks then fail.
 """
 
 from __future__ import annotations
@@ -48,10 +48,7 @@ from substation.scenarios import Scenario, load_scenario  # noqa: E402
 
 # --- configuration -----------------------------------------------------------
 
-ZEEK_IMAGE = (
-    "zeek/zeek:8.2"
-    "@sha256:32b90c30cb87d66748c3a6776ad2c0f5502aae7c12da9766cfdd426453c58838"
-)
+ZEEK_IMAGE = "zeek/zeek:8.2@sha256:32b90c30cb87d66748c3a6776ad2c0f5502aae7c12da9766cfdd426453c58838"
 _DET_ZEEK = _REPO_ROOT / "detections" / "zeek"
 _DET_SURICATA = _REPO_ROOT / "detections" / "suricata"
 _SCENARIOS = _REPO_ROOT / "scenarios"
@@ -64,8 +61,14 @@ _CACHE = _REPO_ROOT / ".verify-cache"
 _ICSNPP = {
     # The hex strings are upstream git COMMIT PINS (not secrets) — allowlisted for
     # the secret scanner's high-entropy detector.
-    "modbus": ("https://github.com/cisagov/icsnpp-modbus", "64559be1640dd91b888aed993531a06156deaed0"),  # pragma: allowlist secret
-    "dnp3": ("https://github.com/cisagov/icsnpp-dnp3", "6e997bfc9445ff6b6845beaa1e4beab4ecec458e"),  # pragma: allowlist secret
+    "modbus": (
+        "https://github.com/cisagov/icsnpp-modbus",
+        "64559be1640dd91b888aed993531a06156deaed0",  # pragma: allowlist secret
+    ),
+    "dnp3": (
+        "https://github.com/cisagov/icsnpp-dnp3",
+        "6e997bfc9445ff6b6845beaa1e4beab4ecec458e",  # pragma: allowlist secret
+    ),
 }
 
 # Per Tier-2 Zeek detection: the Notice::Type token it raises, and whether it needs
@@ -76,10 +79,13 @@ _NOTICE_TOKEN = {
     "S3": "S7Enum::Enumeration",
     "X1": "CrossProtoBaseline::BaselineDeviation",
 }
-_NEEDS_S7 = {"S3"}  # X1 runs over Modbus/DNP3; its S7 path is skipped per-scenario without the plugin.
+_NEEDS_S7 = {
+    "S3"
+}  # X1 runs over Modbus/DNP3; its S7 path is skipped per-scenario without the plugin.
 # Optional local image with icsnpp-s7comm built in (see docs/verify-s7.md). When set
 # and pullable, verify prefers it over the stock ZEEK_IMAGE for S7-capable runs.
 _S7_ZEEK_IMAGE_ENV = "SUBSTATION_ZEEK_S7_IMAGE"
+_NATIVE_ZEEK: str | None = None
 
 
 # --- result bookkeeping ------------------------------------------------------
@@ -114,9 +120,7 @@ def _docker_ok() -> bool:
 
 
 def _image_present() -> bool:
-    out = subprocess.run(
-        ["docker", "image", "inspect", ZEEK_IMAGE], capture_output=True
-    )
+    out = subprocess.run(["docker", "image", "inspect", ZEEK_IMAGE], capture_output=True)
     if out.returncode == 0:
         return True
     print(f"verify: pulling {ZEEK_IMAGE} ...")
@@ -127,15 +131,28 @@ def _at_commit(dest: Path, commit: str) -> bool:
     head = subprocess.run(
         ["git", "-C", str(dest), "rev-parse", "HEAD"], capture_output=True, text=True
     )
-    return head.returncode == 0 and head.stdout.strip() == commit
+    if head.returncode != 0 or head.stdout.strip() != commit:
+        return False
+    status = subprocess.run(
+        ["git", "-C", str(dest), "status", "--porcelain", "--untracked-files=all"],
+        capture_output=True,
+        text=True,
+    )
+    return status.returncode == 0 and not status.stdout.strip()
 
 
 def _checkout(dest: Path, commit: str) -> bool:
-    if subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode == 0:
+    if (
+        subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode
+        == 0
+    ):
         return True
     # The pinned commit may not be in a shallow/older cache — fetch it, then retry.
     subprocess.run(["git", "-C", str(dest), "fetch", "--all", "--tags"], capture_output=True)
-    return subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode == 0
+    return (
+        subprocess.run(["git", "-C", str(dest), "checkout", commit], capture_output=True).returncode
+        == 0
+    )
 
 
 def _discard_cached_clone(dest: Path) -> bool:
@@ -181,16 +198,41 @@ def ensure_icsnpp(name: str) -> Path | None:
 def run_zeek(pcap: Path, loads: list[str], mounts: list[tuple[Path, str]]) -> Path:
     """Run ``zeek -r pcap <loads>`` in the container; return a host dir of logs."""
     outdir = Path(tempfile.mkdtemp(prefix="zeeklogs-"))
+    if _NATIVE_ZEEK:
+        local_loads = []
+        for load in loads:
+            for host, container in mounts:
+                if load == container or load.startswith(container + "/"):
+                    load = str(host.resolve()) + load[len(container) :]
+                    break
+            local_loads.append(load)
+        cmd = [_NATIVE_ZEEK, "-r", str(pcap.resolve()), *local_loads]
+        try:
+            proc = subprocess.run(cmd, cwd=outdir, capture_output=True, text=True, timeout=120)
+        except subprocess.TimeoutExpired:
+            shutil.rmtree(outdir, ignore_errors=True)
+            raise RuntimeError(f"zeek timed out on {pcap.name}") from None
+        if proc.returncode != 0:
+            shutil.rmtree(outdir, ignore_errors=True)
+            raise RuntimeError(f"zeek failed on {pcap.name}: {proc.stderr.strip()[:400]}")
+        return outdir
     cmd = [
-        "docker", "run", "--rm",
-        "-v", f"{pcap.parent}:/pcaps:ro",
-        "-v", f"{outdir}:/out",
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "-v",
+        f"{pcap.parent}:/pcaps:ro",
+        "-v",
+        f"{outdir}:/out",
     ]
     for host, container in mounts:
         cmd += ["-v", f"{host}:{container}:ro"]
     cmd += ["-w", "/out", ZEEK_IMAGE, "zeek", "-r", f"/pcaps/{pcap.name}", *loads]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
+        shutil.rmtree(outdir, ignore_errors=True)
         raise RuntimeError(f"zeek failed on {pcap.name}: {proc.stderr.strip()[:400]}")
     return outdir
 
@@ -232,7 +274,10 @@ def _json_request_tuples(events: list[dict[str, object]]) -> Counter[tuple[str, 
     for e in events:
         if not e.get("is_orig"):
             continue
-        conn = e["conn"]  # type: ignore[index]
+        detail = e.get("detail")
+        if isinstance(detail, dict) and "cotp" in detail:
+            continue  # COTP setup is not an S7 application request.
+        conn = e["conn"]
         c[(conn["orig_h"], conn["resp_h"], str(e["func_name"]))] += 1  # type: ignore[index]
     return c
 
@@ -262,9 +307,19 @@ def _dnp3_log_tuples(logdir: Path) -> Counter[tuple[str, str, str]]:
     return c
 
 
+def _s7_log_tuples(logdir: Path) -> Counter[tuple[str, str, str]]:
+    """Application request identities across the S7comm and S7-plus logs."""
+    return Counter(
+        (row.get("id.orig_h", ""), row.get("id.resp_h", ""), row.get("function_name", ""))
+        for name in ("s7comm.log", "s7comm_plus.log")
+        for row in read_zeek_log(logdir, name)
+        if row.get("is_orig") == "T"
+    )
+
+
 def fidelity_check(proto: str, results: Results) -> None:
     """Diff emitted JSON vs real Zeek/ICSNPP logs for every scenario of a protocol."""
-    if proto not in _ICSNPP:
+    if proto not in {*_ICSNPP, "s7comm"}:
         # Only Modbus/DNP3 have vendored ICSNPP *script* packages; S7comm fidelity
         # needs the compiled plugin + a fidelity mapping (see docs/verify-s7.md).
         results.skip(
@@ -272,15 +327,20 @@ def fidelity_check(proto: str, results: Results) -> None:
             f"(enable via docs/verify-s7.md when using an icsnpp-s7comm image)"
         )
         return
-    scripts = ensure_icsnpp(proto)
-    if scripts is None:
-        results.fail(f"fidelity[{proto}]: could not obtain icsnpp-{proto} scripts")
-        return
-    mounts = [(scripts, f"/icsnpp-{proto}")]
-    loads = [f"/icsnpp-{proto}"]
-    log_tuples = _modbus_log_tuples if proto == "modbus" else _dnp3_log_tuples
+    if proto == "s7comm":
+        mounts = []
+        loads = ["icsnpp/s7comm"]
+        log_tuples = _s7_log_tuples
+    else:
+        scripts = ensure_icsnpp(proto)
+        if scripts is None:
+            results.fail(f"fidelity[{proto}]: could not obtain icsnpp-{proto} scripts")
+            return
+        mounts = [(scripts, f"/icsnpp-{proto}")]
+        loads = [f"/icsnpp-{proto}"]
+        log_tuples = _modbus_log_tuples if proto == "modbus" else _dnp3_log_tuples
 
-    proto_dir = _SCENARIOS / ("modbus" if proto == "modbus" else proto)
+    proto_dir = _SCENARIOS / ("s7" if proto == "s7comm" else proto)
     compared = 0
     for scenario_file in sorted(proto_dir.glob("*.yaml")):
         with tempfile.TemporaryDirectory() as td:
@@ -316,7 +376,7 @@ def fidelity_check(proto: str, results: Results) -> None:
                 )
                 detail = ", ".join(f"{t}: json={w} zeek={g}" for t, w, g in deltas)
                 results.fail(f"fidelity[{proto}] {scenario_file.name}: count mismatch — {detail}")
-    if compared == 0 and proto in _ICSNPP:
+    if compared == 0:
         results.fail(f"fidelity[{proto}]: no scenarios produced comparable request events")
 
 
@@ -356,10 +416,10 @@ def _x1_baseline_redef(outdir: Path) -> Path:
         with tempfile.TemporaryDirectory() as td:
             _, events = emit(benign, Path(td))
         for e in events:
-            token = x1_norm_func(e)  # type: ignore[arg-type]
+            token = x1_norm_func(e)
             if token is None:
                 continue
-            conn = e["conn"]  # type: ignore[index]
+            conn = e["conn"]
             src, dst = conn["orig_h"], conn["resp_h"]  # type: ignore[index]
             talkers.add(str(src))
             pairs.add((str(src), str(dst)))
@@ -384,7 +444,7 @@ def detection_check(
 ) -> None:
     token = _NOTICE_TOKEN.get(det.id)
     if token is None:
-        results.skip(f"detection[{det.id}]: no Tier-2 notice mapping")
+        results.fail(f"detection[{det.id}]: no Tier-2 notice mapping")
         return
     if det.id in _NEEDS_S7 and not s7_available:
         results.skip(
@@ -459,7 +519,7 @@ def suricata_check(results: Results) -> None:
             "nothing to execute (Suricata is optional, PRD §6.5)"
         )
         return
-    results.skip(f"suricata: {len(rules)} rule file(s) found but the Suricata runner is not wired")
+    results.fail(f"suricata: {len(rules)} rule file(s) found but the Suricata runner is not wired")
 
 
 # --- s7 plugin probe ---------------------------------------------------------
@@ -480,90 +540,69 @@ def _s7_plugin_probe(image: str) -> tuple[bool, list[str]]:
     appearing in ``zeek -N`` *and* a loadable script path — claiming "available"
     without usable scripts caused silent empty S7 runs.
     """
-    probe = subprocess.run(  # noqa: S603
-        [
-            "docker",
-            "run",
-            "--rm",
-            image,
-            "bash",
-            "-c",
-            "zeek -N 2>/dev/null | grep -qi s7comm && "
-            "ls /usr/local/zeek/share/zeek/site/icsnpp/s7comm 2>/dev/null || "
-            "ls /usr/local/zeek/share/zeek/site/icsnpp-s7comm 2>/dev/null || "
-            "true",
-        ],
-        capture_output=True,
-        text=True,
+    prefix = (
+        [_NATIVE_ZEEK]
+        if _NATIVE_ZEEK
+        else ["docker", "run", "--rm", "--network", "none", image, "zeek"]
     )
-    out = (probe.stdout or "") + (probe.stderr or "")
-    if "s7comm" not in out.lower() and probe.returncode != 0:
-        # Second probe: plugin name only (scripts may live under a package name).
-        name_only = subprocess.run(  # noqa: S603
-            [
-                "docker",
-                "run",
-                "--rm",
-                image,
-                "bash",
-                "-c",
-                "zeek -N 2>/dev/null | grep -i s7comm || true",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if "s7comm" not in (name_only.stdout or "").lower():
-            return False, []
-    # Prefer the conventional ICSNPP package load path.
-    loads = ["icsnpp/s7comm"]
-    load_ok = subprocess.run(  # noqa: S603
-        [
-            "docker",
-            "run",
-            "--rm",
-            image,
-            "bash",
-            "-c",
-            "zeek -e '@load icsnpp/s7comm' 2>&1 | tail -n 5",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    combined = (load_ok.stdout or "") + (load_ok.stderr or "")
-    if load_ok.returncode != 0 or "error" in combined.lower():
+    probe = subprocess.run([*prefix, "-N"], capture_output=True, text=True, timeout=30)
+    if probe.returncode != 0 or "s7comm" not in probe.stdout.lower():
         return False, []
-    return True, loads
+    load_ok = subprocess.run(
+        [*prefix, "--parse-only", "-e", "@load icsnpp/s7comm"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if load_ok.returncode != 0:
+        return False, []
+    return True, ["icsnpp/s7comm"]
 
 
 # --- main --------------------------------------------------------------------
 
 
 def main() -> int:
-    argparse.ArgumentParser(description=__doc__).parse_args()
-
-    if not _docker_ok():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--native", action="store_true", help="Use Zeek on PATH instead of Docker.")
+    parser.add_argument(
+        "--require-complete", action="store_true", help="Fail if a shipped check is skipped."
+    )
+    args = parser.parse_args()
+    global ZEEK_IMAGE, _NATIVE_ZEEK
+    _NATIVE_ZEEK = shutil.which("zeek") if args.native else None
+    if args.native:
+        if _NATIVE_ZEEK is None:
+            print("verify: --native requires Zeek on PATH", file=sys.stderr)
+            return 2
+        version = subprocess.run([_NATIVE_ZEEK, "--version"], capture_output=True, text=True)
         print(
-            "verify: Docker is required for Tier-2 validation but is not available.\n"
-            "Start the Docker daemon and re-run `make verify`.",
-            file=sys.stderr,
+            f"verify: native {version.stdout.strip()} (host installation, not the pinned Docker image)"
         )
-        return 2
-    global ZEEK_IMAGE
-    ZEEK_IMAGE = _active_zeek_image()
-    if not _image_present():
-        print(f"verify: could not obtain {ZEEK_IMAGE}", file=sys.stderr)
-        return 2
+    else:
+        if not _docker_ok():
+            print(
+                "verify: Docker is unavailable. Start it and re-run `make verify`, "
+                "or use `make verify VERIFY_ARGS=--native` with local Zeek.",
+                file=sys.stderr,
+            )
+            return 2
+        ZEEK_IMAGE = _active_zeek_image()
+        if not _image_present():
+            print(f"verify: could not obtain {ZEEK_IMAGE}", file=sys.stderr)
+            return 2
 
     results = Results()
     s7_available, s7_loads = _s7_plugin_probe(ZEEK_IMAGE)
-    print(f"verify: Zeek image {ZEEK_IMAGE}; icsnpp-s7comm available: {s7_available}\n")
+    engine = f"native {_NATIVE_ZEEK}" if _NATIVE_ZEEK else f"image {ZEEK_IMAGE}"
+    print(f"verify: {engine}; icsnpp-s7comm available: {s7_available}\n")
     if not s7_available:
         print(
             "verify: S7 Tier-2 path disabled — see docs/verify-s7.md "
             f"(optional {_S7_ZEEK_IMAGE_ENV}=...)\n"
         )
 
-    print("== Fidelity (emitted JSON vs real Zeek/ICSNPP) ==")
+    print("== Request identity/count parity (JSON vs real Zeek/ICSNPP) ==")
     fidelity_check("modbus", results)
     fidelity_check("dnp3", results)
     if s7_available:
@@ -587,8 +626,9 @@ def main() -> int:
     print(f"  passed:  {len(results.passed)}")
     print(f"  skipped: {len(results.skipped)}")
     print(f"  failed:  {len(results.failed)}")
-    if results.failed:
-        print("\nverify: FAILED")
+    required_skips = [s for s in results.skipped if not s.startswith("suricata: no Suricata rules")]
+    if results.failed or (args.require_complete and required_skips):
+        print("\nverify: FAILED (failed checks or required validation incomplete)")
         return 1
     if not results.passed:
         print(
@@ -597,7 +637,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print("\nverify: OK (Tier-2 fidelity + Zeek detections; skips are explicit above)")
+    print("\nverify: OK (request parity + Zeek detections; skips are explicit above)")
     return 0
 
 

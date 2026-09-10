@@ -16,7 +16,7 @@ non-trivial work.
    **files-only**; optional Tier-2 Zeek fidelity check.
 3. **Engine policy:** Sigma-first; Zeek when real state is needed; Suricata
    optional; every detection documents its engine choice + rationale.
-4. **Two-tier execution:** Tier 1 (zero-dep Sigma-over-JSON) is the headline path;
+4. **Two-tier execution:** Tier 1 (Python-packaged Sigma-over-JSON) is the headline path;
    Tier 2 (containerized Zeek/Suricata) validates the rest.
 5. **Build order:** Modbus end-to-end → harden + CI → DNP3 → S7 → coverage polish
    + contributor guides + optional honeypot.
@@ -46,7 +46,7 @@ overrides the GitHub-Actions references in PRD §6.9 / checklist Phase 2.)
 ## Canonical commands
 
 - `make ci` — format-check, lint, type-check, unit tests, detection harness,
-  schema, coverage-build/check, and `make security`. The gate.
+  schema, coverage drift-check, and `make security`. The gate.
 - `make demo` — Tier-1 one-command demo (generate → detect → coverage map).
 - `make verify` — Tier-2 fidelity + Zeek/Suricata validation (Docker).
 - `make release` — cut a local release (gate → build → artifacts → tag).

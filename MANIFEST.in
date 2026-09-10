@@ -1,0 +1,6 @@
+include Makefile requirements.lock PRD.md ENGINEERING_CHECKLIST.md AGENTS.md CLAUDE.md CONTRIBUTING.md CHANGELOG.md
+recursive-include detections *.yaml *.yml *.md *.zeek *.rules *.suricata
+recursive-include scenarios *.yaml
+recursive-include scripts *.py
+recursive-include tests/data *.jsonl
+recursive-include docs *.md *.json *.svg *.gif *.txt

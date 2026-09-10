@@ -12,6 +12,14 @@ unauthorized-control detection for the DNP3 slice (`PRD.md` §5.2).
 | **Rule** | [`detections/sigma/dnp3_d3_unauthorized_operate.yml`](../sigma/dnp3_d3_unauthorized_operate.yml) |
 | **Status** | experimental · **Level** | high |
 
+## Example policy and limits
+
+The approved channel is `10.0.1.10` → `10.0.1.50:20000`. A listed source
+sending the matched command to another asset or port still fires. These are
+synthetic addresses, not authenticated identities. Compromise of an approved
+source and in-channel misuse require other signals. The rule has experimental
+status; synthetic quiet tests do not measure a site's false-positive rate.
+
 ## Behavior
 
 DNP3 controls physical outputs with **CROB** (Control Relay Output Block) commands
@@ -26,7 +34,7 @@ process. The detection keys on the **write policy for control**: who may operate
 **Sigma.** Authorization is decidable from a **single event**: `direction: request`,
 `func_name` is one of the four output-control commands, and `conn.orig_h` is the
 issuer. No durable state or correlation is needed — Sigma-first per `PRD.md` §6.5.
-The same rule compiles to production Zeek/SIEM unchanged. (Richer per-command detail
+A SIEM deployment needs normalization and backend qualification. (Richer per-command detail
 — index, operation type, trip code — is available in `detail.control` from ICSNPP
 `dnp3_control.log`, but is not needed for the authorization decision.)
 
@@ -51,8 +59,9 @@ Tier-1 `.jsonl` event log (`docs/schema.md`):
 ```
 output_control:    proto=dnp3 AND direction=request
                    AND func_name in { SELECT, OPERATE, DIRECT_OPERATE, DIRECT_OPERATE_NR }
-authorized_source: conn.orig_h == 10.0.1.10 (master-1)
-fire when:         output_control AND NOT authorized_source
+authorized_channel: conn.orig_h == 10.0.1.10 (master-1)
+                    AND conn.resp_h == 10.0.1.50 AND conn.resp_p == 20000
+fire when:         output_control AND NOT authorized_channel
 ```
 
 ## Scenarios
@@ -98,7 +107,7 @@ What benign behavior could trip this, and why it does not here:
 - **Sanctioned maintenance** from an unlisted laptop — pre-authorize by adding the
   address for the maintenance window.
 
-**Modelling note.** Like M1, D3 allow-lists by **source**; per-index/per-point
+**Modelling note.** Like M1, D3 allow-lists by **source, destination and service**; per-index/per-point
 control policy (which outputs a given master may operate) is a richer policy that a
 field-match rule does not express — a Zeek-class concern. Policy values (the
 permitted master address) are demo-scenario specifics, edited per environment.

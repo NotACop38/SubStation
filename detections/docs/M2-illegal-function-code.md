@@ -25,9 +25,8 @@ on **the code / exception itself**, not on the source or the request rate.
 function code is reserved/undefined (normalized to `action_class: other`), or an
 exception event whose `error` names an illegal-function/address response. No
 state or correlation is required, so Sigma is the simplest correct engine
-(Sigma-first, `PRD.md` §6.5). It transfers unchanged to a production SIEM/Zeek
-via pySigma backends, where the same fields map to ICSNPP
-`modbus_detailed.exception_code` and Zeek's `Modbus::function_codes`.
+(Sigma-first, `PRD.md` §6.5). Sensor logs need normalization, including ICSNPP transaction exceptions and
+Zeek function names; the selected SIEM backend needs independent validation.
 
 **Why code/exception, not volume.** A single malformed or unsupported request is
 enough to be interesting; the abnormality is the *code*, not how often it

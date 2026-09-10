@@ -3,7 +3,7 @@
 A **scenario** is the single source of truth for one simulator run (`PRD.md`
 §6.1). It is human-editable YAML under `scenarios/<proto>/`, loaded into a typed,
 immutable model (`substation/scenarios/model.py`) that — in later phases — drives
-**both** the PCAP and JSON emitters so the two outputs can never drift.
+**both** the PCAP and JSON emitters with independent checks for output agreement.
 
 The canonical, fully commented example is
 [`scenarios/modbus/benign-poll.yaml`](../scenarios/modbus/benign-poll.yaml). This

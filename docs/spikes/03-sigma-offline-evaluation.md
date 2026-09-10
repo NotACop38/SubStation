@@ -129,3 +129,13 @@ loader use PyYAML — single shared pin.)
 ## Nothing blocked
 
 Mechanism confirmed with a passing pytest prototype. No escalation needed.
+
+## Evaluator review, 2026-09-09
+
+The supported subset uses case-insensitive string matching by default and honors
+`|cased`, in line with the [Sigma rules specification](https://sigmahq.io/sigma-specification/specification/sigma-rules-specification.html).
+Every condition branch is checked for unsupported constructs before events are
+evaluated, including empty input; boolean shortcuts cannot hide an unsupported
+rule. Duplicate YAML keys are rejected. Parsed-file caching keys on content so
+rule edits take effect within the same process. This remains a small offline
+subset evaluator, not a claim of full Sigma/backend compatibility.

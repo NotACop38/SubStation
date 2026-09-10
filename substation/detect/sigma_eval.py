@@ -5,8 +5,9 @@ This is the mechanism the Phase-0 spike confirmed
 YAML into a typed boolean condition tree (``ConditionAND``/``OR``/``NOT`` with
 ``ConditionFieldEqualsValueExpression`` leaves); a small recursive evaluator walks
 that tree over each JSON event. Zero SIEM, in-process, pure-Python — exactly the
-Tier-1 headline path (PRD.md §6.2). The *same* rule compiles to a production SIEM
-via stock pySigma backends, so detections transfer unchanged (PRD.md §6.5).
+Tier-1 headline path (PRD.md §6.2). Rules use portable Sigma constructs. A SIEM
+deployment still needs a tested backend, field normalization and site policy;
+this evaluator is a limited subset.
 
 Scope: plain field equality and numeric compare modifiers (``|gt`` / ``|gte`` /
 ``|lt`` / ``|lte`` / ``|neq``) with dotted-path lookup into the normalized
@@ -19,10 +20,11 @@ mis-evaluating (spike 03 "Scope / follow-ups").
 
 from __future__ import annotations
 
-from functools import cache
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import yaml
 from sigma.collection import SigmaCollection
 from sigma.conditions import (
     ConditionAND,
@@ -30,7 +32,16 @@ from sigma.conditions import (
     ConditionNOT,
     ConditionOR,
 )
-from sigma.types import SigmaBool, SigmaCompareExpression, SigmaNumber, SigmaString
+from sigma.exceptions import SigmaError
+from sigma.types import (
+    SigmaBool,
+    SigmaCasedString,
+    SigmaCompareExpression,
+    SigmaNumber,
+    SigmaString,
+)
+
+from substation._yaml import safe_load_strict
 
 __all__ = ["SigmaEvalError", "load_rule", "parse_rule", "matching_indices"]
 
@@ -43,7 +54,12 @@ class SigmaEvalError(ValueError):
 
 def parse_rule(rule_yaml: str) -> Any:
     """Parse Sigma YAML text into a single pySigma ``SigmaRule``."""
-    rules = SigmaCollection.from_yaml(rule_yaml).rules
+    try:
+        # pySigma's default YAML loader silently accepts duplicate selections.
+        safe_load_strict(rule_yaml)
+        rules = SigmaCollection.from_yaml(rule_yaml).rules
+    except (yaml.YAMLError, SigmaError) as exc:
+        raise SigmaEvalError(f"invalid Sigma rule: {exc}") from exc
     if len(rules) != 1:
         raise SigmaEvalError(f"expected exactly one rule, found {len(rules)}")
     return rules[0]
@@ -52,17 +68,33 @@ def parse_rule(rule_yaml: str) -> Any:
 def load_rule(path: str | Path) -> Any:
     """Load and parse a Sigma rule file into a single pySigma ``SigmaRule``.
 
-    Parsed rules are cached by resolved path: the demo and the Detection
-    Contract harness evaluate the same shipped rules over many scenarios, and
-    re-reading + re-parsing the YAML per scenario is pure waste. Shipped rules
-    never change mid-process; the cache is invisible to correctness.
+    Cache by file content so edits in a long-lived process take effect, even
+    when the path, size or filesystem timestamp is unchanged.
     """
-    return _load_rule_cached(str(Path(path).resolve()))
+    return _parse_rule_cached(Path(path).read_text(encoding="utf-8"))
 
 
-@cache
-def _load_rule_cached(resolved_path: str) -> Any:
-    return parse_rule(Path(resolved_path).read_text(encoding="utf-8"))
+@lru_cache(maxsize=128)
+def _parse_rule_cached(rule_yaml: str) -> Any:
+    return parse_rule(rule_yaml)
+
+
+def _validate_node(node: Any) -> None:
+    """Reject unsupported syntax independently of input and boolean shortcuts."""
+    if isinstance(node, (ConditionAND, ConditionOR, ConditionNOT)):
+        for arg in node.args:
+            _validate_node(arg)
+        return
+    if not isinstance(node, ConditionFieldEqualsValueExpression):
+        raise SigmaEvalError(f"unsupported condition node {type(node).__name__}")
+    value = node.value
+    if isinstance(value, SigmaString):
+        if value.contains_special():
+            raise SigmaEvalError(f"field {node.field!r}: value wildcards are not supported")
+    elif not isinstance(value, (SigmaBool, SigmaNumber, SigmaCompareExpression)):
+        raise SigmaEvalError(
+            f"field {node.field!r}: unsupported leaf value type {type(value).__name__}"
+        )
 
 
 def _lookup(event: dict[str, Any], dotted: str) -> Any:
@@ -130,7 +162,12 @@ def _leaf_matches(node: Any, event: dict[str, Any]) -> bool:
                 "Tier-1 evaluator (spike 03 follow-up)"
             )
         # A boolean field never equals a string token; compare other scalars as text.
-        return not isinstance(actual, bool) and str(actual) == str(value.to_plain())
+        if isinstance(actual, bool) or not isinstance(actual, (str, int, float)):
+            return False
+        expected = str(value.to_plain())
+        if isinstance(value, SigmaCasedString):
+            return str(actual) == expected
+        return str(actual).casefold() == expected.casefold()
     raise SigmaEvalError(
         f"field {node.field!r}: unsupported leaf value type {type(value).__name__}"
     )
@@ -159,4 +196,6 @@ def matching_indices(rule: Any, events: list[dict[str, Any]]) -> list[int]:
     Sigma default for a multi-condition list).
     """
     asts = [parsed.parse() for parsed in rule.detection.parsed_condition]
+    for ast in asts:
+        _validate_node(ast)
     return [i for i, event in enumerate(events) if any(_node_matches(ast, event) for ast in asts)]

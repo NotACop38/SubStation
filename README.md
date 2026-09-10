@@ -1,85 +1,59 @@
-<!-- ============================== HERO ============================== -->
 <div align="center">
+<img src="docs/assets/hero.svg" alt="Substation: offline ICS detection development for Modbus, DNP3 and S7" width="100%">
 
-<img src="docs/assets/hero.svg" alt="Substation: defensive ICS detection content for Modbus, DNP3 and Siemens S7, mapped to MITRE ATT&amp;CK for ICS and validated without OT hardware" width="100%">
+**Generate synthetic ICS traffic. Test detection behavior. Inspect the evidence.**
 
-<br/>
-
-### Clone the repo, run **one command**, and watch synthetic ICS telemetry flow through *real* detections and light up an ATT&CK-for-ICS coverage map. **No PLC, no lab, no live OT.**
-
-<br/>
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-3fb950?style=for-the-badge)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](pyproject.toml)
-[![Release v0.1.0](https://img.shields.io/badge/Release-v0.1.0-58a6ff?style=for-the-badge)](CHANGELOG.md)
-[![CI: local · Claude-driven](https://img.shields.io/badge/CI-local%20%C2%B7%20Claude--driven-8957e5?style=for-the-badge)](CLAUDE.md)
-<br/>
-[![MITRE ATT&CK for ICS](https://img.shields.io/badge/MITRE%20ATT%26CK-for%20ICS-e3672a?style=for-the-badge)](https://attack.mitre.org/matrices/ics/)
-[![Simulator: files-only](https://img.shields.io/badge/Simulator-files--only%20%C2%B7%20defensive-0aa2aa?style=for-the-badge)](#safety)
-[![Tier 1: zero-dependency](https://img.shields.io/badge/Tier%201-zero--dependency-2ea043?style=for-the-badge)](#two-tier-execution)
-
-<!-- The badges above are intentionally STATIC. Substation's CI/CD is local and
-     Claude-driven; there is no GitHub Actions and no cloud CI service to report a
-     live status (see CLAUDE.md). The coverage figures reflect the locally-generated
-     ATT&CK-for-ICS map (`make coverage-build`). -->
-
-**[Quick start](#quick-start) · [How it works](#how-it-works) · [Coverage](#coverage) · [Two-tier execution](#two-tier-execution) · [Safety](#safety) · [Docs](#docs-and-status)**
-
+[![License: MIT](https://img.shields.io/badge/License-MIT-3fb950)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB)](pyproject.toml)
+[![CI: local](https://img.shields.io/badge/CI-local-8957e5)](AGENTS.md)
+[![Simulator: files only](https://img.shields.io/badge/Simulator-files%20only-0aa2aa)](#safety)
 </div>
-
----
 
 ## Why this exists
 
-OT/ICS detection content is scarce and hard to validate: most defenders don't have
-a PLC lab, so they can't generate the telemetry needed to test a rule before
-trusting it in production, leaving detections untested, naive, or copied without
-understanding their false-positive behavior. **Substation ships ready-to-use
-detections *and* a safe, repeatable way to generate the telemetry that exercises
-them, together**, so a rule's fire-on-attack and quiet-on-benign behavior is proven
-before it ever reaches a live environment.
+Substation is an **offline detection regression and teaching toolkit** for Modbus,
+DNP3 and Siemens S7. It pairs experimental Sigma/Zeek rules with readable benign
+and anomalous scenarios. Generate PCAP and normalized JSON, inspect why a rule
+fired, and preserve that behavior in a repeatable test without PLC hardware.
 
-| | |
-|---|---|
-| 🛡️ **Defensive detection pack** | Modbus · DNP3 · Siemens S7, every rule mapped to a **verified** ATT&CK-for-ICS technique |
-| 📡 **Files-only simulator** | one scenario model → **dual emit** (PCAP **and** JSON), so telemetry can't drift from the rules |
-| 🧪 **Proven, not promised** | every detection ships with fire-on-anomaly and quiet-on-benign scenarios; the catalogue states which engine/tier validates each rule |
-| ⚡ **One command, < 5 min** | pure-Python headline path: no Zeek, no Suricata, no Docker, no hardware |
+The useful result is a reproducible example with an explicit policy and expected
+outcome. Synthetic tests do **not** establish production recall, false-positive
+rates, device realism or detection of an entire ATT&CK technique. All rules need
+site-specific policy and independent validation before operational use. The
+[project review](docs/reviews/2026-09-09-codebase-review.md) explains the evidence
+and remaining limits.
 
 ## Quick start
 
-The headline path is **Python-only**: a one-line `pip install` of pure-Python
-wheels (scapy, pySigma, PyYAML): **no Zeek, no Suricata, no Docker, no hardware,
-and no live OT network traffic**. First install may download wheels; the simulator
-itself only writes files. (Tier 2 below adds Docker for full-fidelity validation.)
+Use Python 3.11+ in a virtual environment. Installation downloads Python packages;
+the demo itself needs no Docker, sensor engine or network connection.
 
 ```sh
 git clone https://github.com/notacop38/substation.git
 cd substation
-make dev      # editable install of the pinned, pure-Python deps + dev tooling (Python 3.11+)
-make demo     # generate → detect → report (Tier 1, pure Python)
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e .
+substation demo
 ```
 
-`make demo` builds synthetic Modbus telemetry from scenarios, runs the Sigma
-detections over the JSON event log, and prints the hits plus the real
-ATT&CK-for-ICS coverage map. It runs a **benign** baseline (which stays **quiet**,
-keeping false positives low) and **anomalous** scenarios (which **fire** real detections),
-so one command shows both halves:
+The default demo runs a benign Modbus baseline and Modbus/DNP3 anomalies. It checks
+their Tier-1 contracts and labels applicable Zeek detections **not-run**. Artifacts
+are written to `./artifacts/`. The wheel also includes rules and scenarios, so the
+installed CLI works outside a checkout.
 
-<div align="center">
-  <img src="docs/assets/demo.gif" alt="Animated capture of make demo: the command runs, the benign baseline stays quiet, the anomalous M1 and M2 scenarios FIRE their detections, then the ATT&amp;CK-for-ICS coverage map prints" width="760">
-</div>
+<img src="docs/assets/demo.gif" alt="Current demo output with synthetic fire and quiet results and explicit Tier-2 not-run labels" width="900">
 
 <details>
-<summary>📄 Same output as copy-pasteable text</summary>
+<summary>Demo output</summary>
 
 ```text
-$ make demo
 substation demo · Tier-1 loop: generate -> detect -> report (pure Python)
 
 [benign   ] benign-baseline                    18 events -> quiet (no hits)
 [anomalous] anomalous-m1-unauthorized-write    10 events -> FIRED 2 hit(s) -> M1
 [anomalous] anomalous-m2-illegal-function       4 events -> FIRED 2 hit(s) -> M2
+[anomalous] dnp3-anomalous-d1-restart           7 events -> FIRED 1 hit(s) -> D1
 
 ATT&CK-for-ICS coverage map
 ============================================================
@@ -87,246 +61,136 @@ ATT&CK-for-ICS coverage map
   ----------------------------------------------------------
   M1   T1692.001   Impair Process Control     ● FIRED
   M2   T0888       Discovery                  ● FIRED
-  M3   T0846       Discovery                  ○ quiet
-  D1   T0816       Inhibit Response Function   ·
-  D2   T1691.002   Inhibit Response Function   ·
-  D3   T1692.001   Impair Process Control      ·
+  M3   T0846       Discovery                  ◇ not-run
+  D1   T0816       Inhibit Response Function  ● FIRED
+  D2   T1691.002   Inhibit Response Function  ○ quiet
+  D3   T1692.001   Impair Process Control     ○ quiet
   D4   T0888       Discovery                   ·
   S1   T0858       Execution                   ·
   S2   T0843       Lateral Movement            ·
   S3   T0888       Discovery                   ·
-  X1   T0846       Discovery                  ○ quiet
+  X1   T0846       Discovery                  ◇ not-run
 ============================================================
-11 detections · 10 ATT&CK techniques · 5 tactics · 2 fired this run
+11 detections · 10 ATT&CK techniques · 5 tactics · 3 fired this run
 
-Result: quiet on the benign baseline; fired 2 detection(s) on the anomalies (M1, M2).
+Result: quiet on the benign baseline; fired 3 detection(s) on the anomalies (D1, M1, M2).
 ```
 
 </details>
 
-> The animation above is the tool's **verbatim output**, rendered faithfully and
-> regenerated headlessly by [`make demo-gif`](#recording-the-demo). The in-terminal
-> coverage map is registry-driven (the same metadata behind the full generated
-> table); the downloadable ATT&CK Navigator layer + full table come from
-> `make coverage-build` (see [Coverage](#coverage)).
-
-Beyond `make demo`, the installed `substation` CLI is the single front door:
-
 ```sh
-substation list                                  # registered detections + bundled scenarios
-substation demo --scenario mine-benign.yaml mine-attack.yaml   # run your own pair
-substation demo --strict                         # exit non-zero unless every exercises contract holds
-substation validate artifacts/run.jsonl          # schema-check an event log
-substation coverage --check                      # drift-check the committed coverage snapshot
+substation list
+substation demo --scenario mine-benign.yaml mine-anomaly.yaml --strict
+substation validate artifacts/benign-baseline.jsonl
+substation detect artifacts/anomalous-m1-unauthorized-write.jsonl --detection M1
+substation coverage --out ./coverage
 ```
+
+`detect` accepts **Substation-schema JSONL**, validates every record, and prints
+one JSON object per hit with `event_file`, `detection_id` and a zero-based
+`event_index`. Its summary goes to stderr. Invalid input fails before any hit
+output is published. It runs only Tier-1 rules; raw Zeek logs need normalization,
+and no sensor-import adapter is shipped yet. An empty valid log reports zero hits.
 
 ## How it works
 
-<div align="center">
-  <img src="docs/assets/pipeline.svg" alt="Pipeline: scenario YAML → scenario model (single source of truth) → dual emit (PCAP + JSON) → detect with Sigma (Tier 1) and Zeek (Tier 2) → report hits and ATT&amp;CK coverage" width="100%">
-</div>
+<img src="docs/assets/pipeline.svg" alt="One scenario model feeds PCAP and JSON emitters; Sigma uses JSON and Zeek uses PCAP" width="100%">
 
-One **scenario model** is the single source of truth for a run. It feeds **both**
-emitters, so the PCAP and the JSON event log can never disagree:
+One scenario model feeds both emitters. That reduces duplicated scenario logic;
+independent parser checks are still needed because wire encoding can disagree
+with the JSON model.
 
-1. **Generate:** load human-editable `scenarios/*.yaml` → build the scenario model
-   → emit a `.pcap` *and* a Zeek/ICSNPP-aligned `.jsonl` event log from that one model.
-2. **Detect:** evaluate **Sigma** rules directly over the JSON (Tier 1, pure Python),
-   and run **Zeek** over the PCAP for the stateful rules (Tier 2).
-3. **Report:** print the hits and the ATT&CK-for-ICS coverage map: detections
-   **fire on attacks** and stay **quiet on benign** traffic.
+| Path | What it checks | Requirements |
+|---|---|---|
+| Tier 1 | Seven Sigma rules over schema-validated synthetic JSON; expected fire/quiet results | Python, scapy, pySigma, PyYAML and their dependencies |
+| Tier 2 | Request source/destination/function counts decoded by Zeek/ICSNPP; four stateful Zeek rules | Docker by default, or explicit native Zeek; S7 requires its compiled plugin |
 
-See [Architecture](#architecture) for the full diagram, and
-[Two-tier execution](#two-tier-execution) for the Tier 1 / Tier 2 split.
+Tier 2 does not compare every detail field, response, timing edge or device
+interaction. No Suricata rules are shipped. The simulator produces bounded
+protocol fixtures, not a process emulator or encrypted S7 session implementation.
+See [Tier-2 setup and limits](docs/verify-s7.md).
 
-## Coverage
+## Detection content and ATT&CK mappings
 
-Every detection maps to a **verified** ATT&CK-for-ICS technique ID (confirmed
-against the live matrix, never from memory). The authoritative coverage map,
-[`docs/coverage/`](docs/coverage/) (table, JSON, and Navigator layer), is
-**generated** from [`detections/registry.yaml`](detections/registry.yaml) by
-`make coverage-build` and drift-checked by `make ci`, so it can't diverge from the
-detections. The graphic and catalogue below are visual snapshots of that generated map:
-
-<div align="center">
-  <img src="docs/assets/coverage-matrix.svg" alt="ATT&amp;CK-for-ICS coverage matrix: 5 of 12 tactics covered by 11 detections across 10 techniques: Execution (S1), Discovery (M2, M3, D4, S3, X1), Lateral Movement (S2), Inhibit Response Function (D1, D2), and Impair Process Control (M1, D3)" width="100%">
-</div>
-
-> **Load it in the Navigator:** download
-> [`docs/coverage/navigator-layer.json`](docs/coverage/navigator-layer.json) and open
-> it in the [ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/) to
-> view Substation's coverage on the live ICS matrix. Full rendered map:
-> [`docs/coverage/coverage.md`](docs/coverage/coverage.md).
-
-<details open>
-<summary><b>Detection catalogue</b>: 11 detections · 3 protocols · 2 engines</summary>
-
-<br/>
+Eleven examples map to ten ATT&CK-for-ICS techniques across five of twelve tactics.
+The identifiers and tactic relationships were rechecked against MITRE's published
+ICS dataset on 2026-09-09. Mapping counts describe the catalogue; they are not a
+measure of protection or tactic-wide coverage.
 
 | Detection | Title | Protocol | Technique(s) | Tactic | Engine | Tier | Status |
 |---|---|---|---|---|---|---|---|
-| **M1** | Unauthorized register/coil write | `modbus` | T1692.001, T0836 | Impair Process Control (TA0106) | sigma | 1 | ✅ validated |
-| **M2** | Illegal / abnormal function code | `modbus` | T0888 | Discovery (TA0102) | sigma | 1 | ✅ validated |
-| **M3** | Function-code / unit-ID sweep | `modbus` | T0846, T0888 | Discovery (TA0102) | zeek | 2 | 🔵 tier 2 |
-| **D1** | Cold/warm restart from unexpected source | `dnp3` | T0816, T0814 | Inhibit Response Function (TA0107) | sigma | 1 | ✅ validated |
-| **D2** | Disable unsolicited responses | `dnp3` | T1691.002, T0878 | Inhibit Response Function (TA0107) | sigma | 1 | ✅ validated |
-| **D3** | Unauthorized control (operate/direct-operate) | `dnp3` | T1692.001 | Impair Process Control (TA0106) | sigma | 1 | ✅ validated |
-| **D4** | Function-code enumeration / scanning | `dnp3` | T0888, T0846 | Discovery (TA0102) | zeek | 2 | 🔵 tier 2 |
-| **S1** | CPU stop/start from unexpected source | `s7comm` | T0858 | Execution (TA0104) | sigma | 1 | ✅ validated |
-| **S2** | Program / data-block write or download | `s7comm` | T0843 | Lateral Movement (TA0109) | sigma | 1 | ✅ validated |
-| **S3** | Enumeration / module-info reads | `s7comm` | T0888, T0846 | Discovery (TA0102) | zeek | 2 | 🔵 tier 2 |
-| **X1** | Cross-protocol baseline deviation (new talker / asset pair / function) | `cross` | T0846 | Discovery (TA0102) | zeek | 2 | 🔵 tier 2 |
+| M1 | Unauthorized register/coil write | modbus | T1692.001, T0836 | Impair Process Control (TA0106) | sigma | 1 | synthetic tests |
+| M2 | Illegal / abnormal function code | modbus | T0888 | Discovery (TA0102) | sigma | 1 | synthetic tests |
+| M3 | Function-code / unit-ID sweep | modbus | T0846, T0888 | Discovery (TA0102) | zeek | 2 | requires Zeek |
+| D1 | Cold/warm restart from unexpected source | dnp3 | T0816, T0814 | Inhibit Response Function (TA0107) | sigma | 1 | synthetic tests |
+| D2 | Disable unsolicited responses | dnp3 | T1691.002, T0878 | Inhibit Response Function (TA0107) | sigma | 1 | synthetic tests |
+| D3 | Unauthorized control (operate/direct-operate) | dnp3 | T1692.001 | Impair Process Control (TA0106) | sigma | 1 | synthetic tests |
+| D4 | Function-code enumeration / scanning | dnp3 | T0888, T0846 | Discovery (TA0102) | zeek | 2 | requires Zeek |
+| S1 | CPU stop/start from unexpected source | s7comm | T0858 | Execution (TA0104) | sigma | 1 | synthetic tests |
+| S2 | Program / data-block write or download | s7comm | T0843 | Lateral Movement (TA0109) | sigma | 1 | synthetic tests |
+| S3 | Enumeration / module-info reads | s7comm | T0888, T0846 | Discovery (TA0102) | zeek | 2 | requires Zeek |
+| X1 | Cross-protocol baseline deviation (new talker / asset pair / function) | cross | T0846 | Discovery (TA0102) | zeek | 2 | requires Zeek |
 
-</details>
+The Sigma files are `experimental`. Registry `validated` denotes the synthetic
+Tier-1 contract; `tier2` denotes the engine needed to execute a rule. The
+[generated table](docs/coverage/coverage.md), [JSON](docs/coverage/coverage.json)
+and [Navigator layer](docs/coverage/navigator-layer.json) share one registry.
+`make coverage-build` updates them; `make ci` fails on drift without rewriting them.
 
-**5 of 12** ATT&CK-for-ICS tactics currently have at least one detection (Execution,
-Discovery, Lateral Movement, Inhibit Response Function, Impair Process Control).
-Tactics are stable; the gaps are candidate areas for new detections, not missing
-technique IDs.
+Example allowlists are scoped to a source, destination and service. M1 additionally
+checks the unit, register address space and complete write span. These IP-based
+policies cannot identify a compromised approved host. X1 detects novelty relative
+to reviewed baseline sets; novelty alone does not establish hostile intent, and
+traffic after training never silently expands trust.
 
-## Architecture
+## Development and verification
 
-One scenario model drives **both** emitters, so the PCAP and the JSON event log can
-never drift. Generation is pure Python; the headline path (Tier 1) runs anywhere,
-and Tier 2 validates the rest alongside it.
+With the virtual environment active:
 
-```mermaid
-flowchart TD
-    Y["scenarios/*.yaml<br/>(benign + anomalous, human-editable)"] --> M
-
-    subgraph model["Single source of truth"]
-        M["Scenario model<br/>(actors · exchanges · timing · labels)"]
-    end
-
-    M -->|same model| P["PCAP emitter<br/>(scapy / hand-built PDUs)"]
-    M -->|same model| J["JSON emitter<br/>(Zeek / ICSNPP-aligned envelope)"]
-
-    P --> PCAP["artifacts/*.pcap"]
-    J --> JSONL["artifacts/*.jsonl"]
-
-    subgraph t1["Tier 1 · pure Python · default (headline path)"]
-        direction TB
-        SIG["Sigma detections<br/>evaluated over JSON"] --> REP["hits + ATT&CK-for-ICS<br/>coverage map"]
-    end
-
-    subgraph t2["Tier 2 · containerized · CI / contributors"]
-        direction TB
-        ZEEK["real Zeek + ICSNPP /<br/>Suricata over PCAP"] --> FID["fidelity check +<br/>stateful detections"]
-    end
-
-    JSONL --> SIG
-    PCAP --> ZEEK
-
-    classDef tier1 fill:#e8f5e9,stroke:#2e7d32;
-    classDef tier2 fill:#e3f2fd,stroke:#1565c0;
-    class t1 tier1;
-    class t2 tier2;
+```sh
+make dev                 # install the locked development dependencies and package
+make hooks               # install the local pre-push gate
+make ci                  # formatting, lint, types, tests, schema, coverage and security
+make verify VERIFY_ARGS=--require-complete
 ```
 
-## Two-tier execution
+`make verify` defaults to a pinned Docker image. To use an installed Zeek and S7
+plugin, pass `VERIFY_ARGS='--native --require-complete'`. Missing required checks
+then fail. The [review](docs/reviews/2026-09-09-codebase-review.md) records the tested
+engine versions; native results do not qualify the pinned Docker image.
 
-The single most important UX/credibility decision: the headline path has **zero
-external dependencies**, while the harder, stateful detections are still genuinely
-proven.
+CI/CD is **local and Codex-driven**. There is no GitHub Actions or cloud CI.
+`make release` builds and tags locally after its gates; it never pushes. An existing
+tag can be rebuilt only from its clean matching checkout. The secret gate scans
+current source, including new non-ignored files; release additionally scans the
+exact Git index. Neither is a Git-history audit. The SBOM lists direct dependencies only.
+Dependency pins lack artifact
+hashes, and the documented unused diskcache advisory remains accepted.
 
-<table>
-<tr>
-<th width="50%">🟢 Tier 1: the headline path</th>
-<th width="50%">🔵 Tier 2: full-fidelity validation</th>
-</tr>
-<tr>
-<td valign="top">
-<b>Python-only.</b> Generate telemetry (pure Python) → run <b>Sigma</b> detections over the <b>JSON</b> event log → print hits + coverage map.
-<br/><br/>
-Needs <b>Python&nbsp;3.11+</b> and a one-line <code>pip install</code> of pure-Python wheels, with no Zeek, Suricata, Docker, or hardware. This is what <code>make demo</code> runs.
-</td>
-<td valign="top">
-<b>CI / contributors.</b> Run the generated <b>PCAPs</b> through real <b>Zeek + ICSNPP</b> and/or <b>Suricata</b> (containerized) to (a) prove our synthetic JSON matches real Zeek output and (b) execute the Zeek/Suricata detections that genuinely require packet-level state (the sweeps + the cross-protocol baseline X1). Run with <code>make verify</code>.
-</td>
-</tr>
-</table>
-
-Sigma-over-JSON detections need no Zeek; Zeek/Suricata detections inherently require
-their engine and are therefore validated in Tier 2. This keeps the barrier to first
-success near zero while still proving the harder rails.
+`make demo-gif` captures the current CLI and renders the GIF and SVG with Pillow.
+It fails if the demo fails; it does not maintain a separate set of example results.
+Rendering varies with the installed font. The editable sources remain in
+`detections/` and `scenarios/`; packaging copies supported content into the wheel.
 
 ## Safety
 
-Substation is **strictly defensive**. These are non-negotiable invariants, stated
-here and enforced in code and tests.
+- **Files-only simulator:** writes PCAP/JSON and never transmits on a live interface.
+  Runtime socket guards and static/dynamic tests enforce that boundary.
+- **Defensive fixtures:** model observable protocol signatures; no exploit payloads
+  or operational PLC programs. Use captures for offline analysis; do not replay
+  them toward real OT equipment.
+- **Optional honeypot:** a separate passive Modbus listener, outside the demo and
+  simulator. It binds loopback by default. External binding requires explicit
+  opt-ins and must be network-isolated. See its [README](substation/honeypot/README.md).
 
-- 🔒 **Files-only simulator.** The simulator only ever **writes files** (PCAP/JSON).
-  It **never** opens a sending socket and **never** transmits on a live network
-  interface. This is guarded in code (`substation/emit/guard.py` makes every socket
-  connect/transmit primitive raise during emission), asserted in tests
-  (`tests/test_files_only.py`), and enforced by a codebase-wide static scan
-  (`tests/test_no_raw_socket_send.py`) under `make ci`.
-- ⛔ **Do not replay PCAPs against live OT.** Generated captures are for offline
-  detection development and validation only. Replaying them toward real PLCs,
-  RTUs, or plant networks is out of scope and unsafe.
-- 🧭 **Defensive-only.** We model the *network signature* of malicious behavior so it
-  can be **detected**. There is **no exploit code, no weaponization, and no payloads**
-  intended to manipulate or damage real equipment.
-- 🧪 **Passive, isolated honeypot (optional).** The included Modbus probe-logger is
-  opt-in, binds loopback by default, network-isolated, research-only, and out of the
-  headline path, never part of `make demo`. Binding a non-loopback address requires
-  both `--allow-external` and `SUBSTATION_HONEYPOT_I_UNDERSTAND=1`.
+## Project documents
 
-Substation is **not** a SIEM, a packet-capture appliance, or a substitute for a real
-OT monitoring product.
+- [PRD](PRD.md) and [engineering checklist](ENGINEERING_CHECKLIST.md): scope and decisions.
+- [AGENTS.md](AGENTS.md): local execution rules and safety invariants.
+- [Current project review](docs/reviews/2026-09-09-codebase-review.md): defects, decisions and verification.
+- [Event schema](docs/schema.md) and [scenario format](docs/scenario-format.md): data contracts.
+- [Contributing](CONTRIBUTING.md): adding or improving content.
 
-## Recording the demo
-
-The terminal card under [Quick start](#quick-start) is a **faithful render** of the
-real `make demo` output. It is generated two ways:
-
-```sh
-make demo-gif    # headless: deterministic animated GIF (the committed asset)
-make demo-cast   # interactive: asciinema cast -> animated SVG (needs a TTY)
-```
-
-- **`make demo-gif`** runs [`scripts/render-demo-gif.py`](scripts/render-demo-gif.py),
-  which replays the verbatim demo output into [`docs/assets/demo.gif`](docs/assets/demo.gif)
-  with [Pillow](https://python-pillow.org/). It is deterministic and needs no TTY, so
-  it reproduces the embedded asset anywhere (this is what produced the GIF above).
-- **`make demo-cast`** runs [`scripts/record-demo.sh`](scripts/record-demo.sh), which
-  records the live run with [asciinema](https://asciinema.org/) and renders an animated
-  **SVG** via [svg-term-cli](https://github.com/marionebl/svg-term-cli) (optionally a
-  GIF via [agg](https://github.com/asciinema/agg) with `RENDER_GIF=1`). asciinema needs
-  an interactive TTY, so run it locally; see the script header for the one-time install
-  steps.
-
-## Docs and status
-
-Substation reached its **v0.1.0** release across all five build phases
-(`Modbus → DNP3 → S7 → cross-protocol + polish`). Every Tier-1 detection is validated
-fire-**and**-quiet, and the Tier-2 runner validates the Modbus/DNP3 Zeek rails plus X1
-when Docker is available. The **S7 Zeek rail (S3) and X1's S7 path** are
-contract-complete, but their real-engine fire/quiet is gated on the compiled
-`icsnpp-s7comm` plugin, an honest remaining gap tracked in
-[`docs/launch-readiness.md`](docs/launch-readiness.md). The source of truth lives in:
-
-- [`PRD.md`](PRD.md): product requirements and locked decisions.
-- [`ENGINEERING_CHECKLIST.md`](ENGINEERING_CHECKLIST.md): phased build plan.
-- [`CLAUDE.md`](CLAUDE.md): the project constitution and safety invariants.
-- [`docs/schema.md`](docs/schema.md): the event-log JSON schema (the binding contract).
-- [`docs/scenario-format.md`](docs/scenario-format.md): the scenario YAML format.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md): how to add a protocol or a detection
-  ([`docs/adding-a-protocol.md`](docs/adding-a-protocol.md),
-  [`docs/adding-a-detection.md`](docs/adding-a-detection.md)).
-
-**Built on:** Python · [Sigma / pySigma](https://github.com/SigmaHQ/sigma) ·
-[Zeek + ICSNPP](https://github.com/cisagov/icsnpp) ·
-[Suricata](https://suricata.io/) · [scapy](https://scapy.net/) ·
+[MIT license](LICENSE). Built with [Sigma](https://sigmahq.io/),
+[Zeek/ICSNPP](https://github.com/cisagov/icsnpp), [scapy](https://scapy.net/) and
 [MITRE ATT&CK for ICS](https://attack.mitre.org/matrices/ics/).
-
-### CI/CD is local (no cloud CI)
-
-There is **no GitHub Actions and no `.github/workflows/`**. `make ci` is the gate
-(format-check, lint, strict type-check, the detection harness, schema validation,
-coverage-map regeneration + drift check, and the security gate), and the git pre-push
-hook (`make hooks`) runs it before every push.
-
-## License
-
-[MIT](LICENSE).

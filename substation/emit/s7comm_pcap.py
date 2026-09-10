@@ -88,13 +88,25 @@ def _job_param_data(event: S7Event) -> tuple[bytes, bytes]:
         )
         return param + b"\x00", b""
     if func in (0x1A, 0x1B):  # Request Download / Download Block: block file spec
+        if is_resp:
+            # Empty synthetic block; status, byte count and reserved marker.
+            return bytes([func]), (b"\x00\x00\x00\x00\xfb" if func == 0x1B else b"")
         head = bytes([func, 0, 0, 0, 0, 0, 0x01, 0x00])
         if event.block_filename:
             fn = event.block_filename.encode("ascii")
-            return head + bytes([len(fn)]) + fn, b""
-        return head, b""
+            # Request Download has an additional parameter-length octet after
+            # the filename. Omitting it disables the real analyzer mid-flow.
+            return head + bytes([len(fn)]) + fn + (b"\x00" if func == 0x1A else b""), b""
+        return head + b"\x00" + (b"\x00" if func == 0x1A else b""), b""
     if func in (0x1C, 0x1D, 0x1E, 0x1F):  # Download Ended / uploads
-        return bytes([func, 0, 0, 0, 0, 0, 0x01, 0x00]), b""
+        if is_resp:
+            if func == 0x1D:
+                return bytes([func, 0, 0, 0, 0, 0, 0, 1, 1]) + b"0", b""
+            if func == 0x1E:
+                return bytes([func]), b"\x00\x00\x00\x00\xfb"
+            return bytes([func]), b""
+        header = bytes([func, 0, 0, 0, 0, 0, 0x01, 0x00])
+        return header + (b"\x00" if func in (0x1C, 0x1D) else b""), b""
     # CPU Services / any other Job function: a bare function byte is enough to decode.
     return bytes([func]), b""
 
@@ -109,13 +121,15 @@ def _userdata_param_data(event: S7Event) -> tuple[bytes, bytes]:
     if event.is_orig:
         param = b"\x00\x01\x12\x04\x11" + bytes([func, subfunction, 0x00])
     else:
-        param = b"\x00\x01\x12\x08\x12" + bytes([func, subfunction, 0x00, 0x00, 0x00, 0x00])
+        param = b"\x00\x01\x12\x08\x12" + bytes([func, subfunction, 0, 0, 0, 0, 0])
     if event.szl_id is not None:
         data = (
-            b"\xff\x09\x00\x04"
+            (b"\xff\x09\x00\x04" if event.is_orig else b"\xff\x09\x00\x08")
             + int(event.szl_id).to_bytes(2, "big")
             + int(event.szl_index or 0).to_bytes(2, "big")
         )
+        if not event.is_orig:
+            data += b"\x00\x00\x00\x00"  # Empty synthetic SZL list: record length/count.
     else:
         data = b"\xff\x09\x00\x00"
     return param, data
@@ -142,9 +156,13 @@ def _s7plus_pdu(event: S7Event) -> bytes:
     opcode = int(event.plus_opcode or 0x31)
     function = int(event.plus_function or 0)
     # Plaintext s7comm-plus data: opcode(1) reserved(2) function(2) reserved(2) seq(2).
-    inner = bytes([opcode]) + b"\x00\x00" + function.to_bytes(2, "big") + b"\x00\x00\x00\x00"
+    # Digest length precedes the opcode (ICSNPP S7comm_Plus). No integrity
+    # digest or operational object body is simulated.
+    inner = (
+        b"\x00" + bytes([opcode]) + b"\x00\x00" + function.to_bytes(2, "big") + b"\x00\x00\x00\x00"
+    )
     body = (
-        bytes([_S7PLUS_PROTO_ID, 0x03])
+        bytes([_S7PLUS_PROTO_ID, int(event.detail["plus"]["version"])])
         + len(inner).to_bytes(2, "big")
         + inner
         + b"\x00\x72\x00\x00"

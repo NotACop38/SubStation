@@ -16,19 +16,24 @@ detection there makes :func:`run_detections` pick it up with no code change.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from substation.schema import (
+    MAX_JSONL_BYTES,
+    MAX_JSONL_LINES,
+    SchemaValidationError,
+    iter_jsonl_lines,
+    load_event_schema,
+    parse_json_event,
+    validate_event,
+)
 
 from .registry import Detection, load_registry
 from .sigma_eval import load_rule, matching_indices
 
 __all__ = ["Hit", "run_detections", "load_events", "MAX_JSONL_LINES", "MAX_JSONL_BYTES"]
-
-# Local DoS hardening: refuse unbounded event logs from a careless/hostile file.
-MAX_JSONL_LINES = 100_000
-MAX_JSONL_BYTES = 64 * 1024 * 1024  # 64 MiB
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,18 +57,18 @@ def load_events(events_path: str | Path) -> list[dict[str, Any]]:
     path = Path(events_path)
     if not path.exists():
         raise FileNotFoundError(f"event log not found: {path} (was the generate stage run?)")
-    size = path.stat().st_size
-    if size > MAX_JSONL_BYTES:
-        raise ValueError(
-            f"event log {path} is {size} bytes; exceeds the {MAX_JSONL_BYTES} byte load cap"
-        )
     events: list[dict[str, Any]] = []
-    with path.open(encoding="utf-8") as fh:
-        for line_no, line in enumerate(fh, start=1):
-            if line_no > MAX_JSONL_LINES:
-                raise ValueError(f"event log {path} exceeds the {MAX_JSONL_LINES} line load cap")
-            if line.strip():
-                events.append(json.loads(line))
+    schema = load_event_schema()
+    for line_no, line in iter_jsonl_lines(
+        path, max_bytes=MAX_JSONL_BYTES, max_lines=MAX_JSONL_LINES
+    ):
+        if line.strip():
+            try:
+                event = parse_json_event(line)
+                validate_event(event, schema)
+            except ValueError as exc:
+                raise SchemaValidationError(f"{path}:{line_no}: {exc}") from exc
+            events.append(event)
     return events
 
 

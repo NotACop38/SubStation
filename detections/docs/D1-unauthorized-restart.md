@@ -12,6 +12,14 @@ its response and reporting function — the DNP3 restart detection for the DNP3 
 | **Rule** | [`detections/sigma/dnp3_d1_unauthorized_restart.yml`](../sigma/dnp3_d1_unauthorized_restart.yml) |
 | **Status** | experimental · **Level** | high |
 
+## Example policy and limits
+
+The approved channel is `10.0.1.10` → `10.0.1.50:20000`. A listed source
+sending the matched command to another asset or port still fires. These are
+synthetic addresses, not authenticated identities. Compromise of an approved
+source and in-channel misuse require other signals. The rule has experimental
+status; synthetic quiet tests do not measure a site's false-positive rate.
+
 ## Behavior
 
 A DNP3 master sends a `COLD_RESTART` (0x0d) or `WARM_RESTART` (0x0e) application
@@ -27,8 +35,7 @@ than the permitted master fires.
 is a DNP3 request (`direction: request`), `func_name` is the restart command, and
 `conn.orig_h` says who sent it. No durable state, correlation window, or multi-event
 join is needed, so this is the simplest engine that expresses the behavior correctly
-— Sigma-first per `PRD.md` §6.5. The same rule compiles to a production SIEM or Zeek
-via stock pySigma backends, so it transfers unchanged.
+— Sigma-first per `PRD.md` §6.5. Sensor logs require normalization, and a SIEM backend requires independent qualification.
 
 **Why allow-list, not "any restart" (the OT-realism guardrail, `PRD.md` §8).**
 Engineers legitimately restart outstations during maintenance/commissioning. A rule
@@ -53,8 +60,9 @@ Tier-1 `.jsonl` event log (`docs/schema.md`):
 ```
 restart_command:   proto=dnp3 AND direction=request
                    AND func_name in { COLD_RESTART, WARM_RESTART }
-authorized_source: conn.orig_h == 10.0.1.10 (master-1)
-fire when:         restart_command AND NOT authorized_source
+authorized_channel: conn.orig_h == 10.0.1.10 (master-1)
+                    AND conn.resp_h == 10.0.1.50 AND conn.resp_p == 20000
+fire when:         restart_command AND NOT authorized_channel
 ```
 
 ## Scenarios

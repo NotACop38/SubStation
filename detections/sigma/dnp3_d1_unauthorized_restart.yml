@@ -12,7 +12,7 @@
 # -----------------------------------------------------------------------------
 title: DNP3 Device Restart From Unauthorized Source
 id: 6e2c1f8a-3b4d-4f1e-9a2c-1d7e5b0a9c34
-status: stable
+status: experimental
 description: |
   A DNP3 device-restart function (COLD_RESTART / WARM_RESTART) issued by a source
   that is not the allow-listed master. Substation detection D1 (PRD.md §5.2):
@@ -42,11 +42,16 @@ detection:
   # The permitted control source (the allow-listed master). A restart from any
   # other source is unauthorized. orig_h is the source on a request (derive
   # source through is_orig, docs/schema.md → conn).
-  authorized_source:
+  # Synthetic policy: source permission is limited to this asset and service.
+  authorized_channel:
     conn.orig_h: '10.0.1.10' # master-1 — the allow-listed SCADA master
-  condition: restart_command and not authorized_source
+    conn.resp_h: '10.0.1.50'
+    conn.resp_p: 20000
+  condition: restart_command and not authorized_channel
 fields:
   - conn.orig_h
+  - conn.resp_h
+  - conn.resp_p
   - func_name
 falsepositives:
   - A sanctioned maintenance restart issued from the allow-listed master is handled

@@ -7,8 +7,8 @@ against ``docs/spikes/01-icsnpp-modbus-fields.md``). The event log is
 newline-delimited JSON: one event object per line.
 
 It also ships a small, dependency-free validator for the **subset** of JSON
-Schema the contract uses, so the Tier-1 headline path stays zero-dep (only
-Python; `PRD.md` §6.2). The same schema file is standard draft-2020-12 and can be
+Schema the contract uses, without adding a validator dependency to Tier 1.
+The same schema file is standard draft-2020-12 and can be
 fed to any external validator (e.g. ``jsonschema``) unchanged.
 
 Supported keywords: ``type`` (incl. type arrays), ``enum``, ``const``,
@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
+import stat
 from collections.abc import Callable, Iterator
 from importlib.resources import files
 from pathlib import Path
@@ -37,10 +39,16 @@ __all__ = [
     "validate_event",
     "iter_jsonl_errors",
     "validate_jsonl_file",
+    "parse_json_event",
+    "iter_jsonl_lines",
+    "MAX_JSONL_BYTES",
+    "MAX_JSONL_LINES",
 ]
 
 # Path to the packaged JSON Schema (also a normal file on disk for external tools).
 EVENT_SCHEMA_PATH: Path = Path(str(files(__package__).joinpath("event-log.schema.json")))
+MAX_JSONL_BYTES = 64 * 1024 * 1024
+MAX_JSONL_LINES = 100_000
 
 
 # JSON Schema "type" -> Python predicate. ``bool`` is a subclass of ``int`` in
@@ -79,6 +87,62 @@ def load_event_schema() -> dict[str, Any]:
 def _reject_json_constant(constant: str) -> Any:
     """``json.loads`` ``parse_constant`` hook: refuse NaN/Infinity barewords."""
     raise ValueError(f"non-standard JSON constant {constant!r}")
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    obj: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError(f"duplicate JSON key {key!r}")
+        obj[key] = value
+    return obj
+
+
+def parse_json_event(raw: str) -> Any:
+    """Decode a JSON line without accepting duplicate keys or non-JSON numbers."""
+    try:
+        return json.loads(
+            raw, parse_constant=_reject_json_constant, object_pairs_hook=_unique_json_object
+        )
+    except RecursionError as exc:
+        raise ValueError("JSON nesting exceeds the parser limit") from exc
+
+
+def iter_jsonl_lines(
+    path: str | Path,
+    *,
+    max_bytes: int = MAX_JSONL_BYTES,
+    max_lines: int = MAX_JSONL_LINES,
+) -> Iterator[tuple[int, str]]:
+    """Read bounded UTF-8 lines from a regular file, retaining physical line numbers.
+
+    Check the opened descriptor, not just the path. A nonblocking open avoids
+    waiting for a writer if the path is a FIFO (including a raced replacement).
+    Bound every read as well as the initial size, since a file may grow later.
+    """
+    p = Path(path)
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+    with os.fdopen(os.open(p, flags), "rb") as fh:
+        info = os.fstat(fh.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise SchemaValidationError(f"{p}: event log must be a regular file")
+        if info.st_size > max_bytes:
+            raise SchemaValidationError(
+                f"event log {p} is {info.st_size} bytes; exceeds the {max_bytes} byte load cap"
+            )
+        consumed = 0
+        line_no = 0
+        while raw := fh.readline(max_bytes - consumed + 1):
+            consumed += len(raw)
+            line_no += 1
+            if consumed > max_bytes:
+                raise SchemaValidationError(f"event log {p} exceeds the {max_bytes} byte load cap")
+            if line_no > max_lines:
+                raise SchemaValidationError(f"event log {p} exceeds the {max_lines} line load cap")
+            try:
+                yield line_no, raw.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise SchemaValidationError(f"{p}:{line_no}: not valid UTF-8: {exc}") from exc
 
 
 def _type_name(value: Any) -> str:
@@ -213,13 +277,13 @@ def iter_jsonl_errors(path: str | Path, schema: dict[str, Any] | None = None) ->
     """
     root = schema if schema is not None else load_event_schema()
     p = Path(path)
-    with p.open(encoding="utf-8") as fh:
-        for lineno, raw in enumerate(fh, start=1):
+    try:
+        for lineno, raw in iter_jsonl_lines(p):
             stripped = raw.strip()
             if not stripped:
                 continue
             try:
-                event = json.loads(stripped, parse_constant=_reject_json_constant)
+                event = parse_json_event(stripped)
             except json.JSONDecodeError as exc:
                 yield f"{p}:{lineno}: not valid JSON: {exc.msg}"
                 continue
@@ -228,6 +292,8 @@ def iter_jsonl_errors(path: str | Path, schema: dict[str, Any] | None = None) ->
                 continue
             for err in _validate(event, root, "", root):
                 yield f"{p}:{lineno}: {err}"
+    except (OSError, SchemaValidationError) as exc:
+        yield f"{p}: {exc}"
 
 
 def validate_jsonl_file(path: str | Path, schema: dict[str, Any] | None = None) -> None:

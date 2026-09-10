@@ -11,6 +11,14 @@ event/telemetry reporting — blinding the operator to alarms (`PRD.md` §5.2).
 | **Rule** | [`detections/sigma/dnp3_d2_disable_unsolicited.yml`](../sigma/dnp3_d2_disable_unsolicited.yml) |
 | **Status** | experimental · **Level** | high |
 
+## Example policy and limits
+
+The approved channel is `10.0.1.10` → `10.0.1.50:20000`. A listed source
+sending the matched command to another asset or port still fires. These are
+synthetic addresses, not authenticated identities. Compromise of an approved
+source and in-channel misuse require other signals. The rule has experimental
+status; synthetic quiet tests do not measure a site's false-positive rate.
+
 ## Behavior
 
 DNP3 outstations report events spontaneously via **unsolicited responses** (function
@@ -25,8 +33,7 @@ non-allow-listed source.
 
 **Sigma.** The signal is on a **single event**: `direction: request`, `func_name`
 = `DISABLE_UNSOLICITED`, and `conn.orig_h` = the issuer. No state or correlation is
-needed — Sigma-first per `PRD.md` §6.5. The same rule compiles to production
-Zeek/SIEM unchanged.
+needed — Sigma-first per `PRD.md` §6.5. Sensor logs require normalization and a separately qualified SIEM backend.
 
 **Why allow-list, not "any disable" (the OT-realism guardrail, `PRD.md` §8).** A
 master may legitimately disable unsolicited mode (e.g. while reconfiguring event
@@ -47,8 +54,9 @@ Tier-1 `.jsonl` event log (`docs/schema.md`):
 
 ```
 disable_unsolicited: proto=dnp3 AND direction=request AND func_name == DISABLE_UNSOLICITED
-authorized_source:   conn.orig_h == 10.0.1.10 (master-1)
-fire when:           disable_unsolicited AND NOT authorized_source
+authorized_channel:   conn.orig_h == 10.0.1.10 (master-1)
+                    AND conn.resp_h == 10.0.1.50 AND conn.resp_p == 20000
+fire when:           disable_unsolicited AND NOT authorized_channel
 ```
 
 ## Scenarios

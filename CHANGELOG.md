@@ -9,6 +9,18 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ## [Unreleased]
 
+### September 2026 project review
+
+- Corrected M1 full-span and target policy, DNP3/S7 target scoping, and S1 PLC Control service discrimination.
+- Kept X1 trust fixed after training, with bounded suppression and recurring alerts.
+- Repaired S7 download, User-Data and S7-plus wire encoding; added real-parser request-count comparisons and complete native Tier-2 validation.
+- Added validated JSONL `detect`; reject ambiguous JSON/rules, unsupported Sigma expressions and unused scenario parameters.
+- Unified bounded UTF-8 input handling for detection and schema validation; reject special files without blocking and enforce caps even when input grows.
+- Fixed source archives and rebuilt wheels, pinned missing build tools, and hardened release source/tag and staged secret checks.
+- Made CI coverage checks read-only and dependency installation consume the checked lock.
+- Installed the local push gate using Git's active hook path, including linked worktrees, while preserving unrelated existing hooks.
+- Reframed the project as an experimental offline toolkit; regenerated demo media from real CLI output and documented qualification limits.
+
 ### Added
 
 - **Packaged content** — `detections/` and `scenarios/` ship in the wheel under
@@ -52,7 +64,7 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
   product trees).
 - Constitution docs (PRD / AGENTS / CLAUDE / checklist / CONTRIBUTING) synced to
   local-CI reality; orphan root `coverage/` artifacts removed.
-- Sigma rule `status:` aligned to `stable` for validated Tier-1 rules.
+- Sigma rule `status:` is `experimental`; synthetic Tier-1 validation is not production qualification.
 - Pillow pinned in the `dev` extra for `make demo-gif`.
 - Tier-1 `detect` package docstring clarifies Zeek/Suricata run out-of-package.
 - `make ci` invokes every tool as `$(PY) -m <tool>` so the gate always checks
@@ -81,7 +93,7 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 - Verify fails clearly when every check is skipped; empty-request fidelity is an
   explicit skip; S7 availability requires a loadable plugin, not a name-only hit.
 - README Safety: do not replay PCAPs against live OT.
-- M1 quantity/span gap documented with an acceptance scenario + test.
+- M1 quantity/span gap now rejected by the rule, with an anomaly scenario and independent interval-policy regression.
 - `scripts/render-demo-gif.py` probes per-platform font paths instead of
   hardcoding the Debian DejaVu location, and fails with an actionable hint.
 - The scenario loader rejects a non-string `description` instead of silently
@@ -141,4 +153,3 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
   detection pack and scenarios are versioned repo content, not importable package
   data. Install the wheel for the simulator/CLI as a library; clone the repo to
   run the demo and detections.
-

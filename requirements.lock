@@ -1,6 +1,7 @@
 # Locked dependency closure for Substation (runtime + dev).
 # Generated from pyproject.toml pins via `pip install --dry-run --report`.
-# Consumed by scripts/security/audit_deps.py when present.
+# Consumed by make dev and scripts/security/audit_deps.py.
+# Pins are version constraints, not artifact hashes or an offline wheel bundle.
 bandit==1.9.4
 boolean.py==5.0
 build==1.5.0
@@ -45,6 +46,7 @@ requests==2.34.2
 rich==15.0.0
 ruff==0.15.8
 scapy==2.7.0
+setuptools==84.0.0
 sortedcontainers==2.4.0
 stevedore==5.9.0
 tomli==2.4.1
@@ -52,3 +54,4 @@ tomli_w==1.2.0
 types-PyYAML==6.0.12.20260518
 typing_extensions==4.16.0
 urllib3==2.7.0
+wheel==0.48.0

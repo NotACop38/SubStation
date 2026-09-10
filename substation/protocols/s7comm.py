@@ -369,6 +369,15 @@ def build_events(scenario: Scenario) -> list[S7Event]:
     for idx, exchange in enumerate(scenario.exchanges):
         where = f"exchanges[{idx}] ({exchange.function})"
         token = resolve_function(exchange.function)
+        allowed = {
+            "plccontrol": {"service"},
+            "requestdownload": {"block_type", "block_number"},
+            "downloadblock": {"block_type", "block_number"},
+            "readszl": {"szl_id", "szl_index"},
+        }.get(token, {"version"} if token in _PLUS_OPS else set())
+        unknown = set(exchange.params) - allowed
+        if unknown:
+            raise S7Error(f"{where}: unknown/unused param(s) {sorted(unknown)}")
         src = actors[exchange.source]
         dst = actors[exchange.target]
         master, plc, src_is_master = _orient(src, dst, where)

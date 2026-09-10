@@ -12,7 +12,7 @@
 # -----------------------------------------------------------------------------
 title: DNP3 Output Control From Unauthorized Source
 id: 7f3b1d29-6a8c-4e52-b0d4-9c1e83f6a2b7
-status: stable
+status: experimental
 description: |
   A DNP3 output-control request (SELECT / OPERATE / DIRECT_OPERATE) — typically a
   Control-Relay-Output-Block driving a breaker or setpoint — from a master that is
@@ -42,11 +42,16 @@ detection:
       - DIRECT_OPERATE_NR
   # The permitted control source (allow-listed master). A control from any other
   # source is unauthorized (source derived through is_orig, docs/schema.md → conn).
-  authorized_source:
+  # Synthetic policy: source permission is limited to this asset and service.
+  authorized_channel:
     conn.orig_h: '10.0.1.10' # master-1 — the allow-listed SCADA master
-  condition: output_control and not authorized_source
+    conn.resp_h: '10.0.1.50'
+    conn.resp_p: 20000
+  condition: output_control and not authorized_channel
 fields:
   - conn.orig_h
+  - conn.resp_h
+  - conn.resp_p
   - func_name
 falsepositives:
   - A new or relocated master/HMI whose address is not yet allow-listed will fire

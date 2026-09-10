@@ -4,7 +4,8 @@
 This is the headless companion to scripts/record-demo.sh. The asciinema path
 records a real PTY and therefore needs an interactive TTY, so it cannot run in
 the no-TTY CI/agent environment. This generator is fully deterministic and
-needs only Pillow plus a monospace font, so it reproduces the GIF anywhere.
+needs the installed package, Pillow and a monospace font. Font differences
+across hosts can change the rendered bytes.
 
 The frames replay the *verbatim* output captured from a real `make demo` run
 (the same text the static docs/assets/demo.svg renders), revealed line by line
@@ -20,7 +21,11 @@ Usage:
 
 from __future__ import annotations
 
+import html
 import pathlib
+import subprocess
+import sys
+import tempfile
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -43,77 +48,37 @@ YELLOW = (227, 179, 65)  # #e3b341
 # Traffic lights
 LIGHTS = [((255, 95, 86)), ((255, 189, 46)), ((39, 201, 63))]
 
-# --- verbatim `make demo` output, as colored segments -----------------------
-# Each logical line is a list of (text, color, bold) segments. The text is
-# copied character-for-character from a real run so spacing stays faithful.
+# Capture the current CLI, not a hand-maintained transcript. Fail if it fails.
 B = True
 N = False
-EQ = "=" * 60
+_REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
-def _row(rid, tech, tactic, status):
-    """Build a coverage-map row exactly as the CLI prints it.
+def _capture_lines():
+    with tempfile.TemporaryDirectory(prefix="substation-demo-") as td:
+        result = subprocess.run(
+            [sys.executable, "-m", "substation.cli", "demo", "--artifacts", td],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    lines = [[("$ make demo", WHITE, B)], []]
+    for line in result.stdout.splitlines():
+        color = (
+            RED
+            if "FIRED" in line
+            else GREEN
+            if "quiet" in line
+            else DIM
+            if "not-run" in line
+            else DEF
+        )
+        lines.append([(line, color, N)] if line else [])
+    return lines
 
-    Layout (monospace): 2 lead spaces, id (w2), 3 spaces, technique (left, w12),
-    tactic (left, w25), then the status marker. Verified against the captured
-    output and docs/assets/demo.svg.
-    """
-    seg = [
-        ("  ", DEF, N),
-        (rid, WHITE, B),
-        ("   ", DEF, N),
-        (tech.ljust(12), CYAN, N),
-    ]
-    if status == "fired":
-        seg += [(tactic.ljust(27), DIM, N), ("● FIRED", RED, B)]
-    elif status == "quiet":
-        seg += [(tactic.ljust(27), DIM, N), ("○ quiet", GREEN, B)]
-    else:  # untouched this run
-        seg += [(tactic.ljust(28), DIM, N), ("·", DIMMER, N)]
-    return seg
 
-
-LINES = [
-    [("$", GREEN, B), (" make demo", WHITE, B)],
-    [],
-    [("substation", CYAN, B),
-     (" demo · Tier-1 loop: generate -> detect -> report (pure Python)", DIM, N)],
-    [],
-    [("[benign   ]", CYAN, B),
-     (" benign-baseline                    18 events -> ", DEF, N),
-     ("quiet (no hits)", GREEN, N)],
-    [("[anomalous]", YELLOW, B),
-     (" anomalous-m1-unauthorized-write    10 events -> ", DEF, N),
-     ("FIRED", RED, B), (" 2 hit(s) ", DEF, N), ("-> ", DIMMER, N), ("M1", YELLOW, B)],
-    [("[anomalous]", YELLOW, B),
-     (" anomalous-m2-illegal-function       4 events -> ", DEF, N),
-     ("FIRED", RED, B), (" 2 hit(s) ", DEF, N), ("-> ", DIMMER, N), ("M2", YELLOW, B)],
-    [],
-    [("ATT&CK-for-ICS coverage map", WHITE, B)],
-    [(EQ, DIMMER, N)],
-    [("  ID   Technique   Tactic                     This run", DIM, N)],
-    [("  " + "-" * 58, DIMMER, N)],
-    _row("M1", "T1692.001", "Impair Process Control", "fired"),
-    _row("M2", "T0888", "Discovery", "fired"),
-    _row("M3", "T0846", "Discovery", "quiet"),
-    _row("D1", "T0816", "Inhibit Response Function", "none"),
-    _row("D2", "T1691.002", "Inhibit Response Function", "none"),
-    _row("D3", "T1692.001", "Impair Process Control", "none"),
-    _row("D4", "T0888", "Discovery", "none"),
-    _row("S1", "T0858", "Execution", "none"),
-    _row("S2", "T0843", "Lateral Movement", "none"),
-    _row("S3", "T0888", "Discovery", "none"),
-    _row("X1", "T0846", "Discovery", "quiet"),
-    [(EQ, DIMMER, N)],
-    [("11", WHITE, B), (" detections ", DIM, N), ("·", DIMMER, N),
-     (" ", DIM, N), ("10", WHITE, B), (" ATT&CK techniques ", DIM, N),
-     ("·", DIMMER, N), (" ", DIM, N), ("5", WHITE, B), (" tactics ", DIM, N),
-     ("·", DIMMER, N), (" ", DIM, N), ("2", WHITE, B), (" fired this run", DIM, N)],
-    [],
-    [("Result:", DIM, B), (" ", DIM, N), ("quiet", GREEN, N),
-     (" on the benign baseline; ", DIM, N), ("fired 2 detection(s)", RED, N),
-     (" on the anomalies ", DIM, N), ("(M1, M2)", YELLOW, B), (".", DIM, N)],
-]
+LINES = _capture_lines()
 
 # --- geometry ---------------------------------------------------------------
 PAD_X = 26
@@ -278,6 +243,23 @@ def main():
         optimize=True,
         disposal=2,
     )
+    # Keep the static SVG on the exact same captured transcript as the GIF.
+    width, height = w // SCALE, h // SCALE
+    rows = []
+    for i, line in enumerate(LINES):
+        text = html.escape("".join(segment[0] for segment in line))
+        rows.append(
+            f'<text x="{PAD_X}" y="{TOP + i * LINE_H + FONT_SIZE}" xml:space="preserve">{text}</text>'
+        )
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img">'
+        "<title>Current Substation demo output</title>"
+        f'<rect width="{width}" height="{height}" fill="#11161d"/>'
+        f'<g font-family="Menlo,DejaVu Sans Mono,monospace" font-size="{FONT_SIZE}" fill="#c4cdd6">'
+        + "".join(rows)
+        + "</g></svg>\n"
+    )
+    out.with_suffix(".svg").write_text(svg, encoding="utf-8")
     kb = out.stat().st_size / 1024
     print(f"wrote {out} ({w // SCALE}x{h // SCALE}, {len(frames)} frames, {kb:.0f} KB)")
 

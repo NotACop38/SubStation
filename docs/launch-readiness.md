@@ -1,4 +1,8 @@
-# Substation — Launch-Readiness Report
+# Substation — Historical Launch-Readiness Report
+
+> Historical record from June 2026. These results do not establish current
+> readiness. See the [September 2026 review](reviews/2026-09-09-codebase-review.md)
+> for corrected validation scope, defects found and current evidence.
 
 **Date:** 2026-06-04 · **Scope:** full end-to-end validation (`make ci`, `make
 security`, `make verify`, the VERIFY gates, and the headline `make demo` promise).

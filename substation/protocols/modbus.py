@@ -518,6 +518,16 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
     for idx, exchange in enumerate(scenario.exchanges):
         where = f"exchanges[{idx}] ({exchange.function})"
         code = resolve_function(exchange.function)
+        allowed = {"unit_id", "address"}
+        if code in (WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER):
+            allowed.add("value")
+        elif code in (WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS):
+            allowed.add("values")
+        else:
+            allowed.add("quantity")
+        unknown = set(exchange.params) - allowed
+        if unknown:
+            raise ModbusError(f"{where}: unknown/unused param(s) {sorted(unknown)}")
         # A genuinely undefined request code (the M2 abnormal-function signal) has
         # no standard name/class/payload: render it Zeek's `unknown-N`, class it
         # `other`, and have the outstation answer ILLEGAL_FUNCTION.

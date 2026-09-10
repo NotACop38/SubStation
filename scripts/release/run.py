@@ -14,15 +14,14 @@ Pipeline (PRD §6.9 / ENGINEERING_CHECKLIST "definition of launch-ready"):
      release only happens over a green gate. ``--no-verify`` drops Tier 2 for
      environments without Docker; ``--skip-gate`` skips both only when the local
      gate just ran.
-  2. **Build.** Produce the sdist + wheel into ``dist/`` (``python -m build``,
-     no build isolation so it uses the pinned, already-installed backend).
+  2. **Bump + changelog.** Set the target version and promote the unreleased notes.
   3. **Regenerate committed artifacts.** Rebuild the ATT&CK-for-ICS coverage map
      + Navigator layer snapshot (``docs/coverage/``) and the demo transcript
      (``docs/demo-output.txt``) from the live registry / simulator, and stage
      them. (The raw PCAP/JSON the simulator emits stay git-ignored per repo
      policy — only the published snapshots are committed.)
-  4. **Bump + changelog.** Set ``pyproject.toml``'s version to the target and
-     promote ``CHANGELOG.md``'s ``[Unreleased]`` section to ``[<version>]``.
+  4. **Build.** Produce the sdist + wheel into ``dist/`` (``python -m build``,
+     no build isolation so it uses the pinned, already-installed backend).
   5. **Commit + tag locally.** One release commit, then an annotated
      ``v<version>`` tag. The tag is **local** — this script never pushes.
 
@@ -175,22 +174,21 @@ def _gate(args: argparse.Namespace) -> None:
         print("release: --skip-gate set; NOT re-running make ci / make verify")
         return
     print("release: gate — re-running make ci (Tier 1)")
-    _run(["make", "ci"], dry_run=args.dry_run)
+    _run(["make", "ci", f"PY={sys.executable}"], dry_run=args.dry_run)
     if args.no_verify:
         print("release: --no-verify set; skipping Tier-2 'make verify' gate")
         return
     print("release: gate — re-running make verify (Tier 2)")
-    _run(["make", "verify"], dry_run=args.dry_run)
+    _run(
+        ["make", "verify", f"PY={sys.executable}", "VERIFY_ARGS=--require-complete"],
+        dry_run=args.dry_run,
+    )
 
 
 def _build_distributions(args: argparse.Namespace) -> None:
     print("release: building sdist + wheel into dist/")
-    # The distributions ship the library + `substation` CLI only. scenarios/,
-    # detections/, and docs/coverage/ deliberately live OUTSIDE the package
-    # (PRD §6.9), so the demo/coverage/detection paths run from a repo checkout,
-    # not a bare wheel install (see CHANGELOG "Packaging"). This is intentional.
-    # --no-isolation: use the already-installed, pinned setuptools/wheel backend
-    # (keeps the build offline + deterministic, matching the Tier-1 promise).
+    # setup.py bundles detections and scenarios so the installed CLI works
+    # outside a checkout. Use the selected interpreter and its build backend.
     _run(
         [
             sys.executable,
@@ -238,6 +236,38 @@ def _working_tree_dirty() -> bool:
     return bool(_git("status", "--porcelain"))
 
 
+def _check_release_tree(
+    target: str, current: str, already_released: bool, allow_dirty: bool
+) -> None:
+    """A built artifact must describe the same source tree as its release tag."""
+    if already_released:
+        tagged = _git("rev-parse", f"v{target}^{{commit}}")
+        if tagged != _git("rev-parse", "HEAD") or target != current or _working_tree_dirty():
+            raise ReleaseError(
+                f"v{target} already exists; retry only from its clean tagged checkout "
+                "with matching project version. Refusing to rebuild a different tree under that tag."
+            )
+        return
+    if not allow_dirty:
+        if _working_tree_dirty():
+            raise ReleaseError("working tree is not clean; commit changes before releasing")
+        return
+    # Untracked sources can enter the wheel but would be omitted by git add -u.
+    # Require them to be deliberately committed before this convenience mode.
+    if _git("ls-files", "--others", "--exclude-standard"):
+        raise ReleaseError("--allow-dirty supports tracked edits only; commit new files first")
+    changed = set(_git("diff", "--name-only", "-z").split("\0"))
+    changed.update(_git("diff", "--cached", "--name-only", "-z").split("\0"))
+    allowed = {*_RELEASE_ARTIFACT_PATHS, *_RELEASE_SOURCE_TREES}
+    unexpected = [
+        p
+        for p in changed
+        if p and not any(p == root or p.startswith(root + "/") for root in allowed)
+    ]
+    if unexpected:
+        raise ReleaseError(f"changes outside release paths must be committed first: {unexpected}")
+
+
 # Paths the release pipeline itself regenerates / bumps. Always stage these.
 _RELEASE_ARTIFACT_PATHS = (
     "docs/coverage/coverage.md",
@@ -263,6 +293,7 @@ _RELEASE_SOURCE_TREES = (
     "CLAUDE.md",
     "CONTRIBUTING.md",
     "setup.py",
+    "MANIFEST.in",
     "requirements.lock",
 )
 
@@ -278,26 +309,23 @@ def _stage_release_paths(*, allow_dirty: bool, dry_run: bool) -> None:
 
 def _scan_staged_tree(*, dry_run: bool) -> None:
     """Re-run the secret scanner after staging the exact tree to be committed."""
-    _run([sys.executable, "scripts/security/secret_scan.py"], dry_run=dry_run)
+    _run([sys.executable, "scripts/security/secret_scan.py", "--staged"], dry_run=dry_run)
+
+
+def _require_unchanged_retry(version: str, *, dry_run: bool) -> None:
+    if not dry_run and _working_tree_dirty():
+        raise ReleaseError(
+            f"regenerated artifacts differ from v{version}; refusing to rebuild under "
+            "the existing tag. Review the changes and use a new version."
+        )
 
 
 def _commit_and_tag(version: str, args: argparse.Namespace, already_released: bool) -> None:
     tag = f"v{version}"
 
     if already_released:
-        # The tag already exists. Committing now would create a *second* "Release
-        # <tag>" commit that the existing tag does not point at, and the re-synced
-        # artifacts would not be part of the tagged release. So never commit here:
-        # the regenerated artifacts live in the working tree for inspection only.
-        if not args.dry_run and _working_tree_dirty():
-            print(
-                f"release: WARNING — the working tree differs from the tagged release "
-                f"{tag}. Regenerated artifacts were NOT committed (the tag stays "
-                "authoritative). If you intend to change the release, delete the tag "
-                "and cut a new version deliberately."
-            )
-        else:
-            print(f"release: {tag} already released; artifacts unchanged — nothing to do.")
+        _require_unchanged_retry(version, dry_run=args.dry_run)
+        print(f"release: {tag} already released; artifacts unchanged — nothing to do.")
         print(f"release: tag {tag} left in place (idempotent; NOT pushed).")
         return
 
@@ -347,7 +375,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--allow-dirty",
         action="store_true",
-        help="Permit a non-clean working tree (uncommitted changes get committed).",
+        help="Include tracked product edits; commit new files and unrelated changes first.",
     )
     parser.add_argument(
         "--dry-run",
@@ -372,13 +400,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "(re-sync artifacts; no new commit/tag/changelog entry)"
             )
 
-        # Refuse to clobber unrelated work unless told otherwise.
-        if not args.allow_dirty and not already_released:
-            dirty = _git("status", "--porcelain")
-            if dirty:
-                raise ReleaseError(
-                    "working tree is not clean; commit/stash first or pass --allow-dirty:\n" + dirty
-                )
+        _check_release_tree(target, current, already_released, args.allow_dirty)
 
         _gate(args)
 
@@ -391,8 +413,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.dry_run:
             print(f"release: would set version {target} and promote CHANGELOG ({date})")
 
-        _build_distributions(args)
         _regenerate_artifacts(args)
+        if already_released:
+            _require_unchanged_retry(target, dry_run=args.dry_run)
+        _build_distributions(args)
         _commit_and_tag(target, args, already_released)
 
         print(f"release: done — {tag} is built, recorded, and tagged locally.")

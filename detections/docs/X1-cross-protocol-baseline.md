@@ -13,9 +13,8 @@ cross-protocol detection (`PRD.md` §5.4). Three deviation classes: **new talker
 | **Protocol** | cross (Modbus + DNP3 + S7comm, normalized) |
 | **Status** | tier2 · **Notice** | `CrossProtoBaseline::BaselineDeviation` |
 
-X1 is the **flagship reason for the normalized envelope** (`PRD.md` §6.3) and the
-**primary justification for a stateful Zeek detection** (`PRD.md` §6.5, §5.4). It
-is the one detection that runs a single baseline over **all three** protocols.
+X1 shares one in-memory baseline across three protocols. It consumes native Zeek
+events, independently of the JSON envelope used by the Tier-1 rules.
 
 ## Behavior
 
@@ -36,9 +35,9 @@ functions. Against that backdrop, three deviations are high-signal:
 
 Only the **highest-precedence** novelty is reported per observation (talker > pair
 > function): a brand-new talker is reported as a new talker, not redundantly as a
-new pair and new function. Each distinct novel tuple alerts **once** — it is
-folded into the baseline after alerting — so a sustained anomalous flow yields one
-notice, not a storm.
+new pair and new function. Each novel tuple can alert once per `notice_interval` (five minutes by default).
+Observations after training never enter the trusted baseline, so repeated
+unapproved activity remains detectable after suppression expires.
 
 ## Engine choice + rationale
 
@@ -46,13 +45,13 @@ notice, not a storm.
 Zeek for (`PRD.md` §6.5). It needs two things a stateless Sigma field-match cannot
 express:
 
-- **Learned state** — a durable baseline of known talkers / pairs / functions,
-  accumulated from a known-good learning period and carried across connections.
+- **Learned state** — known talkers, pairs and functions retained across connections
+  within a Zeek process. Inject the baseline again after restarting Zeek; the
+  script does not persist it to disk.
 - **Set membership** — every observed tuple is tested against that baseline; the
   alert is "**not** in the set," which is inherently a stateful set operation.
 
-It is also the flagship justification for the **normalized envelope** (`PRD.md`
-§6.3): the per-protocol Zeek/ICSNPP logs are not uniformly shaped, so X1
+Per-protocol Zeek/ICSNPP events differ, so X1
 normalizes every protocol event down to one `(orig_h, resp_h, func)` tuple via
 `norm_func()` and runs **one** baseline over Modbus, DNP3 and S7comm together. A
 Modbus-only or DNP3-only rule could never see a talker that pivots *between*
@@ -95,13 +94,13 @@ supplied two ways (use either or both):
   union of tuples observed in the **benign baseline scenarios**
   (`scenarios/*/benign-baseline.yaml`). This is the "learned state" of `PRD.md`
   §5.4: learned once offline, then enforced. The Tier-2 runner derives the
-  baseline from the benign PCAPs, redefs it, then runs the anomalous PCAP and
+  baseline from the synthetic JSON events, redefs it, then runs the anomalous PCAP and
   expects the deviation to fire.
 - **Self-learn (optional, standalone).** Set `learn_period` > 0: every tuple seen
-  within `learn_period` of the first packet seeds the baseline, and only
+  within `learn_period` of the first observed request seeds the baseline, and only
   deviations **after** the window alert. Default is `0secs` (off) so X1 relies on
   the injected baseline and never silently "learns away" an attacker that is
-  present from the very first packet.
+  present from the very first observed request.
 
 | Knob (`&redef`) | Default | Meaning |
 |---|---|---|
@@ -109,13 +108,16 @@ supplied two ways (use either or both):
 | `known_pairs` | `{}` | Learned legitimate (src, dst) asset pairs. |
 | `known_funcs` | `{}` | Learned legitimate (src, dst, normalized-func) tuples. |
 | `learn_period` | `0secs` | Optional self-learning window (0 = rely on injected baseline). |
+| `notice_interval` | `5min` | Minimum interval between notices for the same unapproved tuple. |
 
-Every observed tuple is folded into the baseline after it is evaluated, which both
-seeds the self-learning window and de-dups alerts (each novel tuple fires once).
+Only the explicit self-learning window changes the known sets. Traffic observed
+during training is trusted, including hostile traffic if the training capture is
+contaminated. A reviewed, injected baseline is preferable. Suppression is separate
+state and never authorizes a tuple. The optional native-Zeek regression in
+`tests/test_zeek_state.py` checks recurring alerts and unchanged trust sets.
 
 > **Status note.** X1 executes in **Tier 2** (containerized Zeek over the PCAP).
-> The Tier-2 runner is a Phase-2 `ENGINEERING_CHECKLIST.md` item, so X1's
-> fire/quiet test runs there; the harness here still enforces X1's contract
+> Its fire/quiet tests run there; the Tier-1 harness enforces contract
 > linkage (rule + doc + ≥1 fire and ≥1 quiet scenario). The rule is authored
 > against verified Zeek/ICSNPP APIs.
 

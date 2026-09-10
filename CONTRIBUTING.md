@@ -24,6 +24,8 @@ before non-trivial work.
 ## Getting set up
 
 ```bash
+python3 -m venv .venv
+. .venv/bin/activate
 make dev        # editable install with pinned dev tooling (Python 3.11+)
 make hooks      # install the pre-push hook that runs `make ci`
 make ci         # the full local gate: format-check, lint, type, tests, schema, coverage
@@ -34,7 +36,8 @@ Canonical targets: `make ci` (the gate), `make coverage-build` (regenerate the
 coverage map + Navigator layer from the registry), `make security` (bandit over
 the package + scripts, scoped dependency audit, secret scan, CycloneDX SBOM, and
 the files-only / no-raw-socket-send invariant), `make verify` (Tier-2 fidelity
-and Zeek/Suricata validation; Docker).
+and Zeek validation; Docker or explicit `VERIFY_ARGS=--native`). Use
+`VERIFY_ARGS=--require-complete` when claiming all shipped Tier-2 checks passed.
 
 ## What you can contribute
 
@@ -43,6 +46,10 @@ and Zeek/Suricata validation; Docker).
 - **A new protocol** (post-v1) → follow [`docs/adding-a-protocol.md`](docs/adding-a-protocol.md).
   Confirm scope with the maintainers first (`PRD.md` §2).
 - **Scenarios, docs, coverage polish, bug fixes** → welcome; keep the gate green.
+
+Prioritize boundary cases, independent benign captures and sensor normalization
+before adding protocols. Passing synthetic scenarios is not a production
+false-positive or recall estimate. See [the current review](docs/reviews/2026-09-09-codebase-review.md).
 
 Both checklists are the operational form of the **Detection Contract** below.
 

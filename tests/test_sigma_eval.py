@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
-from substation.detect.sigma_eval import SigmaEvalError, matching_indices, parse_rule
+from substation.detect.sigma_eval import SigmaEvalError, load_rule, matching_indices, parse_rule
 
 _ALLOWLIST_RULE = """
 title: write from non-allowlisted source
@@ -117,3 +119,47 @@ detection:
     )
     with pytest.raises(SigmaEvalError):
         matching_indices(rule, [_event(func_name="READ_COILS")])
+
+
+@pytest.mark.parametrize("events", [[], [{}], [{"action_class": "read"}]])
+def test_unsupported_branch_is_rejected_before_evaluating_events(
+    events: list[dict[str, object]],
+) -> None:
+    rule = parse_rule(
+        """title: unsupported branch
+logsource: {product: ot}
+detection:
+    ordinary: {action_class: read}
+    wildcard: {func_name: 'READ_*'}
+    condition: ordinary or wildcard
+"""
+    )
+    with pytest.raises(SigmaEvalError, match="wildcard"):
+        matching_indices(rule, events)
+
+
+def test_strings_follow_sigma_case_insensitive_default() -> None:
+    rule = parse_rule(_ALLOWLIST_RULE)
+    assert matching_indices(rule, [{"action_class": "WRITE"}]) == [0]
+
+
+def test_cased_modifier_preserves_case() -> None:
+    rule = parse_rule(_ALLOWLIST_RULE.replace("action_class: write", "action_class|cased: write"))
+    assert matching_indices(rule, [{"action_class": "WRITE"}, {"action_class": "write"}]) == [1]
+
+
+def test_duplicate_sigma_keys_are_rejected() -> None:
+    with pytest.raises(SigmaEvalError, match="duplicate key"):
+        parse_rule(
+            _ALLOWLIST_RULE.replace(
+                "action_class: write", "action_class: write\n        action_class: read"
+            )
+        )
+
+
+def test_rule_edits_in_same_process_take_effect(tmp_path: Path) -> None:
+    path = tmp_path / "rule.yml"
+    path.write_text(_ALLOWLIST_RULE)
+    assert matching_indices(load_rule(path), [{"action_class": "write"}]) == [0]
+    path.write_text(_ALLOWLIST_RULE.replace("action_class: write", "action_class: read"))
+    assert matching_indices(load_rule(path), [{"action_class": "write"}]) == []

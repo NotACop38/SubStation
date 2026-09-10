@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Generate a CycloneDX SBOM for Substation's declared dependency closure.
+"""Generate a CycloneDX SBOM for Substation's declared direct dependencies.
 
 Emits a CycloneDX 1.5 JSON SBOM listing the application plus every pinned
 dependency (runtime + dev) from ``pyproject.toml``, each with a PEP 508 / Package
 URL (``pkg:pypi/...``) identifier. Pure stdlib (``tomllib`` ships with 3.11) so it
 runs with only Python installed — no external SBOM tool or network needed, which
-keeps it deterministic and consistent with the project's Tier-1 "Python-only"
-promise.
+keeps it usable offline. This inventory omits transitive dependencies and
+dependency edges; it is not a complete resolved software bill of materials.
+The timestamp changes on every run.
 
 Run: ``python scripts/security/sbom.py [--out PATH]`` (invoked by ``make security``).
 """
@@ -79,6 +80,9 @@ def build_sbom() -> dict[str, Any]:
                 "%Y-%m-%dT%H:%M:%SZ"
             ),
             "tools": [{"vendor": "Substation", "name": "sbom.py", "version": "1.0"}],
+            "properties": [
+                {"name": "substation:inventory-scope", "value": "declared direct dependencies only"}
+            ],
             "component": {
                 "type": "application",
                 "bom-ref": f"{app_name}@{app_version}",
