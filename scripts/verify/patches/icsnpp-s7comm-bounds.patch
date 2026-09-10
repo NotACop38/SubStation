@@ -1,23 +1,23 @@
 --- a/src/Plugin.cc
 +++ b/src/Plugin.cc
 @@ -18,7 +18,7 @@
- 
+
      zeek::plugin::Configuration config;
      config.name = "ICSNPP::S7COMM";
 -    config.description = "S7comm, S7comm-plus, and COTP Protocol analyzer";
 +    config.description = "S7comm, S7comm-plus, and COTP Protocol analyzer (substation-bounds-v1)";
      config.version.major = 1;
      config.version.minor = 3;
- 
+
 --- a/src/s7comm-analyzer.pac
 +++ b/src/s7comm-analyzer.pac
 @@ -9,6 +9,7 @@
- 
+
  %extern{
      #include "zeek/file_analysis/Manager.h"
 +    #include <limits>
  %}
- 
+
  %header{
 @@ -22,7 +23,7 @@
              filename = "";
@@ -25,12 +25,12 @@
              block_number = "";
 -            destination_filesystem = data[8];
 +            destination_filesystem = data.length() > 8 ? string(1, data[8]) : "";
- 
+
              for ( int32 i = 0; i < data.length(); ++i )
              {
 @@ -50,12 +51,19 @@
      }
- 
+
      int get_number(const_bytestring data){
 -        char str[32];
 -
@@ -52,7 +52,7 @@
 +        return value;
      }
  %}
- 
+
 @@ -436,6 +444,12 @@
      ###############################################################################################
      function process_rosctr_ack_data_start_upload(data: ROSCTR_ACK_Data_Start_Upload): bool
