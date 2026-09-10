@@ -356,6 +356,27 @@ def fidelity_check(proto: str, results: Results) -> None:
             except RuntimeError as exc:
                 results.fail(f"fidelity[{proto}] {scenario_file.name}: {exc}")
                 continue
+            if proto == "modbus":
+                from substation.ingest.modbus import compare_modbus_events, load_modbus_log
+
+                try:
+                    observed = load_modbus_log(logs / "modbus_detailed.log")
+                    differences = compare_modbus_events(events, observed)
+                    if differences:
+                        results.fail(
+                            f"fidelity[modbus] {scenario_file.name}: " + "; ".join(differences[:8])
+                        )
+                    else:
+                        results.ok(
+                            f"fidelity[modbus] {scenario_file.name}: {len(events)} observations "
+                            "match identity, spans, values and outcomes (transaction timestamps)"
+                        )
+                except (OSError, ValueError) as exc:
+                    results.fail(f"fidelity[modbus] {scenario_file.name}: {exc}")
+                finally:
+                    shutil.rmtree(logs, ignore_errors=True)
+                compared += 1
+                continue
             got = log_tuples(logs)
             shutil.rmtree(logs, ignore_errors=True)
             compared += 1

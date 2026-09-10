@@ -19,6 +19,20 @@
     "detail"
   ],
   "properties": {
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "kind", "line", "timestamp"],
+      "properties": {
+        "source": {"const": "icsnpp-modbus"},
+        "kind": {"enum": ["transaction_projection", "message"]},
+        "line": {"type": "integer", "minimum": 1},
+        "timestamp": {"enum": ["transaction", "message"]}
+      },
+      "if": {"properties": {"kind": {"const": "transaction_projection"}}},
+      "then": {"properties": {"timestamp": {"const": "transaction"}}},
+      "else": {"properties": {"timestamp": {"const": "message"}}}
+    },
     "ts": {
       "type": "number",
       "minimum": 0,

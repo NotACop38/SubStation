@@ -94,6 +94,11 @@ def _build_parser() -> argparse.ArgumentParser:
     detect.add_argument("--detection", nargs="+", help="Tier-1 detection IDs (default: all).")
     detect.set_defaults(func=_cmd_detect)
 
+    importer = sub.add_parser("import-modbus", help="Normalize ICSNPP Modbus JSON/TSV logs.")
+    importer.add_argument("paths", nargs="+", type=Path)
+    importer.add_argument("--out", type=Path, help="Atomic JSONL output (default: stdout).")
+    importer.set_defaults(func=_cmd_import_modbus)
+
     validate = sub.add_parser(
         "validate",
         help="Validate .jsonl event logs against the frozen event-log schema.",
@@ -356,6 +361,32 @@ def _cmd_detect(args: argparse.Namespace) -> int:
     print(
         f"detect: {len(results)} file(s), {len(detections)} Tier-1 rule(s), {count} hit(s); "
         "Tier-2 rules not run",
+        file=sys.stderr,
+    )
+    return 0
+
+
+def _cmd_import_modbus(args: argparse.Namespace) -> int:
+    from substation.ingest.modbus import load_modbus_log
+    from substation.io import atomic_write
+    from substation.schema import MAX_JSONL_BYTES, MAX_JSONL_LINES
+
+    if args.out and any(args.out.resolve() == path.resolve() for path in args.paths):
+        raise SchemaValidationError("output must differ from every input")
+    events = []
+    for path in args.paths:
+        events.extend(load_modbus_log(path))
+        if len(events) > MAX_JSONL_LINES:
+            raise SchemaValidationError("combined projections exceed event load cap")
+    output = "".join(json.dumps(event, allow_nan=False) + "\n" for event in events)
+    if len(output.encode("utf-8")) > MAX_JSONL_BYTES:
+        raise SchemaValidationError("projected JSONL exceeds event byte cap")
+    if args.out:
+        atomic_write(args.out, output)
+    else:
+        sys.stdout.write(output)
+    print(
+        f"import-modbus: {len(events)} observations; transaction timestamps retained",
         file=sys.stderr,
     )
     return 0
