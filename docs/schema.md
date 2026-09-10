@@ -19,6 +19,11 @@ non-blank line of a file. Blank lines are ignored; a non-JSON line — including
 the non-standard `NaN`/`Infinity` barewords that Python's `json.dumps` emits by
 default — fails the gate rather than slipping through numeric checks.
 
+`detect` and `validate` read regular UTF-8 files with a 64 MiB / 100,000 physical
+line cap per file, including blank lines. Inputs that grow past the byte cap,
+named pipes, invalid encodings and excessive JSON nesting fail with diagnostics.
+`detect` emits no hits until every requested input has validated and evaluated.
+
 ## Design: ICSNPP-aligned detail + a thin normalized envelope
 
 Every event is a small **normalized envelope** (uniform across all three

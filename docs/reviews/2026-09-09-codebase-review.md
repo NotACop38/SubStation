@@ -102,7 +102,33 @@ fixtures are not validation of integrity-protected or encrypted sessions.
 
 These are product boundaries and next priorities, not claims covered by a green
 unit suite. No project release, tag, remote push, live-OT transmission or honeypot
-activation was performed during this review.
+activation was performed during the initial review above. The subsequent PR
+review and integration are recorded separately below.
+
+## PR review follow-up
+
+The second pass reviewed the complete branch against current `main`, including
+surrounding input, packaging, release and hook behavior. It found and corrected:
+
+- **P2 — incomplete input failure handling.** Oversized and invalid UTF-8 logs
+  raised uncaught exceptions, while named pipes could wait indefinitely. Both
+  detection and schema validation now share a bounded reader that checks the
+  opened descriptor, refuses special files without waiting, and limits reads even
+  if a regular file grows. Regressions cover byte/line limits, invalid encoding,
+  excessive nesting and no partial detection output when a later file fails.
+- **P2 — push gate installed outside Git's active hook directory.** The installer
+  ignored `core.hooksPath` and placed linked-worktree hooks in an unused location.
+  It now asks Git for the active directory and preserves unrelated existing
+  hooks. Real isolated Git repositories test default/custom paths, linked
+  worktrees and repeat installation. The hook no longer recommends bypassing CI.
+- **P2 — review changelog inserted into its introductory sentence.** The initial
+  documentation change left the new review notes outside the actual Unreleased
+  section, so release promotion would omit them. The notes now belong to the
+  single Unreleased section, and superseded stable-status/span-gap statements
+  match the final behavior.
+
+This is an agent self-review with executable regression checks, not an independent
+reviewer approval. Existing sample-policy and qualification limits still apply.
 
 ## Primary references checked
 

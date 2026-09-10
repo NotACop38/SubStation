@@ -86,7 +86,7 @@ demo-cast: ## Record `make demo` to an animated SVG/GIF (asciinema + agg; needs 
 verify: check-python ## Tier-2 validation: real Zeek/ICSNPP fidelity + Zeek/Suricata detections (Docker)
 	$(PY) scripts/verify/run.py $(VERIFY_ARGS)
 
-release: check-python ## Cut a local release: gate -> build sdist/wheel -> regen artifacts -> bump + changelog -> tag
+release: check-python ## Cut a local release: gate -> bump + artifacts -> build -> commit + tag
 	$(PY) scripts/release/run.py $(RELEASE_ARGS)
 
 ## ---------------------------------------------------------------------------

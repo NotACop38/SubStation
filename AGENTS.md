@@ -46,7 +46,7 @@ overrides the GitHub-Actions references in PRD §6.9 / checklist Phase 2.)
 ## Canonical commands
 
 - `make ci` — format-check, lint, type-check, unit tests, detection harness,
-  schema, coverage-build/check, and `make security`. The gate.
+  schema, coverage drift-check, and `make security`. The gate.
 - `make demo` — Tier-1 one-command demo (generate → detect → coverage map).
 - `make verify` — Tier-2 fidelity + Zeek/Suricata validation (Docker).
 - `make release` — cut a local release (gate → build → artifacts → tag).
