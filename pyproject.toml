@@ -28,6 +28,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "pysigma-backend-sqlite==1.2.4",  # independent offline rule-export qualification.
     "ruff==0.15.8",
     "mypy==1.19.1",
     "types-PyYAML==6.0.12.20260518",  # real yaml stubs so the strict loaders type-check (no Any).
