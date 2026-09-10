@@ -84,10 +84,25 @@ def test_s7_plugin_probe_honors_failed_exit_status(
         calls.append(cmd)
         assert "shell" not in kwargs
         return subprocess.CompletedProcess(
-            cmd, int(len(calls) - 1 == failing_probe), stdout="ICSNPP::S7comm", stderr=""
+            cmd,
+            int(len(calls) - 1 == failing_probe),
+            stdout="ICSNPP::S7comm (substation-bounds-v1)",
+            stderr="",
         )
 
     monkeypatch.setattr(verify_run, "_NATIVE_ZEEK", "zeek")
     monkeypatch.setattr(verify_run.subprocess, "run", run)
     assert verify_run._s7_plugin_probe("unused") == (False, [])
     assert len(calls) == failing_probe + 1
+
+
+def test_s7_plugin_requires_reviewed_bounds_patch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(verify_run, "_NATIVE_ZEEK", "zeek")
+    monkeypatch.setattr(
+        verify_run.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [], 0, stdout="ICSNPP::S7comm", stderr=""
+        ),
+    )
+    assert verify_run._s7_plugin_probe("unused") == (False, [])

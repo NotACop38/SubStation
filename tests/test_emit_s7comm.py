@@ -1,8 +1,8 @@
 """Phase-4 S7 emission tests: one model -> matching PCAP + schema-valid JSON.
 
-These prove the LOCKED dual-emit guarantee (PRD §6.1) holds for S7 the same way it
-does for Modbus/DNP3: the PCAP and JSON are built from the same shared event list, so
-they cannot drift. We assert the JSON validates against the frozen schema, the
+The PCAP and JSON are built from the same shared event list (PRD §6.1), as with
+Modbus/DNP3. Independent parser checks are still necessary. Here we assert the
+JSON validates against the frozen schema, the
 hand-built TPKT/COTP/S7comm PCAP carries exactly one S7 PDU per JSON event with
 matching function semantics in the same order, the TPKT lengths are correct, and the
 whole thing is byte-stable. scapy ships no S7 layer (spike 07), so framing is checked
@@ -209,7 +209,7 @@ def test_download_rejects_bad_block_number_before_writing_jsonl(tmp_path: Path) 
 
 def test_download_rejects_too_long_block_number_before_writing_jsonl(tmp_path: Path) -> None:
     scenario = load_scenario(_write_scenario(tmp_path, _LONG_BLOCK_NUMBER_SCENARIO))
-    with pytest.raises(S7Error, match="too long for S7 block filename"):
+    with pytest.raises(S7Error, match="exactly five ASCII decimal digits"):
         write_artifacts(scenario, tmp_path)
     assert not (tmp_path / "s7-long-block-number.jsonl").exists()
     assert not (tmp_path / "s7-long-block-number.pcap").exists()

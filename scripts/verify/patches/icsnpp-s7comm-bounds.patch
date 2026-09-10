@@ -1,0 +1,77 @@
+--- a/src/Plugin.cc
++++ b/src/Plugin.cc
+@@ -18,7 +18,7 @@
+ 
+     zeek::plugin::Configuration config;
+     config.name = "ICSNPP::S7COMM";
+-    config.description = "S7comm, S7comm-plus, and COTP Protocol analyzer";
++    config.description = "S7comm, S7comm-plus, and COTP Protocol analyzer (substation-bounds-v1)";
+     config.version.major = 1;
+     config.version.minor = 3;
+ 
+--- a/src/s7comm-analyzer.pac
++++ b/src/s7comm-analyzer.pac
+@@ -9,6 +9,7 @@
+ 
+ %extern{
+     #include "zeek/file_analysis/Manager.h"
++    #include <limits>
+ %}
+ 
+ %header{
+@@ -22,7 +23,7 @@
+             filename = "";
+             block_type = "";
+             block_number = "";
+-            destination_filesystem = data[8];
++            destination_filesystem = data.length() > 8 ? string(1, data[8]) : "";
+ 
+             for ( int32 i = 0; i < data.length(); ++i )
+             {
+@@ -50,12 +51,19 @@
+     }
+ 
+     int get_number(const_bytestring data){
+-        char str[32];
+-
++        if ( data.length() == 0 )
++            return -1;
++        int value = 0;
+         for ( int32 i = 0; i < data.length(); ++i )
+-            str[i] = (char)data[i];
+-
+-        return atoi(str);
++        {
++            if ( data[i] < '0' || data[i] > '9' )
++                return -1;
++            const int digit = data[i] - '0';
++            if ( value > (std::numeric_limits<int>::max() - digit) / 10 )
++                return -1;
++            value = value * 10 + digit;
++        }
++        return value;
+     }
+ %}
+ 
+@@ -436,6 +444,12 @@
+     ###############################################################################################
+     function process_rosctr_ack_data_start_upload(data: ROSCTR_ACK_Data_Start_Upload): bool
+         %{
++            const int blocklength = get_number(${data.blocklength});
++            if ( blocklength < 0 )
++            {
++                connection()->zeek_analyzer()->Weird("s7comm_invalid_upload_blocklength");
++                return false;
++            }
+             if ( ::s7comm_upload_download )
+             {
+                 // PDU Reference is little endian so we need to do an endian swap
+@@ -448,7 +462,7 @@
+                                                                START_UPLOAD,
+                                                                ${data.function_status},
+                                                                ${data.session_id},
+-                                                               get_number(${data.blocklength}),
++                                                               blocklength,
+                                                                zeek::make_intrusive<zeek::StringVal>(""),
+                                                                zeek::make_intrusive<zeek::StringVal>(""),
+                                                                zeek::make_intrusive<zeek::StringVal>(""),
