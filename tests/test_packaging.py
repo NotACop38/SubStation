@@ -45,6 +45,7 @@ def test_sdist_rebuilds_wheel_with_detection_content(tmp_path: Path) -> None:
         "tests/data/fidelity/dnp3/boundaries.yaml",
         "tests/data/fidelity/dnp3/no-responses.yaml",
         "scripts/verify/build_s7.py",
+        "scripts/s7_examples.py",
         "scripts/verify/patches/icsnpp-s7comm-bounds.patch",
         "scripts/verify/s7.py",
         "scripts/verify/sigma_backend.py",

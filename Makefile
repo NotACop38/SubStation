@@ -59,6 +59,7 @@ test: check-python ## Run unit tests (pytest)
 
 schema: ## Validate emitted .jsonl events against the frozen event-log JSON Schema
 	$(PY) -m substation.schema
+	$(PY) scripts/s7_examples.py
 
 coverage-build: ## Generate the ATT&CK-for-ICS coverage map + Navigator layer (from the registry)
 	$(PY) -m substation.coverage --out docs/coverage   # the committed, published snapshot

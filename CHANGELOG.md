@@ -14,6 +14,7 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 - Compare COTP frames and S7 request/response details against the pinned independent parser, retaining its explicit PDU-reference compatibility transform.
 - Correct S7 success, SZL and transfer fields; require the supported fixed-width block filename and remove an unused encoder argument.
 - Add all-operation and identifier boundary checks plus observation-mutation regressions.
+- Regenerate S7 golden/documentation records from the independently checked operation fixture; fail local CI on stale examples without rewriting them.
 - Execute authored and site-exported rules with the official SQLite backend in local CI; document reproduced NULL and expression-depth limits.
 - Keep the backend development-only with verified artifact hashes; reconcile current qualification guidance.
 

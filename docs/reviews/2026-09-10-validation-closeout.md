@@ -41,7 +41,7 @@ general SIEM equivalence is made. See the [backend evidence](../spikes/10-sigma-
 
 ## Verification
 
-Local `make ci` passed: **521 tests passed, 21 explicit Tier-2 contract skips**,
+Local `make ci` passed: **523 tests passed, 21 explicit Tier-2 contract skips**,
 with formatting, lint, strict types, schema, coverage drift checks and the full
 security gate. Native S7 tests were enabled, including numeric-buffer bounds and
 all SZL identifiers. The full native Tier-2 run passed **46 checks, 0 failures**;
@@ -55,6 +55,12 @@ records **54 locked components and 55 dependency records**.
 Native results use Zeek 8.2.2 with ICSNPP S7comm 1.3.0 **plus the tracked bounds patch**. The original
 upstream checkout remains clean. The backend is a development dependency;
 runtime installation remains Scapy, pySigma and PyYAML plus their dependencies.
+
+Independent code review found that optional schema fields allowed stale S7
+golden/documentation examples to remain valid after the model fixes. The examples
+now regenerate from the independently parsed operation fixture, and `make schema`
+checks drift without rewriting source. Regression tests prove stale output fails
+and only explicit regeneration updates it.
 
 ## Remaining qualification boundaries
 

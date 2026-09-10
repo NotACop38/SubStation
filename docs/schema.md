@@ -306,7 +306,7 @@ rejected.
 | `function_name`    | string          | `function_name` (`s7comm_functions[fc]`, or `Request:`/`Response: ` + User-Data function); mirrors envelope `func_name`. |
 | `subfunction_code` | string          | `subfunction_code` — User-Data subfunction (hex) or the PLC-control service string. |
 | `subfunction_name` | string          | `subfunction_name` — subfunction / PLC-control service name (e.g. `Read SZL`, `PLC Start / Stop`). |
-| `error_class`      | string          | `error_class` (`s7comm_error_class`) — present on ACK/ACK-Data with an error. |
+| `error_class`      | string          | `error_class` (`s7comm_error_class`), including `No error` on successful ACK-Data/User-Data responses. |
 | `error_code`       | string          | `error_code` — error code within the class (hex string). |
 | `cotp`             | object          | `cotp.log` sub-shape (COTP CR/CC) — see below. |
 | `read_szl`         | object          | `s7comm_read_szl.log` sub-shape (Read SZL) — see below. |
@@ -408,15 +408,21 @@ A DNP3 operate command and an unauthorized cold-restart (one line each):
 More live, validated DNP3 examples:
 [`tests/data/events/dnp3/valid.jsonl`](../tests/data/events/dnp3/valid.jsonl).
 
-An S7 Read-SZL request and an unauthorized PLC Stop (one line each):
+An S7 Read-SZL request and a successful Request Download response (one example per line):
 
+<!-- BEGIN GENERATED S7 EXAMPLES -->
 ```json
-{"ts": 1.0, "uid": "Cs7Aq1z8pPnGoldn1", "conn": {"orig_h": "10.0.4.10", "orig_p": 49152, "resp_h": "10.0.4.50", "resp_p": 102}, "proto": "s7comm", "is_orig": true, "direction": "request", "func_code": 68, "func_name": "Request: CPU Functions", "action_class": "diagnostic", "is_exception": false, "error": null, "detail": {"rosctr_code": 7, "rosctr_name": "User-Data", "pdu_reference": 2, "function_code": "0x44", "function_name": "Request: CPU Functions", "subfunction_code": "0x01", "subfunction_name": "Read SZL", "read_szl": {"method": "Request", "szl_id": "0x0011", "szl_id_name": "Module identification", "szl_index": "0x0000"}}}
-{"ts": 4.0, "uid": "Cs7Aq1z8pPnGoldn1", "conn": {"orig_h": "10.0.4.66", "orig_p": 49153, "resp_h": "10.0.4.50", "resp_p": 102}, "proto": "s7comm", "is_orig": true, "direction": "request", "func_code": 41, "func_name": "PLC Stop", "action_class": "control", "is_exception": false, "error": null, "detail": {"rosctr_code": 1, "rosctr_name": "Job-Request", "pdu_reference": 5, "function_code": "0x29", "function_name": "PLC Stop"}}
+{"ts": 15.0, "uid": "CoP4BiQdUFAwteepVJ", "conn": {"orig_h": "192.0.2.10", "orig_p": 49152, "resp_h": "192.0.2.50", "resp_p": 102}, "proto": "s7comm", "is_orig": true, "direction": "request", "func_code": 68, "func_name": "Request: CPU Functions", "action_class": "diagnostic", "is_exception": false, "error": null, "detail": {"rosctr_code": 7, "rosctr_name": "User-Data", "pdu_reference": 16, "function_code": "0x44", "function_name": "Request: CPU Functions", "subfunction_code": "0x01", "subfunction_name": "Read SZL", "read_szl": {"method": "Request", "szl_id": "0x0000", "szl_id_name": "List of all the SZL-IDs of a module", "szl_index": "0x0000", "return_code": "0xff", "return_code_name": "Success"}}}
+{"ts": 9.05, "uid": "CoP4BiQdUFAwteepVJ", "conn": {"orig_h": "192.0.2.10", "orig_p": 49152, "resp_h": "192.0.2.50", "resp_p": 102}, "proto": "s7comm", "is_orig": false, "direction": "response", "func_code": 26, "func_name": "Request Download", "action_class": "write", "is_exception": false, "error": null, "detail": {"rosctr_code": 3, "rosctr_name": "ACK-Data", "pdu_reference": 10, "function_code": "0x1a", "function_name": "Request Download", "upload_download": {"rosctr": "ACK-Data", "function_name": "Request Download"}, "error_class": "No error", "error_code": "0x00"}}
 ```
+<!-- END GENERATED S7 EXAMPLES -->
 
-More live, validated S7 examples:
-[`tests/data/events/s7/valid.jsonl`](../tests/data/events/s7/valid.jsonl).
+The full generated S7 fixture is
+[`tests/data/events/s7/valid.jsonl`](../tests/data/events/s7/valid.jsonl), derived
+from the independently parsed [operation scenario](../tests/data/fidelity/s7/operations.yaml).
+`make schema` checks both fixture and example drift without rewriting either.
+After an intentional model change, regenerate with
+`python scripts/s7_examples.py --write`, then run `make ci` and applicable Tier-2 checks.
 
 ## Input boundaries
 
