@@ -1,7 +1,7 @@
 # Substation — Engineering Checklist
 
 **Status:** Draft v0.1 (source of truth) · Companion to `PRD.md`
-**Last updated:** 2026-06-03
+**Last updated:** 2026-09-09
 
 > Phased, incremental plan. We build **one piece at a time** in this order; the lead approves each piece before we start it. `[ ]` = todo, `[~]` = in progress, `[x]` = done. **VERIFY** gates must be satisfied before the dependent item is frozen.
 
@@ -20,9 +20,14 @@ evidence and takes precedence over earlier launch claims.
 - [x] Check coverage without rewriting it; scan the exact index before release; reject mismatched release-tag retries.
 - [x] Include detection/scenario content in source archives and rebuilt wheels; declare build dependencies.
 - [x] Describe all rules as experimental and regenerate demo assets from executable output.
-- [ ] Qualify sensor-to-envelope normalization and SIEM backend equivalence.
+- [x] Add bounded Modbus sensor import for eight matched core function families, with projection provenance.
+- [x] Compile reviewed site permissions into portable Sigma shared by export and detection.
+- [x] Add an attributed external Modbus regression corpus, payload/hash checks and labeled confusion counts.
+- [x] Verify dependency artifact hashes and record transitive SBOM relationships for the declared environment.
+- [ ] Qualify DNP3/S7 sensor normalization and SIEM backend equivalence.
 - [ ] Measure behavior on independent, representative benign traffic and boundary cases beyond the synthetic catalogue.
-- [ ] Compare detection-relevant detail fields and responses, not only request identity/counts.
+- [x] Compare core Modbus transaction spans, values and exception outcomes with real ICSNPP, including the external corpus.
+- [ ] Extend field/response comparisons beyond supported core Modbus functions; qualify timing.
 - [ ] Reproduce the complete S7 run with a pinned Docker image; the September review used native Zeek.
 
 ## How to read this

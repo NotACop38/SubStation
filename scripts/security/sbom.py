@@ -1,119 +1,106 @@
 #!/usr/bin/env python3
-"""Generate a CycloneDX SBOM for Substation's declared direct dependencies.
+"""Build an offline CycloneDX inventory and complete recorded-environment graph.
 
-Emits a CycloneDX 1.5 JSON SBOM listing the application plus every pinned
-dependency (runtime + dev) from ``pyproject.toml``, each with a PEP 508 / Package
-URL (``pkg:pypi/...``) identifier. Pure stdlib (``tomllib`` ships with 3.11) so it
-runs with only Python installed — no external SBOM tool or network needed, which
-keeps it usable offline. This inventory omits transitive dependencies and
-dependency edges; it is not a complete resolved software bill of materials.
-The timestamp changes on every run.
-
-Run: ``python scripts/security/sbom.py [--out PATH]`` (invoked by ``make security``).
+Artifact hashes and Requires-Dist were verified during explicit lock generation.
+This describes runtime/dev reachability for that marker environment; it does not
+claim a universal graph for every Python/OS combination or an installed inventory.
 """
 
 from __future__ import annotations
 
 import argparse
-import datetime
 import hashlib
 import json
-import tomllib
+import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_PYPROJECT = _REPO_ROOT / "pyproject.toml"
-_DEFAULT_OUT = _REPO_ROOT / "dist" / "sbom.cdx.json"
+sys.path.insert(0, str(_REPO_ROOT))
+from scripts.security.lockfile import load_evidence
 
-
-def _split_pin(requirement: str) -> tuple[str, str | None]:
-    """Split a pinned ``name==version`` requirement into (name, version)."""
-    req = requirement.split("#", 1)[0].strip()
-    if "==" in req:
-        name, version = req.split("==", 1)
-        return name.strip(), version.strip()
-    return req, None
-
-
-def _component(name: str, version: str | None, scope: str) -> dict[str, Any]:
-    purl = f"pkg:pypi/{name.lower()}@{version}" if version else f"pkg:pypi/{name.lower()}"
-    ref = f"{name}@{version}" if version else name
-    comp: dict[str, Any] = {
-        "type": "library",
-        "bom-ref": ref,
-        "name": name,
-        "purl": purl,
-        "properties": [{"name": "substation:scope", "value": scope}],
-    }
-    if version:
-        comp["version"] = version
-    return comp
+_DEFAULT_OUT = _REPO_ROOT / "dist/sbom.cdx.json"
 
 
 def build_sbom() -> dict[str, Any]:
-    data = tomllib.loads(_PYPROJECT.read_text(encoding="utf-8"))
-    project = data["project"]
-    app_name = project["name"]
-    app_version = project.get("version", "0.0.0")
-
-    components: list[dict[str, Any]] = []
-    for req in project.get("dependencies", []):
-        name, version = _split_pin(req)
-        components.append(_component(name, version, "runtime"))
-    for req in project.get("optional-dependencies", {}).get("dev", []):
-        name, version = _split_pin(req)
-        components.append(_component(name, version, "dev"))
-
-    # Deterministic serial number derived from the (sorted) component set so an
-    # unchanged dependency set yields a stable SBOM.
-    digest_src = "|".join(sorted(c["bom-ref"] for c in components)).encode("utf-8")
-    serial = hashlib.sha256(digest_src).hexdigest()[:32]
-
+    project, evidence, runtime, graph, roots = load_evidence(_REPO_ROOT)
+    packages = evidence["packages"]
+    refs = {name: f"pkg:pypi/{name}@{package['version']}" for name, package in packages.items()}
+    app = f"pkg:pypi/{project['name']}@{project['version']}"
+    components = []
+    for name, package in sorted(packages.items()):
+        scope = "runtime" if name in runtime else "dev" if name in graph else "locked-only"
+        artifact = package["artifact"]
+        components.append(
+            {
+                "type": "library",
+                "bom-ref": refs[name],
+                "name": name,
+                "version": package["version"],
+                "purl": refs[name],
+                "hashes": [{"alg": "SHA-256", "content": artifact["sha256"]}],
+                "externalReferences": [{"type": "distribution", "url": artifact["url"]}],
+                "properties": [
+                    {"name": "substation:scope", "value": scope},
+                    {"name": "substation:hashed-artifact", "value": artifact["filename"]},
+                    {"name": "substation:metadata-sha256", "value": artifact["metadata_sha256"]},
+                ],
+            }
+        )
+    dependencies = [{"ref": app, "dependsOn": [refs[name] for name in roots]}]
+    # Every resolved leaf has an explicit empty list. Unreachable lock inventory
+    # entries have no edge assertion, rather than being mislabeled as leaves.
+    dependencies.extend(
+        {"ref": refs[name], "dependsOn": [refs[child] for child in children]}
+        for name, children in sorted(graph.items())
+    )
+    digest = hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
     return {
         "bomFormat": "CycloneDX",
         "specVersion": "1.5",
-        "serialNumber": f"urn:uuid:{serial[:8]}-{serial[8:12]}-{serial[12:16]}-{serial[16:20]}-{serial[20:32]}",
         "version": 1,
+        "serialNumber": f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, digest)}",
         "metadata": {
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            ),
-            "tools": [{"vendor": "Substation", "name": "sbom.py", "version": "1.0"}],
-            "properties": [
-                {"name": "substation:inventory-scope", "value": "declared direct dependencies only"}
-            ],
+            "tools": [{"vendor": "Substation", "name": "sbom.py", "version": "2.0"}],
             "component": {
                 "type": "application",
-                "bom-ref": f"{app_name}@{app_version}",
-                "name": app_name,
-                "version": app_version,
-                "purl": f"pkg:pypi/{app_name}@{app_version}",
+                "bom-ref": app,
+                "name": project["name"],
+                "version": project["version"],
+                "purl": app,
             },
+            "properties": [
+                {
+                    "name": "substation:inventory-scope",
+                    "value": "Hash-locked inventory; complete runtime/dev graph for recorded marker environment",
+                },
+                {
+                    "name": "substation:marker-environment",
+                    "value": json.dumps(evidence["environment"], sort_keys=True),
+                },
+                {"name": "substation:lock-sha256", "value": evidence["lock_sha256"]},
+            ],
         },
         "components": components,
+        "dependencies": dependencies,
     }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--out", type=Path, default=_DEFAULT_OUT, help="output path (CycloneDX JSON)"
-    )
+    parser.add_argument("--out", type=Path, default=_DEFAULT_OUT)
     args = parser.parse_args()
-
-    sbom = build_sbom()
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    # timestamp varies run-to-run; everything else is deterministic.
-    args.out.write_text(json.dumps(sbom, indent=2) + "\n", encoding="utf-8")
-    # Show a repo-relative path when the output lives in the checkout, else the
-    # absolute path — an --out outside the repo must not raise after a good write.
-    out = args.out.resolve()
     try:
-        shown = out.relative_to(_REPO_ROOT)
-    except ValueError:
-        shown = out
-    print(f"sbom: wrote {shown} ({len(sbom['components'])} components, CycloneDX 1.5)")
+        sbom = build_sbom()
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(sbom, indent=2) + "\n", encoding="utf-8")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"sbom: FAILED: {exc}", file=sys.stderr)
+        return 1
+    print(
+        f"sbom: wrote {args.out.name} ({len(sbom['components'])} components, {len(sbom['dependencies'])} dependency records)"
+    )
     return 0
 
 

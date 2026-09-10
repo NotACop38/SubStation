@@ -53,6 +53,18 @@ backend comparisons and boundary cases before expanding the catalogue. M4 and ne
 protocols remain planned. Keep the optional honeypot isolated from the simulator;
 its network service is not needed to meet the core product objective.
 
+### Implemented follow-up (2026-09-09)
+
+- Versioned site profiles compile Modbus full-span permissions and DNP3/S7 command
+  channels into portable Sigma. Local detection and export share the compiler;
+  bundled demo defaults remain examples. Tier-2 baselines are separate.
+- The independent Modbus regression corpus retains attribution and payload hashes,
+  with explicit policy-counterfactual labels and per-event confusion counts.
+  It is not representative operational telemetry or a production rate estimate.
+- Hash-checked installation and verified wheel metadata support an offline SBOM
+  with runtime/dev dependency relationships for a recorded marker environment.
+  See [the user and evidence guide](docs/independent-validation.md).
+
 ### Non-goals (and hard safety boundaries)
 
 - **No interaction with live OT systems.** Substation is strictly defensive.
@@ -182,13 +194,13 @@ X1 is a cross-protocol novelty example requiring in-process state. It does not i
 This is the most important UX/credibility decision, so it is explicit:
 
 - **Tier 1 — Python packages only (the headline path).** Generate telemetry → evaluate the supported Sigma subset over normalized JSON → print hits and mappings. Requires Python 3.11+, scapy, pySigma, PyYAML and their transitive dependencies. No external sensor engine or hardware is required.
-- **Tier 2 — independent parser and stateful-rule checks.** Run PCAPs through Zeek/ICSNPP, in Docker by default or explicitly with native Zeek. Compare request source/destination/function counts and execute the four Zeek rules. This does not validate every detail field, response, timing edge or device interaction. S7 requires a compiled plugin; `--require-complete` turns missing shipped checks into failures. No Suricata rules or runner are currently shipped.
+- **Tier 2 — independent parser and stateful-rule checks.** Run PCAPs through Zeek/ICSNPP, in Docker by default or explicitly with native Zeek. Compare core Modbus transaction identity, address/quantity, values and exception outcomes, reparse the external Modbus corpus, compare request source/destination/function counts for unsupported Modbus and DNP3/S7, and execute the four Zeek rules. This does not validate every detail field, response, timing edge or device interaction. S7 requires a compiled plugin; `--require-complete` turns missing shipped checks into failures. No Suricata rules or runner are currently shipped.
 
 Consequence we accept and document: **Sigma-over-JSON detections need no Zeek; Zeek/Suricata detections inherently require their engine** to execute and are therefore validated in Tier 2. Users who only want detections + telemetry never need to install Zeek/Suricata. This keeps the barrier to first success near zero while still proving the harder detections.
 
 ### 6.3 Event-log JSON schema (LOCKED approach; field names VERIFY)
 
-**Decision:** retain a Substation JSON contract inspired by verified Zeek/ICSNPP fields, with a common envelope. It is a synthetic event model, not the native sensor log format. Importing sensor logs requires an explicit normalization adapter; none is shipped yet.
+**Decision:** retain a Substation JSON contract inspired by verified Zeek/ICSNPP fields, with a common envelope. It is a synthetic event model, not the native sensor log format. The shipped `import-modbus` adapter accepts eight matched ICSNPP Modbus function families in JSON/TSV. It marks request/response transaction projections explicitly and rejects unknown/unmatched records without direction. DNP3/S7 normalization remains unqualified.
 
 - **Why ICSNPP alignment:** trace field meaning to documented parsers and expose useful protocol detail. Similar names do not establish structural compatibility or prove SIEM backend equivalence.
 - **Why add an envelope:** share validation, rule evaluation and CLI output across protocols. X1 consumes native Zeek events with its own tuple normalization; it does not consume this JSON envelope.
@@ -219,7 +231,7 @@ Consequence we accept and document: **Sigma-over-JSON detections need no Zeek; Z
   - **JSON** event log (Zeek/ICSNPP-aligned, §6.3) from the same model.
 - **Files-only invariant (LOCKED, enforced):** the simulator writes files and never opens a sending socket / never transmits on a live interface. Stated in the README and guarded in code.
 - **Realism requirement:** scenarios must model a **legitimate writer/master** (HMI/EWS) and **continuous benign polling**, not only the attacker — otherwise the allow-list and scanning detections are untestable and not credible (see §8).
-- **Independent checks (Tier 2):** compare request identity/counts against Zeek/ICSNPP and test stateful rules on fire/quiet PCAPs. Extend these to detection-relevant detail fields before claiming sensor compatibility.
+- **Independent checks (Tier 2):** compare supported Modbus fields and responses against Zeek/ICSNPP, including attributed external captures; keep unsupported Modbus and DNP3/S7 count checks explicitly limited. Test stateful rules on fire/quiet PCAPs. Timing, all extensions, device behavior and SIEM backend equivalence remain unqualified.
 
 ### 6.5 Detection-engine policy (LOCKED)
 

@@ -19,6 +19,17 @@
     "detail"
   ],
   "properties": {
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "kind", "line", "timestamp"],
+      "properties": {
+        "source": {"const": "icsnpp-modbus"},
+        "kind": {"const": "transaction_projection"},
+        "line": {"type": "integer", "minimum": 1},
+        "timestamp": {"const": "transaction"}
+      }
+    },
     "ts": {
       "type": "number",
       "minimum": 0,
@@ -74,6 +85,10 @@
     }
   },
   "allOf": [
+    {
+      "if": {"required": ["observation"]},
+      "then": {"properties": {"proto": {"const": "modbus"}}}
+    },
     {
       "$comment": "Direction is derived from is_orig, not free — enforce the invariant (true -> request, false -> response) so an event cannot pass the gate while classifying endpoints inconsistently.",
       "if": {

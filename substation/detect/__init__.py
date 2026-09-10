@@ -31,7 +31,7 @@ from substation.schema import (
 )
 
 from .registry import Detection, load_registry
-from .sigma_eval import load_rule, matching_indices
+from .sigma_eval import load_rule, matching_indices, parse_rule
 
 __all__ = ["Hit", "run_detections", "load_events", "MAX_JSONL_LINES", "MAX_JSONL_BYTES"]
 
@@ -72,7 +72,12 @@ def load_events(events_path: str | Path) -> list[dict[str, Any]]:
     return events
 
 
-def run_detections(events_path: str | Path, detections: list[Detection] | None = None) -> list[Hit]:
+def run_detections(
+    events_path: str | Path,
+    detections: list[Detection] | None = None,
+    *,
+    policy: dict[str, Any] | None = None,
+) -> list[Hit]:
     """Evaluate Tier-1 Sigma detections over the JSONL event log at ``events_path``.
 
     Returns one :class:`Hit` per (detection, matching event). Tier-2 detections
@@ -82,10 +87,13 @@ def run_detections(events_path: str | Path, detections: list[Detection] | None =
     """
     events = load_events(events_path)
     registry = load_registry() if detections is None else detections
+    from substation.policy import compile_policy
+
+    compiled = compile_policy(policy) if policy is not None else None
     hits: list[Hit] = []
     for det in registry:
         if det.engine != "sigma" or det.tier != 1:
             continue
-        rule = load_rule(det.rule_path)
+        rule = parse_rule(compiled[det.id]) if compiled is not None else load_rule(det.rule_path)
         hits.extend(Hit(detection_id=det.id, event_index=i) for i in matching_indices(rule, events))
     return hits

@@ -89,8 +89,10 @@ substation coverage --out ./coverage
 `detect` accepts **Substation-schema JSONL**, validates every record, and prints
 one JSON object per hit with `event_file`, `detection_id` and a zero-based
 `event_index`. Its summary goes to stderr. Invalid input fails before any hit
-output is published. It runs only Tier-1 rules; raw Zeek logs need normalization,
-and no sensor-import adapter is shipped yet. An empty valid log reports zero hits.
+output is published. It runs only Tier-1 rules. `import-modbus` normalizes supported
+ICSNPP Modbus transactions; `detect --policy site.yaml` selects reviewed site
+permissions. An empty valid log reports zero hits. See the
+[import, policy and corpus guide](docs/independent-validation.md).
 
 ## How it works
 
@@ -102,8 +104,8 @@ with the JSON model.
 
 | Path | What it checks | Requirements |
 |---|---|---|
-| Tier 1 | Seven Sigma rules over schema-validated synthetic JSON; expected fire/quiet results | Python, scapy, pySigma, PyYAML and their dependencies |
-| Tier 2 | Request source/destination/function counts decoded by Zeek/ICSNPP; four stateful Zeek rules | Docker by default, or explicit native Zeek; S7 requires its compiled plugin |
+| Tier 1 | Seven Sigma rules over validated JSON; synthetic contracts and a small external Modbus corpus | Python, scapy, pySigma, PyYAML and their dependencies |
+| Tier 2 | Core Modbus fields, responses and external captures; DNP3/S7 request counts; four stateful Zeek rules | Docker by default, or explicit native Zeek; S7 requires its compiled plugin |
 
 Tier 2 does not compare every detail field, response, timing edge or device
 interaction. No Suricata rules are shipped. The simulator produces bounded
@@ -148,9 +150,10 @@ traffic after training never silently expands trust.
 With the virtual environment active:
 
 ```sh
-make dev                 # install the locked development dependencies and package
+make dev                 # install hash-locked dependencies and the package
 make hooks               # install the local pre-push gate
 make ci                  # formatting, lint, types, tests, schema, coverage and security
+make corpus              # attributed Modbus regression metrics
 make verify VERIFY_ARGS=--require-complete
 ```
 
@@ -163,9 +166,10 @@ CI/CD is **local and Codex-driven**. There is no GitHub Actions or cloud CI.
 `make release` builds and tags locally after its gates; it never pushes. An existing
 tag can be rebuilt only from its clean matching checkout. The secret gate scans
 current source, including new non-ignored files; release additionally scans the
-exact Git index. Neither is a Git-history audit. The SBOM lists direct dependencies only.
-Dependency pins lack artifact
-hashes, and the documented unused diskcache advisory remains accepted.
+exact Git index. Neither is a Git-history audit. Installation requires locked
+artifact hashes; the offline SBOM includes transitive runtime/dev relationships
+for its recorded environment. `make lock` explicitly refreshes dependency evidence.
+The documented unused diskcache advisory remains accepted.
 
 `make demo-gif` captures the current CLI and renders the GIF and SVG with Pillow.
 It fails if the demo fails; it does not maintain a separate set of example results.

@@ -22,6 +22,8 @@ artifacts/
 *.jsonl
 # ...except committed golden event fixtures used by the schema-validation gate.
 !tests/data/events/**/*.jsonl
+!tests/data/corpus/modbus/*.jsonl
+!tests/data/corpus/modbus/*.pcap
 
 # Tier-2 verify cache (cloned ICSNPP script packages)
 /.verify-cache/

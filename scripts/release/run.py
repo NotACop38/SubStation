@@ -295,6 +295,7 @@ _RELEASE_SOURCE_TREES = (
     "setup.py",
     "MANIFEST.in",
     "requirements.lock",
+    "requirements.metadata.json",
 )
 
 

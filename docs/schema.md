@@ -54,6 +54,7 @@ minimal change (`PRD.md` §6.3).
 | `action_class` | enum                | yes | Normalized verb: `read` \| `write` \| `control` \| `diagnostic` \| `scan_indicator` \| `other`. Drives X1 + shared logic. |
 | `is_exception` | boolean             | yes | True when this event is an error/exception response. |
 | `error`        | string \| null      | no  | Decoded exception/error name when `is_exception` (Modbus mirrors `detail.exception_code`, e.g. `ILLEGAL_DATA_ADDRESS`); null/absent otherwise. |
+| `observation`  | object              | no  | Imported Modbus transaction provenance: source, kind, physical line and timestamp semantics; see [import guide](independent-validation.md). |
 | `detail`       | object              | yes | Per-protocol detail (constrained per `proto`). |
 
 The envelope rejects unknown top-level properties (`additionalProperties: false`)

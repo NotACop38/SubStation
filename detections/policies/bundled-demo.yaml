@@ -1,0 +1,42 @@
+# Synthetic example permissions. Replace with reviewed site values.
+schema: substation-site-policy/v1
+name: bundled-demo
+modbus:
+  writes:
+  - sources:
+    - 10.0.0.10
+    - 10.0.0.11
+    destination: 10.0.0.50
+    port: 502
+    units:
+    - 1
+    address_space: holding-register
+    ranges:
+    - start: 40
+      end: 49
+channels:
+  D1:
+  - sources:
+    - 10.0.1.10
+    destination: 10.0.1.50
+    port: 20000
+  D2:
+  - sources:
+    - 10.0.1.10
+    destination: 10.0.1.50
+    port: 20000
+  D3:
+  - sources:
+    - 10.0.1.10
+    destination: 10.0.1.50
+    port: 20000
+  S1:
+  - sources:
+    - 10.0.4.10
+    destination: 10.0.4.50
+    port: 102
+  S2:
+  - sources:
+    - 10.0.4.10
+    destination: 10.0.4.50
+    port: 102
