@@ -5,7 +5,18 @@ All notable changes to **Substation** are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); the
-`## [Unreleased]` section is promoted to the new version at release time.
+`## [Unreleased]
+
+### September 2026 project review
+
+- Corrected M1 full-span and target policy, DNP3/S7 target scoping, and S1 PLC Control service discrimination.
+- Kept X1 trust fixed after training, with bounded suppression and recurring alerts.
+- Repaired S7 download, User-Data and S7-plus wire encoding; added real-parser request-count comparisons and complete native Tier-2 validation.
+- Added validated JSONL `detect`; reject ambiguous JSON/rules, unsupported Sigma expressions and unused scenario parameters.
+- Fixed source archives and rebuilt wheels, pinned missing build tools, and hardened release source/tag and staged secret checks.
+- Made CI coverage checks read-only and dependency installation consume the checked lock.
+- Reframed the project as an experimental offline toolkit; regenerated demo media from real CLI output and documented qualification limits.
+` section is promoted to the new version at release time.
 
 ## [Unreleased]
 

@@ -40,7 +40,7 @@ protocol plumbing below is in place, follow
 4. **Build the shared event model + emitters.** Add `substation/protocols/<proto>.py`
    with the typed event dataclass, `build_events()` (scenario → events), and
    `event_to_dict()` (event → envelope dict). **One** model must drive **both**
-   emitters so PCAP and JSON cannot drift (`PRD.md` §6.1):
+   emitters to share scenario inputs; independently check both outputs (`PRD.md` §6.1):
    - JSON: reuse the shared `write_jsonl` (it validates against the frozen schema);
    - PCAP: add a writer (scapy contrib, or hand-built bytes per the step-2 verdict);
    - register the `(build_events, event_to_dict, write_pcap)` triple in

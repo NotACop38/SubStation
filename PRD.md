@@ -1,7 +1,7 @@
 # Substation — Product Requirements Document
 
-**Status:** Draft v0.1 (source of truth) · **Owner:** project lead · **Engineering partner:** Claude
-**Last updated:** 2026-06-03
+**Status:** v0.1 requirements, reviewed 2026-09-09 (source of truth)
+**Last updated:** 2026-09-09
 
 > This document and the companion `ENGINEERING_CHECKLIST.md` are the source of truth for Substation. Decisions marked **LOCKED** are committed but reversible — revisit by editing this doc and noting the change. Items marked **VERIFY** must be confirmed against an authoritative source before the relevant code/content is frozen.
 
@@ -13,7 +13,7 @@
 
 ### Problem
 
-OT/ICS detection content is scarce and hard to validate. Most defenders don’t have a PLC lab, so they can’t generate the telemetry needed to test a rule before trusting it in production. The result is detections that are untested, naive, or copied without understanding their false-positive behavior. Defenders need two things together: **ready-to-use detections** and **a safe, repeatable way to generate the telemetry that exercises them.**
+OT/ICS detection content is scarce and hard to validate. Most defenders don’t have a PLC lab, so they can’t generate the telemetry needed to test a rule before trusting it in production. The result is detections that are untested, naive, or copied without understanding their false-positive behavior. Defenders need two things together: **experimental detection templates** and **a safe, repeatable way to generate the telemetry that exercises them.**
 
 ### Vision / one-line pitch
 
@@ -21,7 +21,7 @@ OT/ICS detection content is scarce and hard to validate. Most defenders don’t 
 
 ### What “good” looks like
 
-- A first-time visitor goes from `git clone` to “I see detections firing on attacks and staying quiet on benign traffic, plus a coverage map” in **one command and under five minutes**, with **no external dependencies beyond Python** for the headline path.
+- A first-time visitor goes from `git clone` to “I see detections firing on attacks and staying quiet on benign traffic, plus a coverage map” in **one command and under five minutes**, with **Python 3.11+ and installed Python packages** for the headline path.
 - The content is **credible to OT practitioners**: detections account for real OT realities (engineers legitimately write setpoints; SCADA masters poll constantly), and every mapping is traceable to an authoritative source.
 - The project is **easy to extend**: a contributor can add a protocol or a detection by following a documented contract.
 
@@ -38,6 +38,21 @@ OT/ICS detection content is scarce and hard to validate. Most defenders don’t 
 1. Make the project **one-command runnable** and **easy to contribute to** (clear path to add protocols/detections).
 1. Optimize for community visibility: credible, well-referenced content with a clean first-run experience.
 
+### Evidence and scope decisions (2026-09-09 review)
+
+The primary deliverable is an **offline regression and teaching toolkit**. A
+synthetic fire/quiet test proves behavior on that fixture; it does not measure
+production recall, false-positive rate, protocol completeness or physical impact.
+The seven Sigma rules remain `experimental`. Registry `validated` means the
+synthetic Tier-1 contract passes, and `tier2` identifies the required engine.
+ATT&CK coverage counts are content mappings, not a claim to detect a whole tactic.
+
+Retain files-only generation, the shared scenario model, Sigma-first policy and
+two execution tiers. Prioritize independent benign captures, sensor normalization,
+backend comparisons and boundary cases before expanding the catalogue. M4 and new
+protocols remain planned. Keep the optional honeypot isolated from the simulator;
+its network service is not needed to meet the core product objective.
+
 ### Non-goals (and hard safety boundaries)
 
 - **No interaction with live OT systems.** Substation is strictly defensive.
@@ -53,9 +68,9 @@ OT/ICS detection content is scarce and hard to validate. Most defenders don’t 
 
 |User                           |Context                                |What they get from Substation                                                                                  |
 |-------------------------------|---------------------------------------|---------------------------------------------------------------------------------------------------------------|
-|OT security engineer           |Owns detection in an OT/ICS environment|Vetted detections they can adapt; telemetry to validate before deploying                                       |
+|OT security engineer           |Owns detection in an OT/ICS environment|Synthetic-tested templates to adapt and assess against independent telemetry                                       |
 |ICS SOC analyst                |Triages alerts from OT monitoring      |Reference for what each detection means, its ATT&CK mapping, and its false-positive profile                    |
-|IT detection engineer new to OT|Just got handed OT coverage            |A safe sandbox to learn ICS protocols and a starting detection library that won’t drown them in false positives|
+|IT detection engineer new to OT|Just got handed OT coverage            |A safe sandbox to learn ICS protocols and a starting detection library with explicit policy assumptions|
 |Detection-content contributor  |Wants to extend coverage               |A documented contract to add a protocol or detection with a passing test                                       |
 
 **Primary use cases**
@@ -69,9 +84,9 @@ OT/ICS detection content is scarce and hard to validate. Most defenders don’t 
 
 ## 4. Success metrics
 
-**Adoption / visibility (primary objective)**
+**Reproducible detection development (primary objective)**
 
-- One-command demo succeeds on a clean clone on Linux/macOS with only Python 3.11+ installed.
+- One-command demo succeeds on a clean clone on Linux/macOS with Python 3.11+ and the package dependencies installed. First install requires a package source.
 - README “why this exists” + first-success path is unambiguous.
 - At launch: Modbus fully end-to-end with ≥3 detections + ≥1 cross-protocol baseline detection scaffold; coverage map renders; CONTRIBUTING explains adding a protocol/detection.
 
@@ -126,7 +141,7 @@ Detections below are the v1 target set. **Engine choice** is per the policy in �
 |--|--------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|-------------------------------|--------------------------------------------------|
 |X1|Baseline deviation (new talker / new asset pair / new function for a pair)|A source/destination/function combination not seen in the learned baseline, across any supported protocol|Discovery; Lateral Movement    |**Zeek** (requires learned state + set membership)|
 
-X1 is the flagship reason for the normalized envelope (§6.3) and the primary justification for a stateful Zeek detection.
+X1 is a cross-protocol novelty example requiring in-process state. It does not identify malicious intent, authenticate sources or persist trust across sensor restarts.
 
 -----
 
@@ -160,23 +175,23 @@ X1 is the flagship reason for the normalized envelope (§6.3) and the primary ju
                                   hits + ATT&CK-for-ICS coverage map
 ```
 
-**Core design principle (LOCKED):** one scenario model drives **both** emitters, so PCAP and JSON can never drift. Generation is **pure Python** with **no Zeek and no hardware**, so the headline path runs anywhere.
+**Core design principle (LOCKED):** one scenario model drives **both** emitters, to reduce duplicated scenario logic. Separate emitters can still disagree; independent parser checks are required. Generation is **pure Python** with **no Zeek and no hardware**, so the headline path runs anywhere.
 
 ### 6.2 Two-tier execution model (LOCKED)
 
 This is the most important UX/credibility decision, so it is explicit:
 
-- **Tier 1 — zero external dependencies (the headline path).** Generate telemetry (pure Python) → run **Sigma** detections over the **JSON** event log → print hits + coverage map. Requires only Python 3.11+. This is what `one command` runs and what the README promises.
-- **Tier 2 — full-fidelity validation (CI / contributors).** Run PCAPs through **real Zeek + ICSNPP** and/or **Suricata** (containerized) to (a) prove our synthetic JSON matches real Zeek output and (b) execute Zeek-script and Suricata detections that genuinely require packet-level state.
+- **Tier 1 — Python packages only (the headline path).** Generate telemetry → evaluate the supported Sigma subset over normalized JSON → print hits and mappings. Requires Python 3.11+, scapy, pySigma, PyYAML and their transitive dependencies. No external sensor engine or hardware is required.
+- **Tier 2 — independent parser and stateful-rule checks.** Run PCAPs through Zeek/ICSNPP, in Docker by default or explicitly with native Zeek. Compare request source/destination/function counts and execute the four Zeek rules. This does not validate every detail field, response, timing edge or device interaction. S7 requires a compiled plugin; `--require-complete` turns missing shipped checks into failures. No Suricata rules or runner are currently shipped.
 
 Consequence we accept and document: **Sigma-over-JSON detections need no Zeek; Zeek/Suricata detections inherently require their engine** to execute and are therefore validated in Tier 2. Users who only want detections + telemetry never need to install Zeek/Suricata. This keeps the barrier to first success near zero while still proving the harder detections.
 
 ### 6.3 Event-log JSON schema (LOCKED approach; field names VERIFY)
 
-**Decision:** model the JSON on **Zeek + ICSNPP** per-protocol fields (so our Sigma rules target the *same shape as real production Zeek logs*), wrapped in a thin **normalized envelope** that enables cross-protocol detection.
+**Decision:** retain a Substation JSON contract inspired by verified Zeek/ICSNPP fields, with a common envelope. It is a synthetic event model, not the native sensor log format. Importing sensor logs requires an explicit normalization adapter; none is shipped yet.
 
-- **Why ICSNPP alignment over Zeek’s thinner built-ins:** detections authored here transfer to production Zeek deployments with minimal change — a major utility and credibility win — and “Zeek/ICSNPP-aligned” is a citable realism story.
-- **Why add an envelope:** the three protocols’ Zeek logs are not uniformly shaped; a small common envelope lets the cross-protocol baseline detection (X1) and shared Sigma logic operate uniformly.
+- **Why ICSNPP alignment:** trace field meaning to documented parsers and expose useful protocol detail. Similar names do not establish structural compatibility or prove SIEM backend equivalence.
+- **Why add an envelope:** share validation, rule evaluation and CLI output across protocols. X1 consumes native Zeek events with its own tuple normalization; it does not consume this JSON envelope.
 
 **Envelope (common, every event):**
 
@@ -204,7 +219,7 @@ Consequence we accept and document: **Sigma-over-JSON detections need no Zeek; Z
   - **JSON** event log (Zeek/ICSNPP-aligned, §6.3) from the same model.
 - **Files-only invariant (LOCKED, enforced):** the simulator writes files and never opens a sending socket / never transmits on a live interface. Stated in the README and guarded in code.
 - **Realism requirement:** scenarios must model a **legitimate writer/master** (HMI/EWS) and **continuous benign polling**, not only the attacker — otherwise the allow-list and scanning detections are untestable and not credible (see §8).
-- **Optional fidelity check (Tier 2, CI):** run generated PCAPs through real Zeek+ICSNPP and diff against our JSON as a golden test, proving the synthetic JSON is faithful. Out of the core path.
+- **Independent checks (Tier 2):** compare request identity/counts against Zeek/ICSNPP and test stateful rules on fire/quiet PCAPs. Extend these to detection-relevant detail fields before claiming sensor compatibility.
 
 ### 6.5 Detection-engine policy (LOCKED)
 
@@ -283,7 +298,7 @@ A minimal, **passive, isolated** Modbus responder that logs inbound probes for r
 1. **Schema:** ICSNPP-aligned per-protocol detail + normalized envelope; `.jsonl`. (§6.3)
 1. **Simulator:** single scenario model → dual emit (PCAP + JSON); pure Python; **files-only**; optional Tier-2 Zeek fidelity check. (§6.4)
 1. **Engine policy:** Sigma-first; Zeek for stateful; Suricata optional; per-detection rationale. (§6.5)
-1. **Two-tier execution:** Tier 1 zero-dep (Sigma/JSON) is the headline; Tier 2 (Zeek/Suricata, containerized) validates the rest. (§6.2)
+1. **Two-tier execution:** Tier 1 Python-packaged (Sigma/JSON) is the headline; Tier 2 (Zeek/Suricata, containerized) validates the rest. (§6.2)
 1. **Build order:** Modbus end-to-end first, then harden+CI, then DNP3, then S7, then coverage polish + contributor guides + optional honeypot. (See checklist.)
 
 ### Open items deferred to implementation (with verification gates)
@@ -302,7 +317,7 @@ A minimal, **passive, isolated** Modbus responder that logs inbound probes for r
 |Naive “unauthorized write = any write”               |Engineers legitimately write setpoints; a write-only rule is pure false positives and discredits the project|M1/D3/S2 use **allow-list by source/asset/unit** or baseline deviation; simulator **must** model a legitimate writer|
 |Naive “scanning = high volume”                       |SCADA masters poll constantly; volume thresholds fire on normal operation                                   |M3/D4 key on **function-code diversity, illegal codes, unit-ID sweeping**, not raw request rate                     |
 |scapy protocol gaps                                  |scapy’s Modbus is uneven; no solid S7comm/DNP3 layers                                                       |Hand-assembled PDUs / template-PCAP splicing; per-protocol capability spike (§7)                                    |
-|Synthetic telemetry doesn’t match real Zeek          |Detections that only work on our JSON aren’t credible                                                       |Tier-2 fidelity check diffs our JSON against real Zeek+ICSNPP output                                                |
+|Synthetic telemetry doesn’t match real Zeek          |Detections that only work on our JSON aren’t credible                                                       |Tier-2 request identity/count comparison; full detail and response parity remain unqualified                                                |
 |Over-claiming ATT&CK mappings                        |Wrong/loose technique IDs erode trust with practitioners                                                    |Per-detection verified IDs (§7), false-positive profile in every doc (§6.6)                                         |
 |S7 complexity (S7comm/-plus, COTP/TPKT, no open spec)|Highest implementation risk; built last for a reason                                                        |Lean on community/Wireshark-dissector references; isolate S7 to its own phase                                       |
 |Scope creep into other protocols                     |Dilutes a clean v1                                                                                          |IEC-104/CIP/BACnet/etc. are explicitly post-v1 contributions                                                        |

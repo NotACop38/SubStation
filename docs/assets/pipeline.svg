@@ -102,5 +102,5 @@
   </g>
 
   <text x="600" y="234" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif"
-        font-size="12.5" fill="#7a8593">One scenario model drives both emitters, so the PCAP and the JSON event log <tspan fill="#adbac7" font-weight="600">can never drift</tspan>.</text>
+        font-size="12.5" fill="#7a8593">One scenario model feeds both emitters. Independent parser checks <tspan fill="#adbac7" font-weight="600">test consistency</tspan>.</text>
 </svg>

@@ -2,9 +2,11 @@
 
 > **Generated** by `python -m substation.coverage` from `detections/registry.yaml`. Do not hand-edit — rerun the generator (`make coverage-build`). `make ci` fails if this file is out of date.
 
-Detections: **11**. Tier 1 = Sigma-over-JSON (zero-dep headline path); Tier 2 = Zeek/Suricata over PCAP.
+Detections: **11**. Tier 1 = Sigma-over-JSON (Python packages); Tier 2 = Zeek/Suricata over PCAP.
 
 Download the [ATT&CK Navigator layer](./navigator-layer.json) and load it directly into the [Navigator](https://mitre-attack.github.io/attack-navigator/) to view this coverage on the live ICS matrix.
+
+`validated` means the synthetic Tier-1 contract passes; `tier2` names the required engine. All rules are experimental. Independent site data and sensor/backend qualification remain necessary.
 
 ## Detections
 
@@ -22,21 +24,21 @@ Download the [ATT&CK Navigator layer](./navigator-layer.json) and load it direct
 | S3 | Enumeration / module-info reads | s7comm | T0888, T0846 | Discovery (TA0102) | zeek | 2 | tier2 |
 | X1 | Cross-protocol baseline deviation (new talker / asset pair / function) | cross | T0846 | Discovery (TA0102) | zeek | 2 | tier2 |
 
-## Coverage by tactic (covered vs gap)
+## Content mapped by tactic
 
-**5 of 12** ATT&CK-for-ICS tactics have at least one detection. Tactics are stable (`CLAUDE.md`); the gaps below are candidate areas for new detections, not missing technique IDs.
+**5 of 12** ATT&CK-for-ICS tactics have at least one detection. This counts content mappings, not measured detection effectiveness or complete coverage of a tactic.
 
 | Tactic | ID | Detections | Coverage |
 |---|---|---|---|
-| Initial Access | TA0108 | — | ⬜ gap |
-| Execution | TA0104 | S1 | ✅ covered |
-| Persistence | TA0110 | — | ⬜ gap |
-| Privilege Escalation | TA0111 | — | ⬜ gap |
-| Evasion | TA0103 | — | ⬜ gap |
-| Discovery | TA0102 | M2, M3, D4, S3, X1 | ✅ covered |
-| Lateral Movement | TA0109 | S2 | ✅ covered |
-| Collection | TA0100 | — | ⬜ gap |
-| Command and Control | TA0101 | — | ⬜ gap |
-| Inhibit Response Function | TA0107 | D1, D2 | ✅ covered |
-| Impair Process Control | TA0106 | M1, D3 | ✅ covered |
-| Impact | TA0105 | — | ⬜ gap |
+| Initial Access | TA0108 | — | no mapping |
+| Execution | TA0104 | S1 | mapped |
+| Persistence | TA0110 | — | no mapping |
+| Privilege Escalation | TA0111 | — | no mapping |
+| Evasion | TA0103 | — | no mapping |
+| Discovery | TA0102 | M2, M3, D4, S3, X1 | mapped |
+| Lateral Movement | TA0109 | S2 | mapped |
+| Collection | TA0100 | — | no mapping |
+| Command and Control | TA0101 | — | no mapping |
+| Inhibit Response Function | TA0107 | D1, D2 | mapped |
+| Impair Process Control | TA0106 | M1, D3 | mapped |
+| Impact | TA0105 | — | no mapping |

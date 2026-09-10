@@ -16,7 +16,7 @@ non-trivial work.
    **files-only**; optional Tier-2 Zeek fidelity check.
 3. **Engine policy:** Sigma-first; Zeek when real state is needed; Suricata
    optional; every detection documents its engine choice + rationale.
-4. **Two-tier execution:** Tier 1 (zero-dep Sigma-over-JSON) is the headline path;
+4. **Two-tier execution:** Tier 1 (Python-packaged Sigma-over-JSON) is the headline path;
    Tier 2 (containerized Zeek/Suricata) validates the rest.
 5. **Build order:** Modbus end-to-end → harden + CI → DNP3 → S7 → coverage polish
    + contributor guides + optional honeypot.

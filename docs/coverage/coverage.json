@@ -2,6 +2,7 @@
   "schema": "substation-coverage/v1",
   "generated_by": "python -m substation.coverage",
   "domain": "ics-attack",
+  "interpretation": "Content mappings only; no production effectiveness claim.",
   "detection_count": 11,
   "tactics_total": 12,
   "tactics_covered": 5,

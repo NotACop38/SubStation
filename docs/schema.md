@@ -225,7 +225,7 @@ per the parser):
 > `16-Bit Analog Input`, `16-Bit Analog Output Block`, `32-Bit Analog Output Block`).
 > The simulator derives the DNP3 object **group/variation**
 > for the PCAP from that same string, so a Zeek decode of the PCAP resolves the
-> identical `object_type` — the JSON and PCAP cannot drift (PRD §6.1). On a response
+> identical `object_type` — both outputs use this mapping, with independent parity checks required (PRD §6.1). On a response
 > `object_count` **must equal** the range span (`range_high − range_low + 1`); an
 > inconsistent count is rejected at build time rather than emitted. Ranges and
 > control `index_number` are carried on the wire as 2-byte fields, so values up to
@@ -397,6 +397,13 @@ An S7 Read-SZL request and an unauthorized PLC Stop (one line each):
 More live, validated S7 examples:
 [`tests/data/events/s7/valid.jsonl`](../tests/data/events/s7/valid.jsonl).
 
+## Input boundaries
+
+Detection validates every JSONL record before evaluating rules. Non-object
+records, duplicate keys and non-finite numbers are errors. A malformed or missing
+input is not a quiet detection result. Validation of a directory containing no
+JSONL files fails.
+
 ## Validation (the gate)
 
 `make ci` runs the **`schema`** step, which validates committed golden events
@@ -410,8 +417,8 @@ python -m substation.schema path/to/run.jsonl # validate one file
 
 Any event that violates the schema makes the step — and therefore `make ci` —
 fail (`PRD.md` §6.3). Validation is **dependency-free**: `substation.schema` ships
-a small validator for the JSON-Schema subset this contract uses, so the Tier-1
-headline path needs only Python (`PRD.md` §6.2). The schema file is standard
+a small validator for the JSON-Schema subset this contract uses, without adding a JSON Schema library. Other Tier-1 components still require
+scapy, pySigma and PyYAML. The schema file is standard
 draft-2020-12 and also works with any external validator (e.g. `jsonschema`).
 
 ## Protocol coverage
@@ -426,5 +433,6 @@ three.
 Tier-1 detections are authored as Sigma and evaluated over this `.jsonl` by
 walking the pySigma-parsed condition AST in pytest — no SIEM required
 ([`spikes/03-sigma-offline-evaluation.md`](spikes/03-sigma-offline-evaluation.md)).
-Because `detail` mirrors ICSNPP, the same rules compile to production Zeek/SIEM
-backends unchanged.
+Rules target the Substation contract. Native Zeek logs must be normalized and
+joined where necessary before evaluating these rules. No sensor-to-Substation
+adapter or independently qualified SIEM backend is shipped.
