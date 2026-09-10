@@ -154,3 +154,22 @@ def test_rules_exported_and_cli_policy_hits_are_identical(tmp_path: Path, capsys
     assert main(["detect", str(path), "--policy", str(source)]) == 0
     output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert {(row["detection_id"], row["event_index"]) for row in output} == expected
+
+
+def test_aliases_are_rejected_before_yaml_object_construction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import substation.policy as policy_module
+
+    source = tmp_path / "policy.yaml"
+    # Small synthetic merge fixture; never construct an expanded alias graph.
+    source.write_text(
+        "first: &first {name: example}\nsecond: &second {<<: [*first, *first]}\n<<: *second\n"
+    )
+
+    def construction_must_not_run(_text: str) -> object:
+        raise AssertionError("alias expansion reached the object constructor")
+
+    monkeypatch.setattr(policy_module, "safe_load_strict", construction_must_not_run)
+    with pytest.raises(SchemaValidationError, match="anchors or aliases"):
+        policy_module.load_policy(source)

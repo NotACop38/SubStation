@@ -40,6 +40,9 @@ between these revisions only affect the upstream README.
 
 ## Site permissions and portable Sigma
 
+Profiles require explicit values; YAML anchors and aliases are rejected before
+object construction to prevent expansion beyond the input byte limit.
+
 Start with `detections/policies/bundled-demo.yaml`, replace the example addresses
 and permissions, then select it explicitly. The default demo retains its existing
 example rules. Site profiles require all five channel lists; an empty list permits

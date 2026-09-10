@@ -70,6 +70,13 @@ def load_policy(path: str | Path) -> dict[str, Any]:
     """Validate a bounded profile; absent permissions are explicit empty lists."""
     try:
         text = "".join(raw for _, raw in iter_jsonl_lines(path, max_bytes=262144, max_lines=10000))
+        # Merge aliases can expand beyond the byte cap. Reject them before
+        # constructing objects; site permissions use explicit lists.
+        if any(
+            isinstance(token, (yaml.tokens.AnchorToken, yaml.tokens.AliasToken))
+            for token in yaml.scan(text)
+        ):
+            raise ValueError("site policies do not support YAML anchors or aliases")
         data = _mapping(safe_load_strict(text), {"schema", "name", "modbus", "channels"})
         if data["schema"] != "substation-site-policy/v1":
             raise ValueError("unsupported policy schema")
