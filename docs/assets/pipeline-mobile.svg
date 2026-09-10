@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="530" viewBox="0 0 360 530" role="img" aria-labelledby="title desc">
+  <title id="title">Two paths from one scenario</title>
+  <desc id="desc">One YAML scenario model emits JSONL for Tier 1 Sigma tests and PCAP for Tier 2 Zeek/ICSNPP field checks and stateful rules. Tier 2 runs separately from the default demo.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0L10 5L0 10" fill="none" stroke="#86a6a0" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="360" height="530" rx="6" fill="#102b2b"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" text-anchor="middle">
+    <rect x="24" y="20" width="312" height="82" rx="4" fill="#193b38" stroke="#527c72"/>
+    <text x="180" y="54" fill="#f2efe6" font-size="24" font-weight="600">Scenario YAML</text>
+    <text x="180" y="83" fill="#b6ccc5" font-size="20">One model, two emitters</text>
+    <path d="M180 102V120H16V416H38M16 226H38" fill="none" stroke="#86a6a0" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M28 416H38" stroke="#86a6a0" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="46" y="142" width="290" height="174" rx="4" fill="#163632" stroke="#527c72"/>
+    <text x="191" y="179" fill="#76c6b3" font-size="18" font-weight="600">TIER 1 · PYTHON</text>
+    <text x="191" y="233" fill="#f2efe6" font-size="25" font-weight="600">JSONL → Sigma rules</text>
+    <text x="191" y="278" fill="#b6ccc5" font-size="20">Hits + ATT&amp;CK map</text>
+    <rect x="46" y="336" width="290" height="174" rx="4" fill="#26372f" stroke="#84724e"/>
+    <text x="191" y="373" fill="#e3c48c" font-size="18" font-weight="600">TIER 2 · ZEEK / ICSNPP</text>
+    <text x="191" y="413" fill="#f2efe6" font-size="25" font-weight="600">PCAP</text>
+    <text x="191" y="447" fill="#f2efe6" font-size="22">Fields + stateful rules</text>
+    <text x="191" y="483" fill="#d4c8ae" font-size="18">Separate verification run</text>
+  </g>
+</svg>
