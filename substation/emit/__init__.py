@@ -2,7 +2,8 @@
 
 :func:`write_artifacts` builds the shared per-protocol event list **once** from the
 scenario, then hands the same list to the JSON emitter and the PCAP emitter — the
-LOCKED design that guarantees the two artifacts can never drift. Each supported
+LOCKED design that reduces duplicated scenario logic. Independent parser checks
+are still required to catch disagreements between the emitters. Each supported
 protocol contributes a ``(build_events, event_to_dict, write_pcap)`` triple; the JSON
 write/validate path is shared. Both emitters run inside
 :func:`~substation.emit.guard.files_only_guard`, enforcing the non-negotiable

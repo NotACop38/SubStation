@@ -1,0 +1,34 @@
+name: s7-field-boundaries
+description: Synthetic S7 operation and field boundaries for independent parser comparison.
+protocol: s7comm
+label: benign
+actors:
+  - {id: ews, role: ews, host: 192.0.2.10}
+  - {id: plc, role: plc, host: 192.0.2.50, port: 102}
+exchanges:
+  - {source: ews, target: plc, function: SetupCommunication}
+  - {source: ews, target: plc, function: ReadVariable}
+  - {source: ews, target: plc, function: WriteVariable}
+  - {source: ews, target: plc, function: PlcStop}
+  - {source: ews, target: plc, function: PlcControl, params: {service: P_PROGRAM}}
+  - {source: ews, target: plc, function: PlcControl, params: {service: _MODU}}
+  - {source: ews, target: plc, function: PlcControl, params: {service: _GARB}}
+  - {source: ews, target: plc, function: PlcControl, params: {service: _INSE}}
+  - {source: ews, target: plc, function: PlcControl, params: {service: _DELE}}
+  - {source: ews, target: plc, function: RequestDownload, params: {block_type: '08', block_number: '00000'}}
+  - {source: ews, target: plc, function: DownloadBlock, params: {block_type: '0F', block_number: '99999'}}
+  - {source: ews, target: plc, function: DownloadEnded}
+  - {source: ews, target: plc, function: StartUpload}
+  - {source: ews, target: plc, function: Upload}
+  - {source: ews, target: plc, function: EndUpload}
+  - {source: ews, target: plc, function: ReadSZL, params: {szl_id: 0, szl_index: 0}}
+  - {source: ews, target: plc, function: ReadSZL, params: {szl_id: 65535, szl_index: 65535}}
+  - {source: ews, target: plc, function: ReadSZL, params: {szl_id: 4659, szl_index: 255}}
+  - {source: ews, target: plc, function: ListBlocks}
+  - {source: ews, target: plc, function: ListBlocksOfType}
+  - {source: ews, target: plc, function: GetBlockInfo}
+  - {source: ews, target: plc, function: Explore, params: {version: 1}}
+  - {source: ews, target: plc, function: CreateObject, params: {version: 2}}
+  - {source: ews, target: plc, function: SetVariable, params: {version: 3}}
+  - {source: ews, target: plc, function: DeleteObject}
+exercises: {}

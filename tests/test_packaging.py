@@ -38,12 +38,18 @@ def test_sdist_rebuilds_wheel_with_detection_content(tmp_path: Path) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data.read())
     source = next(unpack.iterdir())
-    # The source distribution must retain the complete offline DNP3 gate.
+    # The source distribution must retain the protocol/backend verification gates.
     for relative in (
         "scripts/verify/dnp3-observe.zeek",
         "scripts/verify/dnp3.py",
         "tests/data/fidelity/dnp3/boundaries.yaml",
         "tests/data/fidelity/dnp3/no-responses.yaml",
+        "scripts/verify/build_s7.py",
+        "scripts/s7_examples.py",
+        "scripts/verify/patches/icsnpp-s7comm-bounds.patch",
+        "scripts/verify/s7.py",
+        "scripts/verify/sigma_backend.py",
+        "tests/data/fidelity/s7/operations.yaml",
     ):
         assert (source / relative).read_bytes() == (_REPO / relative).read_bytes()
     build(source, "--wheel", tmp_path / "wheel")

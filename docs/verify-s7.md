@@ -10,12 +10,11 @@ Releases require complete Tier 2 unless explicitly waived with `--no-verify` or
 make verify VERIFY_ARGS=--require-complete
 ```
 
-The runner compares **request source/destination/function counts** between the
-JSON model and independently parsed PCAPs, then runs the Zeek detections' fire and
-quiet scenarios. These checks catch dropped messages, function mismatches and
-rule regressions. They do not compare every address, value, response, timing edge
-or session behavior. The simulator does not emulate a PLC process or encrypted
-S7 traffic.
+The runner compares core Modbus transaction fields, DNP3 message/object/control
+fields, and S7 COTP frames and modeled request/response details against independent
+parsers, then runs the Zeek detections' fire and quiet scenarios. Unsupported
+Modbus functions retain request-count checks. Timing, complete session semantics,
+PLC process behavior and encrypted S7 traffic remain outside this qualification.
 
 ## Docker
 
@@ -28,8 +27,9 @@ export SUBSTATION_ZEEK_S7_IMAGE=your-registry/zeek-icsnpp-s7comm:tag
 make verify VERIFY_ARGS=--require-complete
 ```
 
-Pin that image's digest when recording reproducible qualification. The plugin
-must appear in `zeek -N`, and `zeek --parse-only -e '@load icsnpp/s7comm'` must
+Use the upstream commit and reviewed bounds patch below when building the image;
+pin its digest when recording reproducible qualification. The plugin must appear
+in `zeek -N` with `substation-bounds-v1`, and `zeek --parse-only -e '@load icsnpp/s7comm'` must
 succeed. A plugin name alone is insufficient. Analysis containers have no network
 access; first-time image pulls and parser-source fetches require network access.
 
@@ -41,30 +41,45 @@ A host with Zeek installed can run the same checks without Docker:
 make verify VERIFY_ARGS='--native --require-complete'
 ```
 
-Build the S7 plugin against the installed Zeek version, following its upstream
-build instructions. For a local build, expose the plugin and scripts using
-`ZEEK_PLUGIN_PATH` and `ZEEKPATH`. For example, substituting your actual paths:
+The pinned upstream parser has a reproduced decimal-buffer defect and an unchecked
+filename byte read. Build with the [reviewed bounds patch](spikes/09-s7-field-fidelity.md)
+before qualifying field fidelity. With Git, CMake, a C++ compiler and native Zeek
+development headers installed, use a new build directory:
 
 ```sh
-export ZEEK_PLUGIN_PATH=/path/to/icsnpp-s7comm/build
-export ZEEKPATH="/path/to/icsnpp-s7comm/scripts:$(zeek-config --zeekpath)"
+S7_BUILD_ROOT="$(mktemp -d)/qualified"
+python scripts/verify/build_s7.py --out "$S7_BUILD_ROOT"
+export ZEEK_PLUGIN_PATH="$S7_BUILD_ROOT/build"
+export ZEEKPATH="$S7_BUILD_ROOT/source/scripts:$(zeek-config --zeekpath)"
+make ci
 make verify VERIFY_ARGS='--native --require-complete'
 ```
 
+The helper fetches a fixed upstream commit. Supply `--source /path/to/clean/checkout`
+at that commit to avoid downloading. Existing output directories are rejected.
+On this macOS host, Zeek's generator binaries could not write under Documents;
+the temporary build directory above worked. `provenance.json` records the source
+commit, patch hash and native Zeek version. Keep it with qualification evidence.
+
 The runner prints the host version; native results do not qualify the pinned
 Docker image. The September 2026 review used Zeek **8.2.2** and ICSNPP S7comm
-**1.3.0** at commit `7ebeb03a0f954541369361651d1c27d09a64b5a3`. All three protocols'
-request-count checks and all four Zeek rules passed: **41 passes, 0 failures**.
-The sole optional skip was Suricata, for which no rules are shipped.
+**1.3.0** at commit `7ebeb03a0f954541369361651d1c27d09a64b5a3`. The
+[current review](reviews/2026-09-10-validation-closeout.md) records the full gate
+results. Suricata is optional because no rules are shipped.
 
 ## Evidence boundary
 
-The S7 parser checks exposed malformed synthetic download/User-Data messages and
-an absent subfunction represented by `0xff`; those defects are fixed. They also
-showed that matching function counts is not full field fidelity: S7 PDU reference
-values in the tested parser output differed from the correctly encoded wire
-reference. Detail-field equivalence remains unqualified. Preserve this boundary
-when extending schemas or adapting real sensor logs.
+The [S7 field comparison](spikes/09-s7-field-fidelity.md) checks direction, ports,
+connection order, COTP, errors, SZL/transfer details and S7-plus headers. Its
+dedicated fixture covers every modeled operation. The native pytest checks also
+cover all SZL low-byte names and PDU references crossing 255→256; run `make ci`
+with the same native plugin environment to include them.
+
+ICSNPP 1.3.0 reverses PDU-reference bytes relative to the wire and Wireshark.
+The oracle requires that exact known transformation; it does not change the
+wire/schema or accept multiple representations. Other parser versions require
+review. This does not qualify a general sensor importer, timing, process values,
+valid programs, complete transfer sessions or S7-plus integrity/encryption.
 
 Field references:
 

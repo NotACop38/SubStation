@@ -7,8 +7,9 @@ Tier 1 evaluates Sigma over the emitted ``.jsonl`` in-process, Tier 2 runs the
 
   1. **Scoped field parity.** Core Modbus transactions compare spans, values and
      outcomes. DNP3 parser callbacks compare message direction/order, functions,
-     IIN and object/control details. Other Modbus and S7 paths compare request
-     identities/counts. Timing and full protocol/session semantics remain unqualified.
+     IIN and object/control details. S7 compares COTP frames, requests, responses
+     and modeled detail fields. Remaining Modbus paths compare request counts.
+     Timing and full protocol/session semantics remain unqualified.
   2. **Zeek detections in their real engine.** Every Tier-2 Zeek detection in the
      registry is executed by real Zeek over its fire and quiet scenarios; the
      runner asserts the SAME fire/quiet behavior the Tier-1 contract asserts for
@@ -299,16 +300,6 @@ def _modbus_log_tuples(logdir: Path) -> Counter[tuple[str, str, str]]:
     return c
 
 
-def _s7_log_tuples(logdir: Path) -> Counter[tuple[str, str, str]]:
-    """Application request identities across the S7comm and S7-plus logs."""
-    return Counter(
-        (row.get("id.orig_h", ""), row.get("id.resp_h", ""), row.get("function_name", ""))
-        for name in ("s7comm.log", "s7comm_plus.log")
-        for row in read_zeek_log(logdir, name)
-        if row.get("is_orig") == "T"
-    )
-
-
 def corpus_check(results: Results) -> None:
     """Reparse independent captures and compare the committed sensor observations."""
     from substation.corpus import evaluate_corpus
@@ -356,7 +347,6 @@ def fidelity_check(proto: str, results: Results) -> None:
     if proto == "s7comm":
         mounts = []
         loads = ["icsnpp/s7comm"]
-        log_tuples = _s7_log_tuples
     else:
         scripts = ensure_icsnpp(proto)
         if scripts is None:
@@ -364,7 +354,6 @@ def fidelity_check(proto: str, results: Results) -> None:
             return
         mounts = [(scripts, f"/icsnpp-{proto}")]
         loads = [f"/icsnpp-{proto}"]
-        log_tuples = _modbus_log_tuples
         if proto == "dnp3":
             mounts.append((_REPO_ROOT / "scripts/verify", "/verification"))
             loads.append("/verification/dnp3-observe.zeek")
@@ -377,6 +366,8 @@ def fidelity_check(proto: str, results: Results) -> None:
             _REPO_ROOT / "tests/data/fidelity/dnp3" / name
             for name in ("boundaries.yaml", "no-responses.yaml")
         ]
+    elif proto == "s7comm":
+        scenario_files += sorted((_REPO_ROOT / "tests/data/fidelity/s7").glob("*.yaml"))
     for scenario_file in scenario_files:
         with tempfile.TemporaryDirectory() as td:
             pcap, events = emit(scenario_file, Path(td))
@@ -390,6 +381,30 @@ def fidelity_check(proto: str, results: Results) -> None:
                 logs = run_zeek(pcap, loads, mounts)
             except RuntimeError as exc:
                 results.fail(f"fidelity[{proto}] {scenario_file.name}: {exc}")
+                continue
+            if proto == "s7comm":
+                from scripts.verify.s7 import LOGS, compare_s7_events
+
+                try:
+                    differences = compare_s7_events(
+                        events, {name: read_zeek_log(logs, name) for name in LOGS}
+                    )
+                    if read_zeek_log(logs, "weird.log"):
+                        differences.append("parser produced weird.log observations")
+                    if differences:
+                        results.fail(
+                            f"fidelity[s7comm] {scenario_file.name}: " + "; ".join(differences[:8])
+                        )
+                    else:
+                        results.ok(
+                            f"fidelity[s7comm] {scenario_file.name}: {len(events)} messages "
+                            "match COTP, direction/order, headers and modeled detail fields"
+                        )
+                        compared += 1
+                except (KeyError, TypeError, ValueError) as exc:
+                    results.fail(f"fidelity[s7comm] {scenario_file.name}: {exc}")
+                finally:
+                    shutil.rmtree(logs, ignore_errors=True)
                 continue
             if proto == "dnp3":
                 from scripts.verify.dnp3 import compare_dnp3_events
@@ -444,7 +459,7 @@ def fidelity_check(proto: str, results: Results) -> None:
                     shutil.rmtree(logs, ignore_errors=True)
                 compared += 1
                 continue
-            got = log_tuples(logs)
+            got = _modbus_log_tuples(logs)
             shutil.rmtree(logs, ignore_errors=True)
             compared += 1
             # Per-message fidelity: the (src,dst,func) request *counts* must match
@@ -625,8 +640,8 @@ def _s7_plugin_probe(image: str) -> tuple[bool, list[str]]:
     """Probe ``image`` for a usable icsnpp-s7comm analyzer.
 
     Returns ``(available, load_args)``. Availability requires both the plugin
-    appearing in ``zeek -N`` *and* a loadable script path — claiming "available"
-    without usable scripts caused silent empty S7 runs.
+    appearing in ``zeek -N`` with the reviewed bounds patch *and* a loadable
+    script path. Claiming availability without usable scripts caused empty runs.
     """
     prefix = (
         [_NATIVE_ZEEK]
@@ -634,7 +649,10 @@ def _s7_plugin_probe(image: str) -> tuple[bool, list[str]]:
         else ["docker", "run", "--rm", "--network", "none", image, "zeek"]
     )
     probe = subprocess.run([*prefix, "-N"], capture_output=True, text=True, timeout=30)
-    if probe.returncode != 0 or "s7comm" not in probe.stdout.lower():
+    if probe.returncode != 0 or not any(
+        "s7comm" in line.lower() and "substation-bounds-v1" in line
+        for line in probe.stdout.splitlines()
+    ):
         return False, []
     load_ok = subprocess.run(
         [*prefix, "--parse-only", "-e", "@load icsnpp/s7comm"],
@@ -698,8 +716,8 @@ def main() -> int:
         fidelity_check("s7comm", results)
     else:
         results.skip(
-            "fidelity[s7comm]: needs a Zeek image with a loadable icsnpp-s7comm "
-            "plugin (docs/verify-s7.md)"
+            "fidelity[s7comm]: needs a loadable icsnpp-s7comm plugin with the "
+            "substation-bounds-v1 patch (docs/verify-s7.md)"
         )
 
     print("\n== Zeek detections (real engine, fire/quiet) ==")

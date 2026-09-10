@@ -90,7 +90,10 @@ new directory. Export and `detect --policy` use the same compiled rule bytes.
 Rule IDs derive from the base ID and profile digest; metadata records both policy
 and source rule hashes. Permissions use portable equality/range selections, with
 bounded quantity enumeration to enforce complete spans without custom fields.
-Backend translation and field mapping still require separate qualification.
+`make verify-sigma` compares authored and bundled-policy export hits with the
+official SQLite backend. See [its tested table contract and reproduced NULL and
+expression-depth limits](spikes/10-sigma-backend-qualification.md). Other policies,
+field mappings and deployment backends still require separate qualification.
 
 ## Independent corpus
 
@@ -110,8 +113,8 @@ positives under a deny-policy counterfactual; M2 has one exception indicator.
 This is deliberately small test evidence. It does not measure production rates,
 validate DNP3/S7 imports or provide an external corpus for stateful Zeek rules.
 Eight core Modbus scenarios receive field comparisons; the illegal-function
-scenario and S7 remain explicitly scoped to request tuple/count comparisons.
-DNP3 now has message and detail comparisons, described below.
+scenario retains request tuple/count comparisons. DNP3 now has message and detail
+comparisons, described below; S7 has [modeled request/response field comparisons](spikes/09-s7-field-fidelity.md).
 Packet timing, all protocol extensions and actual device behavior remain unqualified.
 
 ## DNP3 fixture fidelity
@@ -157,7 +160,7 @@ closure before updating the lock and `requirements.metadata.json`. Review those
 files together. A new Python/OS combination may need regenerated metadata and
 additional version pins; hash mode fails when an unpinned dependency is required.
 
-The offline CycloneDX builder lists all 53 locked packages and complete runtime/dev
+The offline CycloneDX builder lists all 54 locked packages and complete runtime/dev
 relationships for the recorded marker environment, including explicit leaves.
 It evaluates markers and extras, rejects missing/version-conflicting dependencies,
 and distinguishes unreachable locked inventory from the resolved graph. Selected

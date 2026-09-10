@@ -4,6 +4,7 @@ recursive-include detections *.yaml *.yml *.md *.zeek *.rules *.suricata
 recursive-include scenarios *.yaml
 recursive-include scripts *.py
 recursive-include scripts/verify *.zeek
+recursive-include scripts/verify/patches *.patch
 recursive-include scripts/security *.json
 recursive-include tests/data *.jsonl
 recursive-include tests/data/fidelity *.yaml

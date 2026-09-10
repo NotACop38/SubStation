@@ -2,8 +2,8 @@
 
 :func:`build_events` turns a loaded :class:`~substation.scenarios.Scenario` into an
 ordered list of :class:`S7Event` — the **single intermediate model both emitters
-consume**, so the PCAP and JSON artifacts cannot drift (the LOCKED core design
-principle, PRD §6.1). This mirrors ``substation.protocols.dnp3`` exactly; only the
+consume** (the LOCKED core design principle, PRD §6.1). Independent parsing checks
+whether those emitters agree. This mirrors ``substation.protocols.dnp3``; only the
 protocol semantics differ.
 
 This module is pure Python and protocol-semantic only. :func:`event_to_dict` maps an
@@ -114,7 +114,7 @@ S7COMM_PLUS_FUNCTIONS: dict[int, str] = {
     0x054C: "Get Multi Variables",
 }
 
-# SZL-ID meanings (s7comm_szl_id), keyed by szl_id & 0xff. Subset our scenarios use.
+# SZL-ID meanings (s7comm_szl_id), keyed by szl_id & 0xff; ICSNPP S7comm 1.3.0.
 SZL_ID_NAMES: dict[int, str] = {
     0x00: "List of all the SZL-IDs of a module",
     0x11: "Module identification",
@@ -122,10 +122,35 @@ SZL_ID_NAMES: dict[int, str] = {
     0x13: "User memory areas",
     0x14: "System areas",
     0x15: "Block types",
+    0x16: "Priority classes",
+    0x17: "List of the permitted SDBs with a number < 1000",
+    0x18: "Maximum S7-300 I/O configuration",
+    0x19: "Status of the module LEDs",
     0x1C: "Component Identification",
+    0x21: "Interrupt / error assignment",
+    0x22: "Interrupt status",
+    0x23: "Priority classes",
     0x24: "Modes",
+    0x25: "Assignment between process image partitions and OBs",
+    0x31: "Communication capability parameters",
+    0x32: "Communication status data",
+    0x33: "Diagnostics: device logon list",
+    0x37: "Ethernet - Details of a Module",
+    0x71: "H CPU group information",
+    0x74: "Status of the module LEDs",
+    0x75: "Switched DP slaves in the H-system",
+    0x81: "Start information list",
+    0x82: "Start event list",
     0x91: "Module status information",
+    0x92: "Rack / station status information",
+    0x94: "Rack / station status information",
+    0x95: "Extended DP master system information",
+    0x96: "Module status information, PROFINET IO and PROFIBUS DP",
     0xA0: "Diagnostic buffer of the CPU",
+    0xB1: "Module diagnostic information (data record 0)",
+    0xB2: "Module diagnostic information (data record 1), geographical address",
+    0xB3: "Module diagnostic information (data record 1), logical address",
+    0xB4: "Diagnostic data of a DP slave",
 }
 
 # Block types (s7comm_block_types), keyed by the 2-char hex code ICSNPP logs.
@@ -201,8 +226,8 @@ class S7Event:
 
     A COTP handshake expands to two events (CR then CC); an application exchange
     expands to a request event and a matched response event sharing a connection
-    (``uid`` + 4-tuple). Both emitters read the very same objects, which is what
-    guarantees PCAP and JSON cannot drift. ``detail`` is the JSON-shaped detail dict;
+    (``uid`` + 4-tuple). Both emitters read the same objects; independent parser
+    checks verify their agreement. ``detail`` is the JSON-shaped detail dict;
     the remaining fields are the byte-level hints the PCAP encoder rebuilds the wire
     PDU from (both derived from one computation in :func:`build_events`).
     """
@@ -282,14 +307,10 @@ def _opt_block_number(params: Mapping[str, object], where: str) -> str:
     block_number = _opt_str(params, "block_number", where, "00001")
     if not re.fullmatch(r"[0-9]+", block_number):
         raise S7Error(f"{where}.block_number: expected ASCII decimal digits")
-    # The Request/Download Block filename is encoded on the wire as
-    # _<2-char-block-type><block-number>P prefixed by one length byte.
-    max_block_number_len = 255 - len("_00P")
-    if len(block_number) > max_block_number_len:
-        raise S7Error(
-            f"{where}.block_number: too long for S7 block filename "
-            f"({len(block_number)} > {max_block_number_len} characters)"
-        )
+    # The supported filename has fixed offsets: _<type:2><number:5>P.
+    # A length octet does not make the block-number field variable-width.
+    if len(block_number) != 5:
+        raise S7Error(f"{where}.block_number: expected exactly five ASCII decimal digits")
     return block_number
 
 
@@ -357,7 +378,7 @@ def build_events(scenario: Scenario) -> list[S7Event]:
     Each (master, plc) connection opens with a COTP Connection Request / Confirm
     handshake (emitted once, on first use). Each scenario exchange then becomes a
     request event plus a matched response event. Both emitters consume the returned
-    list verbatim, so the PCAP and JSON cannot drift (PRD §6.1).
+    list; independent parsing checks output agreement (PRD §6.1).
     """
     if scenario.protocol is not Protocol.S7COMM:
         raise S7Error(f"build_events: expected an s7comm scenario, got {scenario.protocol.value}")
@@ -463,7 +484,12 @@ def _append_job(
         subfunction_code = plc_control
         subfunction_name = PLC_CONTROL_SERVICES[plc_control]
     if function in _UPLOAD_DOWNLOAD_FUNCS:
-        upload_download = {"rosctr": ROSCTR_NAMES[ROSCTR_JOB], "function_name": func_name}
+        upload_download = {
+            "rosctr": ROSCTR_NAMES[ROSCTR_JOB],
+            "function_name": func_name,
+            "function_status": "0x00",
+            "session_id": 256,
+        }
         if function in _DOWNLOAD_BLOCK_FUNCS:
             block_type_code = _opt_str(params, "block_type", where, "0A").upper()
             if block_type_code not in BLOCK_TYPES:
@@ -514,13 +540,18 @@ def _append_job(
     )
 
     # Matched ACK-Data response (rosctr 0x03). PLC Control's subfunction is request-only.
-    resp_ud = None
+    resp_ud: dict[str, Any] | None = None
     if upload_download is not None:
         resp_ud = {
             "rosctr": ROSCTR_NAMES[ROSCTR_ACK_DATA],
             "function_name": func_name,
-            "function_status": "0x00",
         }
+        if function in (0x1B, 0x1D, 0x1E):
+            resp_ud["blocklength"] = 0
+        if function in (0x1D, 0x1E):
+            resp_ud["function_status"] = "0x00"
+        if function == 0x1D:
+            resp_ud["session_id"] = 1
     resp_ts = ts + RESPONSE_DELAY
     resp_detail = _s7_detail(
         rosctr=ROSCTR_ACK_DATA,
@@ -573,7 +604,9 @@ def _append_userdata(
     req_read_szl = None
     resp_read_szl = None
     if is_read_szl:
-        req_read_szl = _read_szl_detail(szl_id, szl_index, method="Request")
+        req_read_szl = _read_szl_detail(
+            szl_id, szl_index, method="Request", return_code="0xff", return_code_name="Success"
+        )
         resp_read_szl = _read_szl_detail(
             szl_id, szl_index, method="Response", return_code="0xff", return_code_name="Success"
         )
@@ -619,6 +652,7 @@ def _append_userdata(
         subfunction_code=f"0x{subfunction:02x}",
         subfunction_name=subfunction_name,
         read_szl=resp_read_szl,
+        response=True,
     )
     events.append(
         S7Event(
@@ -712,6 +746,7 @@ def _s7_detail(
     subfunction_name: str | None = None,
     read_szl: dict[str, Any] | None = None,
     upload_download: dict[str, Any] | None = None,
+    response: bool = False,
 ) -> dict[str, Any]:
     """Build the s7comm.log-aligned detail dict (omitting absent optional fields)."""
     detail: dict[str, Any] = {
@@ -729,6 +764,9 @@ def _s7_detail(
         detail["read_szl"] = read_szl
     if upload_download is not None:
         detail["upload_download"] = upload_download
+    if rosctr == ROSCTR_ACK_DATA or response:
+        detail["error_class"] = "No error"
+        detail["error_code"] = "0x00"
     return detail
 
 

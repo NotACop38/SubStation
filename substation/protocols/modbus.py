@@ -2,8 +2,8 @@
 
 :func:`build_events` turns a loaded :class:`~substation.scenarios.Scenario` into
 an ordered list of :class:`ModbusEvent` — the **single intermediate model both
-emitters consume**, so the PCAP and JSON artifacts cannot drift (the LOCKED core
-design principle, PRD §6.1: one scenario model drives both emitters).
+emitters consume** (the LOCKED core design principle, PRD §6.1). Independent
+parser checks verify that the two emitted representations agree.
 
 This module is pure Python and protocol-semantic only: it carries *what each
 Modbus message means*. The JSON emitter (:mod:`substation.emit.json_emitter`)
@@ -198,8 +198,7 @@ class ModbusEvent:
 
     A scenario *exchange* expands to two events (request then matched response)
     sharing a connection (``uid`` + 4-tuple) and transaction id (``tid``). Both
-    emitters read the very same objects, which is what guarantees PCAP and JSON
-    cannot drift.
+    emitters read the same objects; independent parser checks verify agreement.
     """
 
     ts: float

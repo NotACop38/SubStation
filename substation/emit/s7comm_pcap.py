@@ -43,7 +43,7 @@ def _cotp_cr_cc(event: S7Event) -> bytes:
     return _tpkt(cotp)
 
 
-def _s7_header(rosctr: int, pdu_ref: int, param: bytes, data: bytes, *, is_response: bool) -> bytes:
+def _s7_header(rosctr: int, pdu_ref: int, param: bytes, data: bytes) -> bytes:
     """Assemble the S7comm header + parameter + data (10- or 12-byte header)."""
     header = (
         bytes([_S7_PROTO_ID, rosctr])
@@ -146,7 +146,6 @@ def _s7comm_pdu(event: S7Event) -> bytes:
         int(event.pdu_reference or 0),
         param,
         data,
-        is_response=not event.is_orig,
     )
     return _tpkt(_COTP_DT + s7)
 

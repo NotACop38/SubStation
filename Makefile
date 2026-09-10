@@ -11,7 +11,7 @@ SRC := substation tests
 .DEFAULT_GOAL := help
 
 .PHONY: help check-python dev ci format format-check lint type test schema coverage-build \
-        coverage-check security demo demo-gif demo-cast verify release hooks clean corpus lock
+        coverage-check security demo demo-gif demo-cast verify verify-sigma release hooks clean corpus lock
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -59,6 +59,7 @@ test: check-python ## Run unit tests (pytest)
 
 schema: ## Validate emitted .jsonl events against the frozen event-log JSON Schema
 	$(PY) -m substation.schema
+	$(PY) scripts/s7_examples.py
 
 coverage-build: ## Generate the ATT&CK-for-ICS coverage map + Navigator layer (from the registry)
 	$(PY) -m substation.coverage --out docs/coverage   # the committed, published snapshot
@@ -83,6 +84,9 @@ demo: check-python ## Tier-1 one-command demo: generate -> detect -> report (Pyt
 
 corpus: check-python ## Check attributed corpus hashes and labeled detection metrics
 	$(PY) -m substation.cli evaluate-corpus tests/data/corpus/modbus
+
+verify-sigma: check-python ## Compare authored/exported Sigma hits with the official SQLite backend
+	$(PY) scripts/verify/sigma_backend.py
 
 demo-gif: ## Render the embedded demo GIF headlessly (deterministic; no TTY needed)
 	$(PY) scripts/render-demo-gif.py
