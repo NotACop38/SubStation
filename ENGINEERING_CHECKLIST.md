@@ -10,7 +10,7 @@
 ## Current qualification (2026-09-10)
 
 Historical phase notes below describe the implementation sequence. The
-[current review](docs/reviews/2026-09-09-codebase-review.md) records the corrected
+[current review](docs/reviews/2026-09-10-validation-closeout.md) records the corrected
 evidence and takes precedence over earlier launch claims.
 
 - [x] Complete M1 destination/service/unit/register-span policy; DNP3/S7 destination/service scoping; S1 service discrimination.
@@ -24,11 +24,13 @@ evidence and takes precedence over earlier launch claims.
 - [x] Compile reviewed site permissions into portable Sigma shared by export and detection.
 - [x] Add an attributed external Modbus regression corpus, payload/hash checks and labeled confusion counts.
 - [x] Verify dependency artifact hashes and record transitive SBOM relationships for the declared environment.
-- [ ] Qualify DNP3/S7 sensor normalization and SIEM backend equivalence.
+- [x] Compare authored and site-exported Sigma with an independent SQLite backend on scoped fixtures; reproduce and document NULL/expression-depth limits.
+- [ ] Qualify general DNP3/S7 sensor normalization and actual SIEM deployment behavior.
 - [ ] Measure behavior on independent, representative benign traffic and boundary cases beyond the synthetic catalogue.
 - [x] Compare core Modbus transaction spans, values and exception outcomes with real ICSNPP, including the external corpus.
 - [x] Compare DNP3 per-message direction, connection order, functions, IIN and object/control fields; include unsolicited/no-response and encoding boundaries ([evidence](docs/spikes/08-dnp3-message-fidelity.md)).
-- [ ] Extend field/response comparisons to remaining Modbus/S7 details; qualify timing and unmodeled DNP3 payload semantics.
+- [x] Compare modeled S7 request/response and detail fields, with explicit pinned-parser reference handling ([evidence](docs/spikes/09-s7-field-fidelity.md)).
+- [ ] Qualify remaining Modbus extensions, timing and unmodeled protocol/session/payload semantics.
 - [ ] Reproduce the complete S7 run with a pinned Docker image; the September review used native Zeek.
 
 ## How to read this

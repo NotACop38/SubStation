@@ -301,7 +301,7 @@ rejected.
 | ------------------ | --------------- | ----------------------- |
 | `rosctr_code`      | integer 0–255   | `s7comm.log` `rosctr_code` — Remote Operating Service Control code. |
 | `rosctr_name`      | string          | `rosctr_name` (`rosctr_types`): `Job-Request` / `ACK` / `ACK-Data` / `User-Data`. |
-| `pdu_reference`    | integer 0–65535 | `pdu_reference` — links requests to responses. |
+| `pdu_reference`    | integer 0–65535 | Big-endian wire reference linking requests to responses; ICSNPP 1.3.0 logs the bytes reversed (spike 09). |
 | `function_code`    | string          | `function_code` — parameter function code as a hex string (e.g. `0x05`). |
 | `function_name`    | string          | `function_name` (`s7comm_functions[fc]`, or `Request:`/`Response: ` + User-Data function); mirrors envelope `func_name`. |
 | `subfunction_code` | string          | `subfunction_code` — User-Data subfunction (hex) or the PLC-control service string. |
@@ -455,5 +455,8 @@ Tier-1 detections are authored as Sigma and evaluated over this `.jsonl` by
 walking the pySigma-parsed condition AST in pytest — no SIEM required
 ([`spikes/03-sigma-offline-evaluation.md`](spikes/03-sigma-offline-evaluation.md)).
 Rules target the Substation contract. Native Zeek logs must be normalized and
-joined where necessary before evaluating these rules. No sensor-to-Substation
-adapter or independently qualified SIEM backend is shipped.
+joined where necessary before evaluating these rules. The bounded Modbus importer
+is described in the [validation guide](independent-validation.md). DNP3/S7 sensor
+adapters remain unqualified. The [SQLite fixture comparison](spikes/10-sigma-backend-qualification.md)
+records tested hit equivalence and known NULL/expression-depth failures; it is
+not a SIEM deployment qualification.

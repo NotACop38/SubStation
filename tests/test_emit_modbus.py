@@ -1,7 +1,7 @@
 """Phase-1 Modbus emission tests: one model -> matching PCAP + schema-valid JSON.
 
-These prove the LOCKED dual-emit guarantee (PRD §6.1): the PCAP and JSON are built
-from the same shared event list, so they cannot drift. We assert the JSON validates
+The PCAP and JSON are built from the same shared event list (PRD §6.1);
+independent parsing checks agreement. We assert the JSON validates
 against the frozen schema, the PCAP carries exactly one Modbus segment per JSON
 event with matching transaction/unit/function, and the whole thing is byte-stable.
 """

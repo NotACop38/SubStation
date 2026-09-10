@@ -2,12 +2,11 @@
 
 A *scenario* is the single source of truth for one simulator run (`PRD.md` §6.1).
 It is authored as human-editable YAML under `scenarios/<proto>/` and loaded into
-the immutable dataclasses below, which later phases hand to the dual emitters
-(PCAP + JSON) so the two outputs can never drift.
+the immutable dataclasses below, which feed the dual emitters (PCAP + JSON).
+Independent parser checks are required to verify output agreement.
 
-Nothing here builds real protocol logic yet — these are the shapes the YAML
-binds to. The wire-format of exchanges (`params`) is intentionally an opaque
-mapping until the per-protocol encoders land in Phase 1+.
+These are the shapes the YAML binds to. Each protocol implementation validates
+and interprets its exchange parameters before either artifact is written.
 """
 
 from __future__ import annotations

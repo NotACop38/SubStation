@@ -1,4 +1,4 @@
-> Follow-up implementation: [sensor import, site policies, external corpus and dependency evidence](../independent-validation.md). The review below records its earlier scope and findings.
+> Historical review snapshot. See the [current closeout](2026-09-10-validation-closeout.md) for completed follow-up work, current checks and remaining qualification limits. The findings and counts below record the earlier review stage.
 
 # Substation project and code review — 2026-09-09
 

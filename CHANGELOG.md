@@ -9,6 +9,14 @@ Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); th
 
 ## [Unreleased]
 
+### S7 and Sigma validation closeout
+
+- Compare COTP frames and S7 request/response details against the pinned independent parser, retaining its explicit PDU-reference compatibility transform.
+- Correct S7 success, SZL and transfer fields; require the supported fixed-width block filename and remove an unused encoder argument.
+- Add all-operation and identifier boundary checks plus observation-mutation regressions.
+- Execute authored and site-exported rules with the official SQLite backend in local CI; document reproduced NULL and expression-depth limits.
+- Keep the backend development-only with verified artifact hashes; reconcile current qualification guidance.
+
 ### DNP3 field fidelity
 
 - Replaced request-count checks with independent per-message header and object/control comparisons, including responses, ports, direction and connection order.

@@ -20,7 +20,7 @@ The useful result is a reproducible example with an explicit policy and expected
 outcome. Synthetic tests do **not** establish production recall, false-positive
 rates, device realism or detection of an entire ATT&CK technique. All rules need
 site-specific policy and independent validation before operational use. The
-[project review](docs/reviews/2026-09-09-codebase-review.md) explains the evidence
+[project review](docs/reviews/2026-09-10-validation-closeout.md) explains the evidence
 and remaining limits.
 
 ## Quick start
@@ -105,7 +105,7 @@ with the JSON model.
 | Path | What it checks | Requirements |
 |---|---|---|
 | Tier 1 | Seven Sigma rules over validated JSON; synthetic contracts and a small external Modbus corpus | Python, scapy, pySigma, PyYAML and their dependencies |
-| Tier 2 | Core Modbus fields, responses and external captures; DNP3/S7 request counts; four stateful Zeek rules | Docker by default, or explicit native Zeek; S7 requires its compiled plugin |
+| Tier 2 | Core Modbus fields/responses and external captures; DNP3 message/object fields; S7 request/response details; four stateful Zeek rules | Docker by default, or explicit native Zeek; S7 requires its compiled plugin |
 
 Tier 2 does not compare every detail field, response, timing edge or device
 interaction. No Suricata rules are shipped. The simulator produces bounded
