@@ -524,6 +524,7 @@ def build_events(scenario: Scenario) -> list[Dnp3Event]:
         msg_ts = max(base_ts, conn.last_response_ts)
 
         if code == UNSOLICITED_RESPONSE:
+            _reject_unknown_params(exchange.params, _OBJECT_PARAM_KEYS, where)
             if src_is_master:
                 raise Dnp3Error(f"{where}: UNSOLICITED_RESPONSE must originate from the outstation")
             events.append(

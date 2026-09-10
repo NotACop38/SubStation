@@ -6,13 +6,13 @@ emits live PCAP + JSON from the scenario model, runs the Sigma detections
 over the JSON event log, and prints the hits plus the real ATT&CK-for-ICS
 coverage map (registry-driven). The bundled demo runs a benign baseline (which
 stays quiet) and anomalous scenarios (which fire), so one command shows both the
-low-false-positive baseline and real detections.
+expected behavior on the bundled synthetic fixtures.
 
 The other subcommands surface the rest of the toolkit from one entrypoint:
 ``list`` (bundled scenarios + registered detections), ``validate`` (event-log
 schema validation; also ``python -m substation.schema``), ``coverage`` (the
 generated ATT&CK coverage artifacts; also ``python -m substation.coverage``),
-and ``verify`` (how to run Tier-2).
+``detect`` (evaluate normalized JSONL), and ``verify`` (how to run Tier-2).
 
 Safety invariant (PRD.md §6.4): nothing here ever opens a sending socket or
 transmits on a live interface. The simulator is files-only, always.
@@ -21,6 +21,7 @@ transmits on a live interface. The simulator is files-only, always.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -30,11 +31,13 @@ from substation.content import ContentError, content_path
 from substation.coverage import render_coverage_map
 from substation.detect import Hit, run_detections
 from substation.detect.registry import Detection, RegistryError, load_registry
+from substation.detect.sigma_eval import SigmaEvalError
 from substation.emit import EmitError, write_artifacts
 from substation.protocols.dnp3 import Dnp3Error
 from substation.protocols.modbus import ModbusError
 from substation.protocols.s7comm import S7Error
 from substation.scenarios import Scenario, ScenarioError, load_scenario, load_scenarios
+from substation.schema import SchemaValidationError
 
 __all__ = ["main"]
 
@@ -85,6 +88,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     list_cmd = sub.add_parser("list", help="List registered detections and bundled scenarios.")
     list_cmd.set_defaults(func=_cmd_list)
+
+    detect = sub.add_parser("detect", help="Run Tier-1 rules on normalized .jsonl event logs.")
+    detect.add_argument("paths", nargs="+", type=Path, help="Substation-schema JSONL files.")
+    detect.add_argument("--detection", nargs="+", help="Tier-1 detection IDs (default: all).")
+    detect.set_defaults(func=_cmd_detect)
 
     validate = sub.add_parser(
         "validate",
@@ -151,9 +159,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     per_scenario_hits: list[tuple[Scenario, list[Hit]]] = []
     seen_names: dict[str, Path] = {}
     for scenario_path in scenario_paths:
-        # Scenarios live in the repo tree (PRD.md §6.9 keeps scenarios/ outside the
-        # package), so they are only present for an in-tree checkout. Fail with an
-        # actionable hint rather than a cryptic load error.
+        # Content resolves from the checkout or from the installed wheel.
         if not scenario_path.exists():
             print(
                 f"error: scenario not found at {scenario_path}.\n"
@@ -202,7 +208,10 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     print(render_coverage_map(all_scenarios, all_hits, registry))
     fired = sorted({h.detection_id for h in all_hits})
     is_default_set = args.scenario is None
-    if is_default_set and fired:
+    benign_is_quiet = all(
+        not hits for scenario, hits in per_scenario_hits if scenario.label.value == "benign"
+    )
+    if is_default_set and fired and benign_is_quiet:
         # The bundled set always pairs the benign baseline with the anomalies.
         print(
             f"\nResult: quiet on the benign baseline; fired {len(fired)} detection(s) on "
@@ -216,14 +225,15 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         else:
             print(f"\nResult: ran {labels}; no detections fired (quiet).")
 
-    if args.strict:
+    if args.strict or is_default_set:
         failures = _contract_failures(per_scenario_hits, registry)
         if failures:
             print("\nStrict contract check FAILED:", file=sys.stderr)
             for failure in failures:
                 print(f"  - {failure}", file=sys.stderr)
             return 1
-        print("\nStrict contract check: OK — every Tier-1 exercises entry held.")
+        if args.strict:
+            print("\nStrict contract check: OK — every Tier-1 exercises entry held.")
     return 0
 
 
@@ -313,9 +323,46 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     return schema_main([str(p) for p in args.paths])
 
 
+def _cmd_detect(args: argparse.Namespace) -> int:
+    registry = _load_registry_or_explain()
+    if registry is None:
+        return 1
+    eligible = {d.id: d for d in registry if d.engine == "sigma" and d.tier == 1}
+    requested = list(eligible) if args.detection is None else args.detection
+    invalid = set(requested) - eligible.keys()
+    if invalid:
+        print(
+            f"error: unknown or non-Tier-1 detection(s): {', '.join(sorted(invalid))}; "
+            f"available: {', '.join(eligible)}",
+            file=sys.stderr,
+        )
+        return 1
+    detections = [eligible[det_id] for det_id in dict.fromkeys(requested)]
+    # Validate and evaluate every input before publishing results. A malformed
+    # later file must not leave apparently successful, partial machine output.
+    results = [(path, run_detections(path, detections)) for path in args.paths]
+    for path, hits in results:
+        for hit in hits:
+            print(
+                json.dumps(
+                    {
+                        "event_file": str(path),
+                        "detection_id": hit.detection_id,
+                        "event_index": hit.event_index,
+                    }
+                )
+            )
+    count = sum(len(hits) for _, hits in results)
+    print(
+        f"detect: {len(results)} file(s), {len(detections)} Tier-1 rule(s), {count} hit(s); "
+        "Tier-2 rules not run",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def _cmd_coverage(args: argparse.Namespace) -> int:
-    # Same checkout requirement as list/demo: the coverage map renders from the
-    # registry, which ships in the repo tree, not the installed package.
+    # Resolve the registry from the checkout or packaged content.
     if _load_registry_or_explain() is None:
         return 1
     from substation.coverage.__main__ import main as coverage_main
@@ -331,10 +378,11 @@ def _cmd_verify(_args: argparse.Namespace) -> int:
     # deliberately kept out of the pure-Python installed path so the Tier-1
     # headline promise ("only Python 3.11+") holds. It is driven by the Makefile.
     print(
-        "Tier-2 validation runs real Zeek/ICSNPP + Suricata over the emitted PCAPs\n"
-        "(fidelity golden test + Zeek/Suricata detections). It needs Docker and is\n"
+        "Tier-2 validation runs Zeek/ICSNPP over the emitted PCAPs for request\n"
+        "identity/count parity and stateful detection checks. It is\n"
         "driven from a repo checkout:\n\n"
-        "    make verify\n\n"
+        "    make verify VERIFY_ARGS=--require-complete\n\n"
+        "Use VERIFY_ARGS='--native --require-complete' with local Zeek and the S7 plugin.\n"
         "Tier 1 (this CLI's `demo`) stays pure-Python and needs no Docker."
     )
     return 0
@@ -365,6 +413,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         with contextlib.suppress(OSError, ValueError):
             os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 141
+    except (OSError, SchemaValidationError, SigmaEvalError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     return result
 
 

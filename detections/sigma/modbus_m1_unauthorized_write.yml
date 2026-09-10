@@ -14,7 +14,7 @@
 # -----------------------------------------------------------------------------
 title: Modbus Write From Unauthorized Source
 id: ecee7c3a-9d40-4ca2-92c1-7df770ed84d7
-status: stable
+status: experimental
 description: |
   A Modbus write-class event that is not an in-policy setpoint write. The Tier-1
   simulator validates write single/multiple coils or registers; parser-fed
@@ -55,18 +55,58 @@ detection:
     conn.orig_h:
       - '10.0.0.10' # hmi-1 — operator HMI
       - '10.0.0.11' # ews-1 — engineering workstation
+    conn.resp_h: '10.0.0.50' # plc-1; a writer is not trusted for every PLC.
+    conn.resp_p: 502
     detail.unit: 1 # plc-1's permitted unit id
+    func_code: [6, 16] # Holding registers only; coil space has no permitted writes.
+    detail.quantity|gte: 1
     # Writable setpoint registers 40–49 (holding-register space). Range modifiers
     # are supported by the Tier-1 evaluator (gte/lte); identical semantics to the
     # former enumerated list.
     detail.address|gte: 40
     detail.address|lte: 49
-  condition: modbus_write_request and not in_policy_write
+  # Standard Sigma has no field arithmetic. Enumerate the ten legal starting
+  # addresses with their maximum lengths: address + quantity <= 50. This keeps
+  # the full-span policy portable without introducing a synthetic-only field.
+  allowed_span_40:
+    detail.address: 40
+    detail.quantity|lte: 10
+  allowed_span_41:
+    detail.address: 41
+    detail.quantity|lte: 9
+  allowed_span_42:
+    detail.address: 42
+    detail.quantity|lte: 8
+  allowed_span_43:
+    detail.address: 43
+    detail.quantity|lte: 7
+  allowed_span_44:
+    detail.address: 44
+    detail.quantity|lte: 6
+  allowed_span_45:
+    detail.address: 45
+    detail.quantity|lte: 5
+  allowed_span_46:
+    detail.address: 46
+    detail.quantity|lte: 4
+  allowed_span_47:
+    detail.address: 47
+    detail.quantity|lte: 3
+  allowed_span_48:
+    detail.address: 48
+    detail.quantity|lte: 2
+  allowed_span_49:
+    detail.address: 49
+    detail.quantity|lte: 1
+  condition: modbus_write_request and not (in_policy_write and 1 of allowed_span_*)
 fields:
   - conn.orig_h
+  - conn.resp_h
+  - conn.resp_p
   - func_name
   - detail.unit
   - detail.address
+  - detail.quantity
 falsepositives:
   - A new or relocated HMI/EWS whose address is not yet in the writer allow-list
     — keep the allow-list current as assets change.

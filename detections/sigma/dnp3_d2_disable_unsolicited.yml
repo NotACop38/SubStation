@@ -12,7 +12,7 @@
 # -----------------------------------------------------------------------------
 title: DNP3 Disable Unsolicited Responses From Unauthorized Source
 id: 2a9d4c70-8e51-4b3a-9f6d-0c4b2e7a15de
-status: stable
+status: experimental
 description: |
   A DNP3 DISABLE_UNSOLICITED request from a source that is not the allow-listed
   master. Substation detection D2 (PRD.md §5.2): disabling unsolicited responses
@@ -38,11 +38,16 @@ detection:
     func_name: DISABLE_UNSOLICITED
   # The permitted control source (allow-listed master). A disable from any other
   # source is the blinding signal (source derived through is_orig, docs/schema.md).
-  authorized_source:
+  # Synthetic policy: source permission is limited to this asset and service.
+  authorized_channel:
     conn.orig_h: '10.0.1.10' # master-1 — the allow-listed SCADA master
-  condition: disable_unsolicited and not authorized_source
+    conn.resp_h: '10.0.1.50'
+    conn.resp_p: 20000
+  condition: disable_unsolicited and not authorized_channel
 fields:
   - conn.orig_h
+  - conn.resp_h
+  - conn.resp_p
   - func_name
 falsepositives:
   - A sanctioned maintenance window where the allow-listed master disables

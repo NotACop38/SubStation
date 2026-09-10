@@ -13,6 +13,14 @@ program-modification detection for the S7 slice (`PRD.md` §5.3).
 | **Rule** | [`detections/sigma/s7comm_s2_program_write_download.yml`](../sigma/s7comm_s2_program_write_download.yml) |
 | **Status** | experimental · **Level** | high |
 
+## Example policy and limits
+
+The approved channel is `10.0.4.10` → `10.0.4.50:102`. A listed source
+sending the matched command to another asset or port still fires. These are
+synthetic addresses, not authenticated identities. Compromise of an approved
+source and in-channel misuse require other signals. The rule has experimental
+status; synthetic quiet tests do not measure a site's false-positive rate.
+
 ## Behavior
 
 The control logic and data blocks running on a Siemens PLC are changed by
@@ -31,7 +39,7 @@ fires.
 **Sigma.** Authorization is decidable from a **single event**: `direction: request`,
 `func_name` is one of the transfer/object-write commands, and `conn.orig_h` is the
 issuer. No durable state or correlation is needed — Sigma-first per `PRD.md` §6.5. The
-same rule compiles to production Zeek/SIEM unchanged.
+rule needs normalization and backend qualification for a SIEM deployment.
 
 **Why allow-list, and why plain `Write Variable` is excluded (the OT-realism
 guardrail, `PRD.md` §8).** Operators legitimately write process **tags** all the time
@@ -58,8 +66,9 @@ Tier-1 `.jsonl` event log (`docs/schema.md`, S7 `detail` frozen against ICSNPP
 program_transfer:  proto=s7comm AND direction=request
                    AND func_name in { Request Download, Download Block, Download Ended,
                                       Create Object, Set Variable, Delete Object }
-authorized_source: conn.orig_h == 10.0.4.10 (ews-1)
-fire when:         program_transfer AND NOT authorized_source
+authorized_channel: conn.orig_h == 10.0.4.10 (ews-1)
+                    AND conn.resp_h == 10.0.4.50 AND conn.resp_p == 102
+fire when:         program_transfer AND NOT authorized_channel
 ```
 
 ## Scenarios
@@ -105,7 +114,7 @@ What benign behavior could trip this, and why it does not here:
 - **Allow-list staleness** — a new/relocated engineering station fires on its
   legitimate downloads until added; maintain the control-source allow-list.
 
-**Modelling note.** Like M1/D3, S2 allow-lists by **source**. Per-block policy (which
+**Modelling note.** Like M1/D3, S2 allow-lists by **source, destination and service**. Per-block policy (which
 blocks a given station may download) is a richer policy that a field-match rule does
 not express — a Zeek-class concern. The permitted EWS address is a demo-scenario
 specific, edited per environment.

@@ -248,3 +248,22 @@ def test_scenario_names_are_globally_unique() -> None:
     names = [s.name for s in scenarios]
     duplicates = sorted({n for n in names if names.count(n) > 1})
     assert not duplicates, f"duplicate scenario name(s) across protocol trees: {duplicates}"
+
+
+@pytest.mark.parametrize(
+    ("protocol", "function"),
+    [("modbus", "ReadHoldingRegisters"), ("dnp3", "UnsolicitedResponse"), ("s7comm", "ReadSZL")],
+)
+def test_unused_protocol_parameters_do_not_silently_change_fixture_intent(
+    tmp_path: Path, protocol: str, function: str
+) -> None:
+    from substation.emit import write_artifacts
+
+    text = _MINIMAL.replace("protocol: modbus", f"protocol: {protocol}").replace(
+        "exchanges: []",
+        f"exchanges:\n  - {{source: b, target: a, function: {function}, params: {{quanity: 2}}}}",
+    )
+    text = text.replace("exchanges:", "  - {id: b, role: plc, host: 10.0.0.2}\nexchanges:")
+    scenario = load_scenario(_write(tmp_path, text))
+    with pytest.raises(ValueError, match="unknown/unused"):
+        write_artifacts(scenario, tmp_path / "out")

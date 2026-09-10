@@ -215,3 +215,13 @@ def test_pipe_closed_early_exits_quietly() -> None:
     stderr = stderr_bytes.decode()
     assert proc.returncode == 141, f"expected quiet SIGPIPE exit, got {proc.returncode}: {stderr}"
     assert "Traceback" not in stderr and "Exception ignored" not in stderr, stderr
+
+
+def test_default_demo_fails_its_contract_instead_of_claiming_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli, "run_detections", lambda *_args: [])
+    assert cli.main(["demo", "--artifacts", str(tmp_path)]) == 1
+    captured = capsys.readouterr()
+    assert "Strict contract check FAILED" in captured.err
+    assert "fired 3 detection(s)" not in captured.out

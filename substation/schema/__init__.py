@@ -37,6 +37,7 @@ __all__ = [
     "validate_event",
     "iter_jsonl_errors",
     "validate_jsonl_file",
+    "parse_json_event",
 ]
 
 # Path to the packaged JSON Schema (also a normal file on disk for external tools).
@@ -79,6 +80,22 @@ def load_event_schema() -> dict[str, Any]:
 def _reject_json_constant(constant: str) -> Any:
     """``json.loads`` ``parse_constant`` hook: refuse NaN/Infinity barewords."""
     raise ValueError(f"non-standard JSON constant {constant!r}")
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    obj: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError(f"duplicate JSON key {key!r}")
+        obj[key] = value
+    return obj
+
+
+def parse_json_event(raw: str) -> Any:
+    """Decode a JSON line without accepting duplicate keys or non-JSON numbers."""
+    return json.loads(
+        raw, parse_constant=_reject_json_constant, object_pairs_hook=_unique_json_object
+    )
 
 
 def _type_name(value: Any) -> str:
@@ -219,7 +236,7 @@ def iter_jsonl_errors(path: str | Path, schema: dict[str, Any] | None = None) ->
             if not stripped:
                 continue
             try:
-                event = json.loads(stripped, parse_constant=_reject_json_constant)
+                event = parse_json_event(stripped)
             except json.JSONDecodeError as exc:
                 yield f"{p}:{lineno}: not valid JSON: {exc.msg}"
                 continue

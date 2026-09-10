@@ -14,7 +14,7 @@
 # -----------------------------------------------------------------------------
 title: S7 Program / Data-Block Download From Unauthorized Source
 id: 9d8c2f47-1b6e-4a30-8c5d-7e2a9f1b04c6
-status: stable
+status: experimental
 description: |
   An S7comm program/data-block transfer (Request Download / Download Block / Download
   Ended) or an S7comm-plus object write (Create Object / Set Variable / Delete Object)
@@ -47,11 +47,16 @@ detection:
       - Delete Object
   # The permitted engineering source (allow-listed EWS). A program transfer from any
   # other source is unauthorized (source derived through is_orig, docs/schema.md -> conn).
-  authorized_source:
+  # Synthetic policy: source permission is limited to this asset and service.
+  authorized_channel:
     conn.orig_h: '10.0.4.10' # ews-1 — the allow-listed engineering workstation
-  condition: program_transfer and not authorized_source
+    conn.resp_h: '10.0.4.50'
+    conn.resp_p: 102
+  condition: program_transfer and not authorized_channel
 fields:
   - conn.orig_h
+  - conn.resp_h
+  - conn.resp_p
   - func_name
 falsepositives:
   - A sanctioned engineering download from the allow-listed EWS is handled by the

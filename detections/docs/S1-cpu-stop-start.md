@@ -12,6 +12,14 @@ detection for the S7 slice (`PRD.md` §5.3).
 | **Rule** | [`detections/sigma/s7comm_s1_cpu_stop_start.yml`](../sigma/s7comm_s1_cpu_stop_start.yml) |
 | **Status** | experimental · **Level** | high |
 
+## Example policy and limits
+
+The approved channel is `10.0.4.10` → `10.0.4.50:102`. A listed source
+sending the matched command to another asset or port still fires. These are
+synthetic addresses, not authenticated identities. Compromise of an approved
+source and in-channel misuse require other signals. The rule has experimental
+status; synthetic quiet tests do not measure a site's false-positive rate.
+
 ## Behavior
 
 A Siemens PLC runs its control program in RUN mode. An adversary who can reach the
@@ -28,7 +36,7 @@ source fires.
 **Sigma.** Authorization is decidable from a **single event**: `direction: request`,
 `func_name` is `PLC Stop` or `PLC Control`, and `conn.orig_h` is the issuer. No
 durable state or correlation is needed — Sigma-first per `PRD.md` §6.5. The same rule
-compiles to production Zeek/SIEM unchanged. (`detail.subfunction_name` carries the
+needs normalization and independent SIEM backend qualification. (`detail.subfunction_name` carries the
 decoded PLC-control service — e.g. `PLC Start / Stop` — from ICSNPP's `s7comm.log`,
 available for richer policy but not needed for the authorization decision.)
 
@@ -52,10 +60,16 @@ Tier-1 `.jsonl` event log (`docs/schema.md`, S7 `detail` frozen against ICSNPP
 
 ```
 run_state_command: proto=s7comm AND direction=request
-                   AND func_name in { PLC Stop, PLC Control }
-authorized_source: conn.orig_h == 10.0.4.10 (ews-1)
-fire when:         run_state_command AND NOT authorized_source
+                   AND (func_name == PLC Stop
+                        OR (func_name == PLC Control AND detail.subfunction_code == P_PROGRAM))
+authorized_channel: conn.orig_h == 10.0.4.10 (ews-1)
+                    AND conn.resp_h == 10.0.4.50 AND conn.resp_p == 102
+fire when:         run_state_command AND NOT authorized_channel
 ```
+
+Other PLC Control services, such as memory compression or block insertion,
+are not CPU start/stop signals. The rule requires `P_PROGRAM` for PLC Control;
+normalization must retain `detail.subfunction_code`.
 
 ## Scenarios
 
@@ -100,7 +114,7 @@ What benign behavior could trip this, and why it does not here:
 - **Sanctioned maintenance** from an unlisted laptop — pre-authorize by adding the
   address for the maintenance window.
 
-**Modelling note.** Like M1/D3, S1 allow-lists by **source**. Some sites restrict
+**Modelling note.** Like M1/D3, S1 allow-lists by **source, destination and service**. Some sites restrict
 run-state changes to a maintenance time-window or to a specific operating-mode
 transition — richer policy a field-match rule does not express (a Zeek-class concern).
 The permitted EWS address is a demo-scenario specific, edited per environment.

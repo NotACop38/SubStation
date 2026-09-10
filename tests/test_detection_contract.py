@@ -164,6 +164,7 @@ _EXPECTED_FIRE_HITS: dict[tuple[str, str], tuple[int, ...]] = {
     # M1: the two out-of-policy write requests.
     ("M1", "anomalous-m1-unauthorized-write"): (6, 8),
     ("M1", "anomalous-m1-out-of-policy-write"): (4, 6),
+    ("M1", "anomalous-m1-span-beyond-policy"): (0,),
     # M2: the undefined-function request and the ILLEGAL_FUNCTION exception reply.
     ("M2", "anomalous-m2-illegal-function"): (2, 3),
     # D1/D2/D3: the restart / disable-unsolicited / (direct-)operate requests.

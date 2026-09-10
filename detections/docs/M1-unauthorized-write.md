@@ -20,7 +20,7 @@ ICSNPP-aligned telemetry that classifies mask-write, read/write-multiple, or
 write-file records as `action_class: write` is covered by the same rule. A
 successful write can change a setpoint, force a coil, or otherwise move the
 physical process. The detection keys on the **write policy**: who may write
-(allow-listed HMI/EWS), to which **unit**, and which **registers**. A write that
+(allow-listed HMI/EWS), to which **PLC and unit**, and which **complete holding-register span**. A write that
 violates any of those dimensions fires — including an allow-listed source straying
 to an out-of-policy unit/register.
 
@@ -31,12 +31,10 @@ it is a Modbus write request (`action_class: write`, `direction: request`),
 `conn.orig_h` says who sent it, and `detail.unit` / `detail.address` say what it
 targets — everything the policy needs is on the one event. No durable state,
 correlation window, or multi-event join is needed, so this is the simplest engine
-that expresses the behavior correctly — Sigma-first per `PRD.md` §6.5. The same
-rule compiles to a production SIEM (Elastic/Splunk) or Zeek via stock pySigma
-backends, so it transfers unchanged to a real deployment. The writable-register
-policy is written as an explicit value list (not a range modifier) so the Tier-1
-offline evaluator (`docs/spikes/03-sigma-offline-evaluation.md`) can match it with
-no new machinery.
+that expresses the behavior correctly — Sigma-first per `PRD.md` §6.5. Standard Sigma equality and comparison selectors encode the ten legal starting
+addresses with their maximum write lengths. No custom arithmetic field is needed.
+A production backend still needs field mapping and site-specific policy; raw
+ICSNPP transaction logs do not have Substation's request/response envelope.
 
 **Why allow-list, not "any write" (the OT-realism guardrail, `PRD.md` §8).**
 Engineers legitimately write setpoints; a rule that fires on every write is pure
@@ -56,23 +54,28 @@ Tier-1 `.jsonl` event log (`docs/schema.md`):
   rule (`docs/schema.md` → `conn`); assuming source==client would invert
   endpoints on responses.
 - `detail.unit` / `detail.address` — the write's target unit and starting
-  register, checked against the permitted unit and the writable-register set.
+  register; `detail.quantity` determines the complete affected span.
+- `conn.resp_h` / `conn.resp_p` and `func_code` — asset, service and address space.
 
-In production this maps to Zeek `conn.log` + ICSNPP `modbus_detailed.log`
-(`is_orig`, `func`, `unit`, `address`) with no rule change.
+Raw ICSNPP `modbus_detailed.log` combines transaction fields and uses flat
+`id.orig_h` / `id.resp_h` keys. Before using these rules on sensor logs, normalize
+direction and connection fields, map the numeric function code, and retain
+`unit`, `address`, and `quantity`. Substation does not yet ship that adapter.
 
 ## Detection logic
 
 ```
 modbus_write_request:  proto=modbus AND direction=request AND action_class=write
 in_policy_write:       conn.orig_h in { 10.0.0.10 (hmi-1), 10.0.0.11 (ews-1) }
-                       AND detail.unit == 1
-                       AND detail.address in { 40..49 }   # writable setpoints
+                       AND conn.resp_h == 10.0.0.50 AND conn.resp_p == 502
+                       AND detail.unit == 1 AND func_code in { 6, 16 }
+                       AND quantity >= 1
+                       AND 40 <= address AND address + quantity <= 50
 fire when:             modbus_write_request AND NOT in_policy_write
 ```
 
-A write is in-policy only if **all three** hold (allow-listed source, permitted
-unit, writable register); failing any one fires.
+A write is in-policy only if every condition holds. Coil writes and writes to a
+different PLC or port are outside this example policy, even from a listed writer.
 
 ## Scenarios
 
@@ -84,6 +87,8 @@ unit, writable register); failing any one fires.
   — the allow-listed `ews-1` (10.0.0.11) writes a non-permitted unit (2) and an
   out-of-range register (5). Validated: M1 fires on both off-policy writes and
   stays silent on the EWS's in-policy write to register 40.
+- **Fires:** [`anomalous-m1-span-beyond-policy.yaml`](../../scenarios/modbus/anomalous-m1-span-beyond-policy.yaml)
+  — an approved writer starts at register 45 and writes ten registers, crossing 49.
 - **Quiet:** [`benign-baseline.yaml`](../../scenarios/modbus/benign-baseline.yaml)
   — continuous HMI polling plus **legitimate EWS setpoint writes** from an
   allow-listed source to in-policy registers. Validated: 0 hits.
@@ -126,16 +131,11 @@ What benign behavior could trip this, and why it does not here:
 - **Sanctioned maintenance** from an unlisted laptop — pre-authorize by adding the
   address to the allow-list for the maintenance window.
 
-**Unit/register policy (implemented).** M1 enforces all three dimensions of
-`PRD.md` §5.1 — source, unit, and register — so an allow-listed source straying to
-an out-of-policy unit/register fires, not just a rogue source. The register set is
-written with Sigma `|gte` / `|lte` range modifiers (Tier-1 evaluator supports
-them). Two known modelling simplifications: (1) the register set is the
-**holding-register setpoint** space — the demo policy sanctions no coil writes, so
-coil writes are out-of-policy by design; (2) the check is on the **starting**
-`detail.address`, so a write that starts in-policy but spans past register 49 (via
-a large `quantity`) is not caught by a field-match rule — durable span arithmetic
-is a Zeek-class concern. That span gap is an **accepted** Tier-1 limitation,
-locked by `scenarios/modbus/anomalous-m1-span-beyond-policy.yaml` and
-`tests/test_m1_span_gap.py`. Policy values (writers, unit, register set) are
-demo-scenario specifics, meant to be edited per environment.
+**Full-span policy.** The rule checks the complete span, including writes that
+start inside 40–49 and extend past 49. The formerly accepted gap is now a firing
+contract scenario (`anomalous-m1-span-beyond-policy.yaml`).
+`tests/test_m1_policy.py` checks every small span across both boundaries against
+an independent interval calculation, plus off-policy PLCs, ports and coil writes.
+The policy is an example, not a statement about the user's plant. A compromised
+allow-listed writer acting within the allowed span remains outside this rule's
+coverage; source addresses do not establish operator identity or intent.

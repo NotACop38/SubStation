@@ -13,7 +13,7 @@
 # -----------------------------------------------------------------------------
 title: S7 PLC Run-State Change From Unauthorized Source
 id: 4c5b9e21-7a3d-4e8f-9b1c-2d6f0a8e5c14
-status: stable
+status: experimental
 description: |
   An S7comm run-state change (PLC Stop, or PLC Control / P_PROGRAM = PLC Start/Stop)
   issued by a source that is not the allow-listed engineering workstation.
@@ -33,19 +33,26 @@ detection:
   # An S7 run-state command on the request side. func_name carries the ICSNPP
   # s7comm.log function_name (docs/schema.md); PLC Stop (0x29) and PLC Control (0x28)
   # are the run-state operations. conn.orig_h is the issuing source on a request.
-  run_state_command:
+  s7_request:
     proto: s7comm
     direction: request
-    func_name:
-      - PLC Stop
-      - PLC Control
+  cpu_stop:
+    func_name: PLC Stop
+  cpu_start_stop:
+    func_name: PLC Control
+    detail.subfunction_code: P_PROGRAM
   # The permitted engineering source (allow-listed EWS). A run-state change from any
   # other source is unauthorized (source derived through is_orig, docs/schema.md -> conn).
-  authorized_source:
+  # Synthetic policy: source permission is limited to this asset and service.
+  authorized_channel:
     conn.orig_h: '10.0.4.10' # ews-1 — the allow-listed engineering workstation
-  condition: run_state_command and not authorized_source
+    conn.resp_h: '10.0.4.50'
+    conn.resp_p: 102
+  condition: s7_request and (cpu_stop or cpu_start_stop) and not authorized_channel
 fields:
   - conn.orig_h
+  - conn.resp_h
+  - conn.resp_p
   - func_name
 falsepositives:
   - A sanctioned maintenance stop/start issued from the allow-listed EWS is handled by

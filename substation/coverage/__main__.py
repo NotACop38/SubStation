@@ -24,11 +24,11 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from substation.coverage.builder import render_all
-from substation.detect.registry import REPO_ROOT, RegistryError
+from substation.detect.registry import RegistryError
 
 # The single committed snapshot (drift-checked by `make ci`); there is no
 # separate scratch output directory.
-_DEFAULT_OUT = REPO_ROOT / "docs" / "coverage"
+_DEFAULT_OUT = Path("docs") / "coverage"
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -148,6 +148,29 @@ def test_plus_object_is_marked_write(tmp_path: Path) -> None:
     assert create["detail"]["plus"]["function_name"] == "Create Object"
 
 
+@pytest.mark.parametrize("version", [1, 2, 3])
+def test_plus_header_matches_json_version_and_function(tmp_path: Path, version: int) -> None:
+    from dataclasses import replace
+
+    scenario = load_scenario(_write_scenario(tmp_path, _PLUS_SCENARIO))
+    scenario = replace(
+        scenario,
+        exchanges=tuple(replace(e, params={"version": version}) for e in scenario.exchanges),
+    )
+    emitted = write_artifacts(scenario, tmp_path)
+    for event, payload in zip(_json_events(emitted.jsonl), _s7_payloads(emitted.pcap), strict=True):
+        if "plus" not in event["detail"]:
+            continue
+        header = payload[7:]  # TPKT + COTP DT
+        assert header[0] == 0x72
+        assert header[1] == event["detail"]["plus"]["version"] == version
+        assert header[4] == 0  # digest length, a required field before opcode
+        assert header[5] == int(event["detail"]["plus"]["opcode"], 16)
+        assert int.from_bytes(header[8:10], "big") == int(
+            event["detail"]["plus"]["function_code"], 16
+        )
+
+
 def test_emission_is_byte_deterministic(tmp_path: Path) -> None:
     scenario = load_scenario(_BASELINE)
     first = write_artifacts(scenario, tmp_path / "a")
