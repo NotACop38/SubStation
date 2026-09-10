@@ -23,6 +23,7 @@ from substation.protocols.dnp3 import (
     UNSOLICITED_RESPONSE,
     Dnp3Event,
     dnp3_crc,
+    object_payload_size,
 )
 
 __all__ = ["write_pcap"]
@@ -31,7 +32,7 @@ _DNP3_START = b"\x05\x64"
 
 # Inverse of the CROB label tables (dnp3.py) so the encoder can rebuild the wire
 # control_code byte from the schema-clean detail.control labels.
-_OP_CODE = {"Nul": 0, "Pulse_On": 1, "Pulse_Off": 2, "Latch_On": 3, "Latch_Off": 4}
+_OP_CODE = {"Nul": 0, "Pulse On": 1, "Pulse Off": 2, "Latch On": 3, "Latch Off": 4}
 _TRIP_CODE = {"Nul": 0, "Close": 1, "Trip": 2}
 
 
@@ -80,14 +81,14 @@ def _range_objects(event: Dnp3Event) -> bytes:
     review). The point count and data width come from the event's object type, so the
     emitted object body matches the JSON object_count exactly.
     """
-    group, var, point_size = _object_group_var(event)
+    group, var, _ = _object_group_var(event)
     objs = event.objects or {}
     low = int(objs.get("range_low", 0)) & 0xFFFF
     high = int(objs.get("range_high", 0)) & 0xFFFF
     count = max(0, high - low + 1)
     header = bytes([group, var, 0x01]) + low.to_bytes(2, "little") + high.to_bytes(2, "little")
-    # One deterministic zero-filled point per index, at the variation's data width.
-    return header + bytes(count * point_size)
+    # Zero-valued points, with packed bits/status octets where the variation needs them.
+    return header + bytes(object_payload_size(str(objs["object_type"]), count))
 
 
 def _crob_objects(event: Dnp3Event) -> bytes:
@@ -97,7 +98,8 @@ def _crob_objects(event: Dnp3Event) -> bytes:
     control indices up to 65535 round-trip (PR #9 review).
     """
     ctl = event.control or {}
-    op = _OP_CODE.get(str(ctl.get("operation_type", "Nul")), 0)
+    # Preserve pre-correction Dnp3Event objects as well as current spaced labels.
+    op = _OP_CODE[str(ctl.get("operation_type", "Nul")).replace("_", " ")]
     trip = _TRIP_CODE.get(str(ctl.get("trip_control_code", "Nul")), 0)
     clear = 0x20 if ctl.get("clear_bit") else 0x00
     control_code = (trip << 6) | clear | op
@@ -124,7 +126,9 @@ def _app_bytes(event: Dnp3Event) -> bytes:
     app_control = 0xC0
     out = bytes([app_control, event.func_code])
     if not event.is_orig:  # responses (RESPONSE / UNSOLICITED_RESPONSE) carry IIN.
-        out += int(event.iin or 0).to_bytes(2, "little")
+        # The envelope uses Zeek's numeric representation of the two IIN octets:
+        # first octet in bits 8..15, second in bits 0..7 (not a little-endian u16).
+        out += int(event.iin or 0).to_bytes(2, "big")
     if event.is_orig and event.control is not None:
         out += _crob_objects(event)
     elif event.is_orig and event.objects is not None:

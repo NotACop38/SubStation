@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Tier-2 request parity + detection validation (real Zeek/ICSNPP).
+"""Tier-2 field/request parity + detection validation (real Zeek/ICSNPP).
 
 This is the Tier-2 half of the two-tier execution model (PRD §6.5, §6.8). Where
 Tier 1 evaluates Sigma over the emitted ``.jsonl`` in-process, Tier 2 runs the
 **real** engines against the emitted PCAPs:
 
-  1. **Request identity/count parity.** Every supported scenario's PCAP is parsed
-     by Zeek/ICSNPP. Counts of (source, destination, function) requests must match
-     the JSON model. This detects dropped/duplicated messages and function errors;
-     it does not establish address/value, response, timing or full session parity.
+  1. **Scoped field parity.** Core Modbus transactions compare spans, values and
+     outcomes. DNP3 parser callbacks compare message direction/order, functions,
+     IIN and object/control details. Other Modbus and S7 paths compare request
+     identities/counts. Timing and full protocol/session semantics remain unqualified.
   2. **Zeek detections in their real engine.** Every Tier-2 Zeek detection in the
      registry is executed by real Zeek over its fire and quiet scenarios; the
      runner asserts the SAME fire/quiet behavior the Tier-1 contract asserts for
@@ -299,15 +299,6 @@ def _modbus_log_tuples(logdir: Path) -> Counter[tuple[str, str, str]]:
     return c
 
 
-def _dnp3_log_tuples(logdir: Path) -> Counter[tuple[str, str, str]]:
-    c: Counter[tuple[str, str, str]] = Counter()
-    for row in read_zeek_log(logdir, "dnp3.log"):
-        fc = row.get("fc_request", "-")
-        if fc and fc != "-":
-            c[(row.get("id.orig_h", ""), row.get("id.resp_h", ""), fc)] += 1
-    return c
-
-
 def _s7_log_tuples(logdir: Path) -> Counter[tuple[str, str, str]]:
     """Application request identities across the S7comm and S7-plus logs."""
     return Counter(
@@ -373,15 +364,24 @@ def fidelity_check(proto: str, results: Results) -> None:
             return
         mounts = [(scripts, f"/icsnpp-{proto}")]
         loads = [f"/icsnpp-{proto}"]
-        log_tuples = _modbus_log_tuples if proto == "modbus" else _dnp3_log_tuples
+        log_tuples = _modbus_log_tuples
+        if proto == "dnp3":
+            mounts.append((_REPO_ROOT / "scripts/verify", "/verification"))
+            loads.append("/verification/dnp3-observe.zeek")
 
     proto_dir = _SCENARIOS / ("s7" if proto == "s7comm" else proto)
     compared = 0
-    for scenario_file in sorted(proto_dir.glob("*.yaml")):
+    scenario_files = sorted(proto_dir.glob("*.yaml"))
+    if proto == "dnp3":
+        scenario_files += [
+            _REPO_ROOT / "tests/data/fidelity/dnp3" / name
+            for name in ("boundaries.yaml", "no-responses.yaml")
+        ]
+    for scenario_file in scenario_files:
         with tempfile.TemporaryDirectory() as td:
             pcap, events = emit(scenario_file, Path(td))
             want = _json_request_tuples(events)
-            if not want:
+            if not want and proto != "dnp3":
                 results.skip(
                     f"fidelity[{proto}] {scenario_file.name}: no request events to compare"
                 )
@@ -390,6 +390,32 @@ def fidelity_check(proto: str, results: Results) -> None:
                 logs = run_zeek(pcap, loads, mounts)
             except RuntimeError as exc:
                 results.fail(f"fidelity[{proto}] {scenario_file.name}: {exc}")
+                continue
+            if proto == "dnp3":
+                from scripts.verify.dnp3 import compare_dnp3_events
+
+                try:
+                    differences = compare_dnp3_events(
+                        events, read_zeek_log(logs, "substation_dnp3.log")
+                    )
+                    differences.extend(
+                        f"decoder diagnostic: {row.get('name', row)!r}"
+                        for row in read_zeek_log(logs, "weird.log")
+                    )
+                    if differences:
+                        results.fail(
+                            f"fidelity[dnp3] {scenario_file.name}: " + "; ".join(differences[:8])
+                        )
+                    else:
+                        results.ok(
+                            f"fidelity[dnp3] {scenario_file.name}: {len(events)} messages "
+                            "match direction, connection order, functions, IIN and object/control fields"
+                        )
+                except (OSError, ValueError) as exc:
+                    results.fail(f"fidelity[dnp3] {scenario_file.name}: {exc}")
+                finally:
+                    shutil.rmtree(logs, ignore_errors=True)
+                compared += 1
                 continue
             from substation.protocols.modbus import FUNCTION_NAMES
 

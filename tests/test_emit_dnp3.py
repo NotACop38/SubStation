@@ -1,8 +1,8 @@
 """Phase-3 DNP3 emission tests: one model -> matching PCAP + schema-valid JSON.
 
-These prove the LOCKED dual-emit guarantee (PRD §6.1) holds for DNP3 the same way it
-does for Modbus: the PCAP and JSON are built from the same shared event list, so they
-cannot drift. We assert the JSON validates against the frozen schema, the hand-built
+These check the shared-model contract (PRD §6.1); native decoder tests provide
+an independent check in test_dnp3_fidelity.py. We assert the JSON validates against
+the frozen schema, the hand-built
 DNP3 PCAP carries exactly one DNP3 link frame per JSON event with matching function
 codes in the same order, the CRCs are valid, and the whole thing is byte-stable.
 """
@@ -99,7 +99,7 @@ def test_request_response_pairing_and_action_class(tmp_path: Path) -> None:
     # An OPERATE request pairs with a RESPONSE; the response inherits the verb.
     req = next(e for e in events if e["func_name"] == "OPERATE")
     assert req["is_orig"] is True and req["action_class"] == "control"
-    assert req["detail"]["control"]["operation_type"] == "Latch_On"
+    assert req["detail"]["control"]["operation_type"] == "Latch On"
     resp = next(e for e in events if e["func_name"] == "RESPONSE")
     assert resp["is_orig"] is False and resp["action_class"] == "control"
     assert resp["detail"]["fc_reply"] == "RESPONSE"

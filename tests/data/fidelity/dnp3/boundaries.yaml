@@ -1,0 +1,109 @@
+# Offline parser qualification fixture; not a Detection Contract scenario.
+name: dnp3-fidelity-boundaries
+description: Synthetic decoder regression fixture; labels do not measure device behavior
+  or detection effectiveness.
+protocol: dnp3
+label: benign
+timing:
+  start: 1.0
+  default_interval: 1.0
+actors:
+- id: master
+  role: master
+  host: 192.0.2.10
+- id: outstation
+  role: outstation
+  host: 192.0.2.50
+  port: 20000
+exchanges:
+- source: master
+  target: outstation
+  function: DirectOperateNR
+  params:
+    index_number: 65535
+    operation_type: Pulse_Off
+    clear_bit: true
+    trip_control_code: Trip
+    execute_count: 255
+    on_time: 4294967295
+    off_time: 65536
+- source: master
+  target: outstation
+  function: DirectOperateNR
+  params:
+    operation_type: Latch_Off
+- source: master
+  target: outstation
+  function: Confirm
+- source: master
+  target: outstation
+  function: Read
+  params:
+    object_type: Binary Output
+    range_low: 300
+    range_high: 316
+    iin: 4660
+- source: master
+  target: outstation
+  function: Read
+  params:
+    object_type: Binary Input With Status
+    range_low: 65300
+    range_high: 65535
+    iin: 4660
+- source: master
+  target: outstation
+  function: Read
+  params:
+    object_type: 16-Bit Binary Counter
+    range_low: 256
+    range_high: 257
+    iin: 4660
+- source: master
+  target: outstation
+  function: Read
+  params:
+    object_type: 16-Bit Analog Input
+    range_low: 1
+    range_high: 79
+    iin: 4660
+- source: master
+  target: outstation
+  function: Read
+  params:
+    object_type: 32-Bit Analog Input
+    range_low: 65500
+    range_high: 65535
+    iin: 4660
+- source: master
+  target: outstation
+  function: Read
+  params:
+    object_type: 16-Bit Analog Output Block
+    range_low: 1
+    range_high: 79
+    iin: 4660
+- source: master
+  target: outstation
+  function: Read
+  params:
+    object_type: 32-Bit Analog Output Block
+    range_low: 0
+    range_high: 46
+    iin: 4660
+- source: master
+  target: outstation
+  function: Read
+  params:
+    object_type: Binary Output
+    range_low: 0
+    range_high: 1903
+    iin: 4660
+- source: outstation
+  target: master
+  function: UnsolicitedResponse
+  params:
+    object_type: 16-Bit Binary Counter
+    range_low: 256
+    range_high: 257
+    iin: 32769

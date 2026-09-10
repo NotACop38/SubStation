@@ -4,6 +4,10 @@
 **VERIFY gate:** `PRD.md` §6.3 / §7 — "ICSNPP field names / detail shapes."
 **Date:** 2026-06-04
 
+**Correction, 2026-09-10:** operation labels below now follow the executable
+constant table's spaced spellings. See [the independent message-level check](08-dnp3-message-fidelity.md)
+for the transaction-log loss and object-filtering limits missed by this field-only spike.
+
 ## Goal
 
 Confirm the **current** Zeek + ICSNPP DNP3 field names and detail-log shapes so the
@@ -74,7 +78,7 @@ clear_bit, execute_count, on_time, off_time, status_code`.
 Value enumerations (from `main.zeek` logic + README):
 - `block_type` ∈ {`Control Relay Output Block`, `Pattern Control Block`}.
 - `operation_type` (= `control_block_operation_type[control_code & 0x0f]`) ∈
-  {`Nul`, `Pulse_On`, `Pulse_Off`, `Latch_On`, `Latch_Off`}.
+  {`Nul`, `Pulse On`, `Pulse Off`, `Latch On`, `Latch Off`}.
 - `trip_control_code` (= `control_block_trip_code[(control_code & 0xc0)/64]`) ∈
   {`Nul`, `Close`, `Trip`}.
 - `clear_bit` = `((control_code & 0x20) >> 5) == 1`.

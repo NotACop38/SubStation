@@ -197,6 +197,10 @@ record fields); unknown fields are rejected.
 | `control`    | object          | `dnp3_control.log` CROB/PCB sub-shape (SELECT/OPERATE) — see below. |
 | `objects`    | object          | `dnp3_objects.log` object-header sub-shape (READ/RESPONSE) — see below. |
 
+The IIN integer preserves Zeek's logged representation: the first wire octet is
+the high byte, so `iin: 258` (`0x0102`) emits `01 02`. This is a representation
+contract, not a claim that all DNP3 multi-byte fields use that byte order.
+
 `detail.control` (ICSNPP `dnp3_control.log`; values from the parser's
 `control_block_*` tables):
 
@@ -206,19 +210,19 @@ record fields); unknown fields are rejected.
 | `function_code`     | string (this row's function, e.g. `OPERATE`) |
 | `index_number`      | integer 0–65535 |
 | `trip_control_code` | string (`Nul` / `Close` / `Trip`) |
-| `operation_type`    | string (`Nul` / `Pulse_On` / `Pulse_Off` / `Latch_On` / `Latch_Off`) |
+| `operation_type`    | string (`Nul` / `Pulse On` / `Pulse Off` / `Latch On` / `Latch Off`) |
 | `clear_bit`         | boolean         |
 | `execute_count`     | integer 0–255   |
 | `on_time`           | integer 0–2³²−1 |
 | `off_time`          | integer 0–2³²−1 |
 | `status_code`       | string (RESPONSE only) |
 
-`detail.objects` (ICSNPP `dnp3_objects.log`; range/count populated on the RESPONSE,
-per the parser):
+`detail.objects` uses ICSNPP object fields, extended in synthetic events to
+unsolicited responses and request functions filtered out of the native log:
 
 | Field           | Type            |
 | --------------- | --------------- |
-| `function_code` | string (`READ` / `RESPONSE`) |
+| `function_code` | string (this message's function) |
 | `object_type`   | string (device/object type, e.g. `Binary Input With Status`) |
 | `object_count`  | integer 0–65535 |
 | `range_low`     | integer 0–65535 |
@@ -236,6 +240,17 @@ per the parser):
 > inconsistent count is rejected at build time rather than emitted. Ranges and
 > control `index_number` are carried on the wire as 2-byte fields, so values up to
 > 65535 round-trip.
+
+Binary Output points (group 10 variation 1) are bit-packed. Analog Output Block
+points include a status octet. The single-frame limit uses encoded payload bytes.
+Response-only `range_low`, `range_high` and `object_count` are accepted on READ or
+UNSOLICITED_RESPONSE; request-only object operations reject them. CONFIRM and
+no-response functions emit no reply and reject the response-only `iin` parameter.
+
+New JSON uses spaced ICSNPP operation labels (`Pulse On`, `Latch Off`, etc.).
+Scenario input accepts both spaces and the earlier underscore spellings. The
+schema still accepts previously generated labels; the shipped rules select
+function names rather than these control labels.
 
 We do **not** duplicate ICSNPP's `id` / `source_*` / `destination_*` into `detail`
 — the envelope `conn` + `is_orig` carry them (same choice as Modbus, spike 04). A
@@ -386,7 +401,7 @@ More live, validated examples:
 A DNP3 operate command and an unauthorized cold-restart (one line each):
 
 ```json
-{"ts": 1717372802.0, "uid": "COt4RSFMt8R6TYXLdv", "conn": {"orig_h": "10.0.1.10", "orig_p": 49152, "resp_h": "10.0.1.50", "resp_p": 20000}, "proto": "dnp3", "is_orig": true, "direction": "request", "func_code": 4, "func_name": "OPERATE", "action_class": "control", "is_exception": false, "error": null, "detail": {"fc_request": "OPERATE", "control": {"block_type": "Control Relay Output Block", "function_code": "OPERATE", "index_number": 2, "trip_control_code": "Close", "operation_type": "Latch_On", "clear_bit": false, "execute_count": 1, "on_time": 0, "off_time": 0}}}
+{"ts": 1717372802.0, "uid": "COt4RSFMt8R6TYXLdv", "conn": {"orig_h": "10.0.1.10", "orig_p": 49152, "resp_h": "10.0.1.50", "resp_p": 20000}, "proto": "dnp3", "is_orig": true, "direction": "request", "func_code": 4, "func_name": "OPERATE", "action_class": "control", "is_exception": false, "error": null, "detail": {"fc_request": "OPERATE", "control": {"block_type": "Control Relay Output Block", "function_code": "OPERATE", "index_number": 2, "trip_control_code": "Close", "operation_type": "Latch On", "clear_bit": false, "execute_count": 1, "on_time": 0, "off_time": 0}}}
 {"ts": 1717372806.0, "uid": "COt4RSFMt8R6TYXLdv", "conn": {"orig_h": "10.0.1.77", "orig_p": 49153, "resp_h": "10.0.1.50", "resp_p": 20000}, "proto": "dnp3", "is_orig": true, "direction": "request", "func_code": 13, "func_name": "COLD_RESTART", "action_class": "control", "is_exception": false, "error": null, "detail": {"fc_request": "COLD_RESTART"}}
 ```
 

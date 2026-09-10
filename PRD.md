@@ -1,7 +1,7 @@
 # Substation — Product Requirements Document
 
 **Status:** v0.1 requirements, reviewed 2026-09-09 (source of truth)
-**Last updated:** 2026-09-09
+**Last updated:** 2026-09-10
 
 > This document and the companion `ENGINEERING_CHECKLIST.md` are the source of truth for Substation. Decisions marked **LOCKED** are committed but reversible — revisit by editing this doc and noting the change. Items marked **VERIFY** must be confirmed against an authoritative source before the relevant code/content is frozen.
 
@@ -231,7 +231,7 @@ Consequence we accept and document: **Sigma-over-JSON detections need no Zeek; Z
   - **JSON** event log (Zeek/ICSNPP-aligned, §6.3) from the same model.
 - **Files-only invariant (LOCKED, enforced):** the simulator writes files and never opens a sending socket / never transmits on a live interface. Stated in the README and guarded in code.
 - **Realism requirement:** scenarios must model a **legitimate writer/master** (HMI/EWS) and **continuous benign polling**, not only the attacker — otherwise the allow-list and scanning detections are untestable and not credible (see §8).
-- **Independent checks (Tier 2):** compare supported Modbus fields and responses against Zeek/ICSNPP, including attributed external captures; keep unsupported Modbus and DNP3/S7 count checks explicitly limited. Test stateful rules on fire/quiet PCAPs. Timing, all extensions, device behavior and SIEM backend equivalence remain unqualified.
+- **Independent checks (Tier 2):** compare supported Modbus fields and responses against Zeek/ICSNPP, including attributed external captures; compare DNP3 per-message headers, IIN and object/control fields with native parser callbacks. Keep unsupported Modbus and S7 count checks explicitly limited. Test stateful rules on fire/quiet PCAPs. Timing, all extensions, device behavior and SIEM backend equivalence remain unqualified.
 
 ### 6.5 Detection-engine policy (LOCKED)
 
@@ -329,7 +329,7 @@ A minimal, **passive, isolated** Modbus responder that logs inbound probes for r
 |Naive “unauthorized write = any write”               |Engineers legitimately write setpoints; a write-only rule is pure false positives and discredits the project|M1/D3/S2 use **allow-list by source/asset/unit** or baseline deviation; simulator **must** model a legitimate writer|
 |Naive “scanning = high volume”                       |SCADA masters poll constantly; volume thresholds fire on normal operation                                   |M3/D4 key on **function-code diversity, illegal codes, unit-ID sweeping**, not raw request rate                     |
 |scapy protocol gaps                                  |scapy’s Modbus is uneven; no solid S7comm/DNP3 layers                                                       |Hand-assembled PDUs / template-PCAP splicing; per-protocol capability spike (§7)                                    |
-|Synthetic telemetry doesn’t match real Zeek          |Detections that only work on our JSON aren’t credible                                                       |Tier-2 request identity/count comparison; full detail and response parity remain unqualified                                                |
+|Synthetic telemetry doesn’t match real Zeek          |Detections that only work on our JSON aren’t credible                                                       |Tier-2 core Modbus fields and DNP3 message/detail comparison; S7 counts, timing and remaining payload semantics stay explicitly limited                                                |
 |Over-claiming ATT&CK mappings                        |Wrong/loose technique IDs erode trust with practitioners                                                    |Per-detection verified IDs (§7), false-positive profile in every doc (§6.6)                                         |
 |S7 complexity (S7comm/-plus, COTP/TPKT, no open spec)|Highest implementation risk; built last for a reason                                                        |Lean on community/Wireshark-dissector references; isolate S7 to its own phase                                       |
 |Scope creep into other protocols                     |Dilutes a clean v1                                                                                          |IEC-104/CIP/BACnet/etc. are explicitly post-v1 contributions                                                        |
