@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,15 +8,22 @@ version = "0.1.0"
 description = "Defensive ICS detection-content pack (Modbus/DNP3/S7) with a files-only protocol traffic simulator."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Substation contributors" }]
 keywords = ["ics", "ot", "modbus", "dnp3", "s7comm", "sigma", "zeek", "attack", "detection"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Environment :: Console",
     "Intended Audience :: Information Technology",
-    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Security",
+    "Typing :: Typed",
 ]
 
 # Runtime deps (the Tier-1 path is pure Python). Exact pins; see requirements.lock.
@@ -45,12 +52,18 @@ dev = [
 substation = "substation.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/notacop38/substation"
+Homepage = "https://github.com/NotACop38/SubStation"
+Documentation = "https://github.com/NotACop38/SubStation/blob/main/docs/design.md"
+Repository = "https://github.com/NotACop38/SubStation"
+Issues = "https://github.com/NotACop38/SubStation/issues"
+Changelog = "https://github.com/NotACop38/SubStation/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 include = ["substation*"]
 
 [tool.setuptools.package-data]
+# PEP 561: the package ships inline type annotations.
+"substation" = ["py.typed"]
 # Ship the machine-readable event-log JSON Schema with the package so the
 # validator (and external tools) can load it from an installed distribution.
 "substation.schema" = ["*.json"]

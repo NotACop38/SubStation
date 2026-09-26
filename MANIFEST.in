@@ -2,8 +2,8 @@
 # gates (`make ci`, `make verify`); tests/test_packaging.py checks it against git.
 include Makefile requirements.lock requirements.metadata.json
 include AGENTS.md CLAUDE.md CONTRIBUTING.md CHANGELOG.md SECURITY.md
-recursive-include substation *.md *.json
-recursive-include detections *.yaml *.yml *.md *.zeek *.rules *.suricata .gitkeep
+recursive-include substation *.md *.json py.typed
+recursive-include detections *.yaml *.yml *.md *.zeek .gitkeep
 recursive-include scenarios *.yaml
 recursive-include scripts *.py *.zeek *.patch *.json *.Dockerfile pre-push
 recursive-include tests *.py *.jsonl *.yaml *.pcap *.json *.txt *.md
