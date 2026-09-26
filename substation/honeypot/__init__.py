@@ -24,6 +24,7 @@ from substation.honeypot.modbus import (
     HoneypotConfig,
     HoneypotConfigError,
     ModbusHoneypot,
+    ProbeLogError,
     StubDevice,
     process_frame,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "HoneypotConfig",
     "HoneypotConfigError",
     "ModbusHoneypot",
+    "ProbeLogError",
     "StubDevice",
     "process_frame",
 ]

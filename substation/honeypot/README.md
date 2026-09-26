@@ -62,7 +62,15 @@ python -m substation.honeypot --bind 10.99.0.5 --port 502 \
 
 Options: `--bind` (default `127.0.0.1`), `--port` (default `502`), `--log`
 (default `./honeypot-probes.jsonl`), `--allow-external` (opt in to a non-loopback
-bind; also requires `SUBSTATION_HONEYPOT_I_UNDERSTAND=1`).
+bind; also requires `SUBSTATION_HONEYPOT_I_UNDERSTAND=1`), `--log-max-bytes`
+(rotate the log to `<log>.1` past this size; default 50 MiB, `0` disables) and
+`--connection-timeout` (close any connection open longer than this; default 60 s).
+
+Connections are served one at a time. A silent client is dropped after a 10 s
+receive timeout, and one that trickles bytes to hold the listener is dropped at
+the connection timeout. A log that is not a regular file (for example a pipe to
+another tool) is streamed without rotation. If the probe log cannot be written,
+the honeypot stops with an error instead of silently dropping probes.
 
 ## The logs conform to the event-log schema
 
