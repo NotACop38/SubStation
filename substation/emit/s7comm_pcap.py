@@ -78,37 +78,58 @@ def _job_param_data(event: S7Event) -> tuple[bytes, bytes]:
             b"\x05\x01\x12\x0a\x10\x02\x00\x01\x00\x00\x84\x00\x00\x00",
             b"\x00\x04\x00\x10\x00\x01",
         )
+    if func in (0x28, 0x29) and is_resp:
+        # A PLC Control / PLC Stop acknowledgement carries only the function byte.
+        return bytes([func]), b""
     if func == 0x29:  # PLC Stop: function + 5 reserved + len + "P_PROGRAM"
         service = b"P_PROGRAM"
         return bytes([0x29, 0, 0, 0, 0, 0, len(service)]) + service, b""
     if func == 0x28:  # PLC Control: carries the control service string (spike 06)
         service = (event.plc_control or "P_PROGRAM").encode("ascii")
+        # Block activation and deletion name the block they act on: a count, a
+        # reserved byte and one block spec: the transfer filename without its
+        # leading file identifier (type 0A = DB, five-digit number, P = passive FS).
+        blocks = b""
+        if event.block_filename is not None:
+            blocks = b"\x01\x00" + event.block_filename[1:].encode("ascii")
         param = (
-            bytes([0x28, 0, 0, 0, 0, 0, 0, 0xFD]) + b"\x00\x00" + bytes([len(service)]) + service
+            bytes([0x28, 0, 0, 0, 0, 0, 0, 0xFD])
+            + len(blocks).to_bytes(2, "big")
+            + blocks
+            + bytes([len(service)])
+            + service
         )
-        return param + b"\x00", b""
-    if func in (0x1A, 0x1B):  # Request Download / Download Block: block file spec
-        if is_resp:
-            # Empty synthetic block; status, byte count and reserved marker.
-            return bytes([func]), (b"\x00\x00\x00\x00\xfb" if func == 0x1B else b"")
-        head = bytes([func, 0, 0, 0, 0, 0, 0x01, 0x00])
-        if event.block_filename:
-            fn = event.block_filename.encode("ascii")
-            # Request Download has an additional parameter-length octet after
-            # the filename. Omitting it disables the real analyzer mid-flow.
-            return head + bytes([len(fn)]) + fn + (b"\x00" if func == 0x1A else b""), b""
-        return head + b"\x00" + (b"\x00" if func == 0x1A else b""), b""
-    if func in (0x1C, 0x1D, 0x1E, 0x1F):  # Download Ended / uploads
-        if is_resp:
-            if func == 0x1D:
-                return bytes([func, 0, 0, 0, 0, 0, 0, 1, 1]) + b"0", b""
-            if func == 0x1E:
-                return bytes([func]), b"\x00\x00\x00\x00\xfb"
-            return bytes([func]), b""
-        header = bytes([func, 0, 0, 0, 0, 0, 0x01, 0x00])
-        return header + (b"\x00" if func in (0x1C, 0x1D) else b""), b""
+        return param + (b"" if blocks else b"\x00"), b""
+    if func in (0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F):
+        return _transfer_param_data(event, func, is_resp)
     # CPU Services / any other Job function: a bare function byte is enough to decode.
     return bytes([func]), b""
+
+
+# Request Download "part 2": '1', then the load-memory and MC7-code lengths as
+# six ASCII digits each (Wireshark s7comm dissector). Synthetic, empty-block sizes.
+_DOWNLOAD_LENGTHS = b"1" + b"000256" + b"000188"
+
+
+def _transfer_param_data(event: S7Event, func: int, is_resp: bool) -> tuple[bytes, bytes]:
+    """Parameter/data for block transfers: download 0x1A-0x1C, upload 0x1D-0x1F."""
+    if is_resp:
+        if func == 0x1D:  # Start Upload ACK: assigns upload id 1, block length "0".
+            return bytes([func, 0, 0, 0, 0, 0, 0, 1, 1]) + b"0", b""
+        if func in (0x1B, 0x1E):
+            # Function status belongs to the parameter; the data holds the byte
+            # count and the reserved 0x00fb marker of an empty synthetic block.
+            return bytes([func, 0x00]), b"\x00\x00\x00\xfb"
+        return bytes([func]), b""
+    session = int((event.detail.get("upload_download") or {}).get("session_id", 0))
+    head = bytes([func, 0, 0, 0]) + session.to_bytes(4, "big")
+    if func in (0x1A, 0x1B):  # Request Download / Download Block: block file spec
+        fn = (event.block_filename or "").encode("ascii")
+        spec = bytes([len(fn)]) + fn
+        if func == 0x1A:
+            spec += bytes([len(_DOWNLOAD_LENGTHS)]) + _DOWNLOAD_LENGTHS
+        return head + spec, b""
+    return head + (b"\x00" if func in (0x1C, 0x1D) else b""), b""
 
 
 def _userdata_param_data(event: S7Event) -> tuple[bytes, bytes]:
@@ -164,7 +185,8 @@ def _s7plus_pdu(event: S7Event) -> bytes:
         bytes([_S7PLUS_PROTO_ID, int(event.detail["plus"]["version"])])
         + len(inner).to_bytes(2, "big")
         + inner
-        + b"\x00\x72\x00\x00"
+        # Trailer: protocol id, version and a zero length (real S7-1500 frames).
+        + bytes([_S7PLUS_PROTO_ID, int(event.detail["plus"]["version"]), 0, 0])
     )
     return _tpkt(_COTP_DT + body)
 

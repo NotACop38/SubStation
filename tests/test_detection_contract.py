@@ -171,7 +171,7 @@ _EXPECTED_FIRE_HITS: dict[tuple[str, str], tuple[int, ...]] = {
     ("D1", "dnp3-anomalous-d1-restart"): (6,),
     ("D2", "dnp3-anomalous-d2-disable-unsolicited"): (4,),
     ("D3", "dnp3-anomalous-d3-unauthorized-operate"): (5, 8, 10),
-    # S1: the PLC Stop request. S2: the download-sequence + Create Object requests.
+    # S1: the PLC Stop request. S2: the download-sequence requests + the PI _INSE.
     ("S1", "s7-anomalous-s1-cpu-stop"): (12,),
     ("S2", "s7-anomalous-s2-program-download"): (10, 12, 14, 16),
 }

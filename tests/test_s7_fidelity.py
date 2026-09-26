@@ -43,8 +43,15 @@ def test_success_response_fields_are_present(function: str) -> None:
 def test_download_status_and_session_belong_to_the_request() -> None:
     request, response = build_events(scenario("RequestDownload"))[-2:]
     assert request.detail["upload_download"]["function_status"] == "0x00"
-    assert request.detail["upload_download"]["session_id"] == 256
+    # ICSNPP's grammar: a download's session id is always 0.
+    assert request.detail["upload_download"]["session_id"] == 0
     assert "function_status" not in response.detail["upload_download"]
+
+
+@pytest.mark.parametrize(("function", "session"), [("Upload", 1), ("EndUpload", 1)])
+def test_upload_continuations_use_the_assigned_upload_id(function: str, session: int) -> None:
+    request = build_events(scenario(function))[-2]
+    assert request.detail["upload_download"]["session_id"] == session
 
 
 def test_read_szl_request_carries_the_encoded_return_code() -> None:
@@ -212,3 +219,16 @@ def test_patched_parser_bounds_decimal_input(
             assert diagnostics == []
     finally:
         shutil.rmtree(logs)
+
+
+def test_comparison_ties_the_envelope_function_to_the_detail() -> None:
+    from scripts.verify.s7 import compare_s7_events
+    from substation.protocols.s7comm import event_to_dict
+
+    events = [event_to_dict(e) for e in build_events(scenario("PlcStop"))]
+    assert not [d for d in compare_s7_events(events, {}) if "envelope" in d]
+    # A naming drift in the envelope would silence S1 while the detail still
+    # matched the parser; it must be reported.
+    stop = next(e for e in events if e["func_name"] == "PLC Stop")
+    stop["func_name"] = "PLC STOP"
+    assert any("envelope" in d for d in compare_s7_events(events, {}))

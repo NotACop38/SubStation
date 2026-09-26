@@ -205,7 +205,7 @@
       "tactic": "lateral-movement",
       "score": 1,
       "color": "",
-      "comment": "S2 — Program / data-block write or download",
+      "comment": "S2 — Program / data-block download",
       "enabled": true,
       "metadata": [
         {

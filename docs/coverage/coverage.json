@@ -195,7 +195,7 @@
     },
     {
       "id": "S2",
-      "title": "Program / data-block write or download",
+      "title": "Program / data-block download",
       "protocol": "s7comm",
       "engine": "sigma",
       "tier": 1,

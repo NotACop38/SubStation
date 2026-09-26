@@ -101,8 +101,12 @@ def test_cotp_handshake_brackets_each_connection(tmp_path: Path) -> None:
     cotp = [e for e in events if "cotp" in e["detail"]]
     crs = [e for e in cotp if e["func_name"] == "CR Connection Request"]
     ccs = [e for e in cotp if e["func_name"] == "CC Connection Confirm"]
-    # The baseline has two connections (EWS + HMI), so two CR/CC pairs.
-    assert len(crs) == 2 and len(ccs) == 2
+    # One CR/CC pair per connection: two classic S7 sessions (HMI + EWS) and one
+    # S7comm-plus session (the second HMI).
+    connections = {e["uid"] for e in events}
+    assert len(connections) == 3
+    assert len(crs) == len(ccs) == len(connections)
+    assert {e["uid"] for e in crs} == {e["uid"] for e in ccs} == connections
     for cr in crs:
         assert cr["is_orig"] is True and cr["detail"]["cotp"]["pdu_code"] == "0x0e"
     for cc in ccs:
@@ -308,3 +312,43 @@ exchanges:
     function: RequestDownload
     params: {{block_type: "0A", block_number: "{"1" * 252}"}}
 """
+
+
+_PI_BLOCK_SCENARIO = """
+name: s7-pi-block
+protocol: s7comm
+label: anomalous
+actors:
+  - {id: ews, role: ews, host: 10.0.4.10}
+  - {id: plc, role: plc, host: 10.0.4.50, port: 102}
+exchanges:
+  - source: ews
+    target: plc
+    function: PlcControl
+    params: {service: _INSE, block_type: "0e", block_number: "00042"}
+  - {source: ews, target: plc, function: PlcControl, params: {service: _DELE}}
+  - {source: ews, target: plc, function: PlcControl, params: {service: P_PROGRAM}}
+"""
+
+
+def test_pi_block_services_name_the_scenario_block(tmp_path: Path) -> None:
+    # _INSE/_DELE carry a count, a reserved byte and one block spec
+    # (type, five-digit number, P); other services carry no block list.
+    result = write_artifacts(load_scenario(_write_scenario(tmp_path, _PI_BLOCK_SCENARIO)), tmp_path)
+    requests = [
+        payload[7:]
+        for payload in _s7_payloads(result.pcap)
+        if _classify(payload) == "s7comm" and payload[8] == 0x01  # Job
+    ]
+    params = [s7[10 : 10 + int.from_bytes(s7[6:8], "big")] for s7 in requests]
+    assert params[0] == b"\x28" + bytes(6) + b"\xfd\x00\x0a\x01\x000E00042P\x05_INSE"
+    assert params[1] == b"\x28" + bytes(6) + b"\xfd\x00\x0a\x01\x000A00001P\x05_DELE"
+    assert params[2] == b"\x28" + bytes(6) + b"\xfd\x00\x00\x09P_PROGRAM\x00"
+
+
+def test_block_params_are_rejected_for_services_without_a_block(tmp_path: Path) -> None:
+    body = _PI_BLOCK_SCENARIO.replace(
+        "{service: P_PROGRAM}", '{service: P_PROGRAM, block_number: "00001"}'
+    )
+    with pytest.raises(S7Error, match="apply only to the _DELE/_INSE services"):
+        write_artifacts(load_scenario(_write_scenario(tmp_path, body)), tmp_path)
