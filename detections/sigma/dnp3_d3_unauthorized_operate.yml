@@ -1,12 +1,12 @@
 # =============================================================================
 # Substation detection D3 — Unauthorized DNP3 control (operate / direct-operate)
 # =============================================================================
-# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — docs/design.md §6.5).
 # Rationale, data source and the full false-positive profile live in
 # detections/docs/D3-unauthorized-operate.md (the Detection Contract doc, §6.6).
 #
 # Allow-list by SOURCE, not "any operate": operators legitimately issue controls,
-# so a control-only rule is pure false positives (PRD.md §8). A SELECT / OPERATE /
+# so a control-only rule is pure false positives (docs/design.md §8). A SELECT / OPERATE /
 # DIRECT_OPERATE request (a control-relay/analog output command) from a master not
 # on the allow-list fires; the same command from the allow-listed master is quiet.
 # -----------------------------------------------------------------------------
@@ -16,13 +16,13 @@ status: experimental
 description: |
   A DNP3 output-control request (SELECT / OPERATE / DIRECT_OPERATE) — typically a
   Control-Relay-Output-Block driving a breaker or setpoint — from a master that is
-  not on the allow-list. Substation detection D3 (PRD.md §5.2): an unauthorized
+  not on the allow-list. Substation detection D3 (docs/design.md §5.2): an unauthorized
   command message that can move the physical process (Impair Process Control).
   Allow-listing by source, not "any operate", keeps legitimate operator controls
-  quiet (the OT-realism guardrail, PRD.md §8).
+  quiet (the OT-realism guardrail, docs/design.md §8).
 references:
   - https://attack.mitre.org/techniques/T1692/001/
-  - PRD.md §5.2 (D3); detections/docs/D3-unauthorized-operate.md
+  - docs/design.md §5.2 (D3); detections/docs/D3-unauthorized-operate.md
 author: Substation
 date: 2026-06-04
 logsource:

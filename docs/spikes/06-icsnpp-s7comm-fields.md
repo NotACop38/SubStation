@@ -1,15 +1,15 @@
 # Spike 6 — ICSNPP S7comm parser field names & detail-log shapes
 
 **Status:** RESOLVED (verified against authoritative source — frozen for Phase 4).
-**VERIFY gate:** `PRD.md` §6.3 / §7 — "ICSNPP field names / detail shapes" (S7).
+**VERIFY gate:** `docs/design.md` §6.3 / §7 — "ICSNPP field names / detail shapes" (S7).
 **Date:** 2026-06-04
 
 ## Goal
 
 Confirm the **current** ICSNPP S7comm field names, log shapes and value
 enumerations so the S7 `detail` object in `docs/schema.md` is drawn from real names,
-not memory (`ENGINEERING_CHECKLIST.md` Phase 4; `CLAUDE.md` VERIFY gate). S7comm /
-S7comm-plus have **no open specification** (`PRD.md` §9), so the ICSNPP parser and
+not memory (the S7 schema freeze gate; `AGENTS.md` VERIFY gate). S7comm /
+S7comm-plus have **no open specification** (`docs/design.md` §9), so the ICSNPP parser and
 the Wireshark S7comm dissector are the authoritative references.
 
 ## Sources (authoritative)

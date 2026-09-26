@@ -1,7 +1,7 @@
 """PCAP emitter: shared DNP3 events -> hand-built DNP3/TCP ``.pcap``.
 
 Consumes the **same** :class:`~substation.protocols.dnp3.Dnp3Event` list as the JSON
-emitter (PRD §6.1: one model, dual emit, no drift). scapy ships no DNP3 layer (spike
+emitter (docs/design.md §6.1: one model, dual emit, no drift). scapy ships no DNP3 layer (spike
 05), so this module assembles the DNP3 data-link / transport / application bytes
 itself — with the CRC verified against a real capture
 (:func:`substation.protocols.dnp3.dnp3_crc`). The synthetic TCP framing (handshake,

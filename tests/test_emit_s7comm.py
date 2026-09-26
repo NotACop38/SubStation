@@ -1,6 +1,6 @@
-"""Phase-4 S7 emission tests: one model -> matching PCAP + schema-valid JSON.
+"""S7 emission tests: one model -> matching PCAP + schema-valid JSON.
 
-The PCAP and JSON are built from the same shared event list (PRD §6.1), as with
+The PCAP and JSON are built from the same shared event list (docs/design.md §6.1), as with
 Modbus/DNP3. Independent parser checks are still necessary. Here we assert the
 JSON validates against the frozen schema, the
 hand-built TPKT/COTP/S7comm PCAP carries exactly one S7 PDU per JSON event with

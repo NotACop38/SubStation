@@ -1,16 +1,16 @@
 # =============================================================================
 # Substation detection M1 — Unauthorized Modbus register/coil write
 # =============================================================================
-# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — docs/design.md §6.5).
 # Rationale, data source and the full false-positive profile live in
 # detections/docs/M1-unauthorized-write.md (the Detection Contract doc, §6.6).
 #
 # Allow-list by SOURCE + UNIT + REGISTER, not "any write": engineers legitimately
-# write setpoints, so a write-only rule is pure false positives (PRD.md §8). A
+# write setpoints, so a write-only rule is pure false positives (docs/design.md §8). A
 # write is in-policy only when it comes from an allow-listed writer (HMI/EWS) AND
 # targets the permitted unit AND a writable setpoint register; a write that fails
 # any of these — a non-allow-listed source, OR an allow-listed source straying to
-# an out-of-policy unit/register — is unauthorized and fires (PRD.md §5.1).
+# an out-of-policy unit/register — is unauthorized and fires (docs/design.md §5.1).
 # -----------------------------------------------------------------------------
 title: Modbus Write From Unauthorized Source
 id: ecee7c3a-9d40-4ca2-92c1-7df770ed84d7
@@ -20,17 +20,17 @@ description: |
   simulator validates write single/multiple coils or registers; parser-fed
   telemetry that normalizes mask-write, read/write-multiple or write-file records
   to action_class: write is covered by the same rule.
-  Substation detection M1 (PRD.md §5.1): an unauthorized command message that can
+  Substation detection M1 (docs/design.md §5.1): an unauthorized command message that can
   change PLC state. A write is in-policy only when it comes from an allow-listed
   writer (HMI/EWS) to the permitted unit and a writable setpoint register; a write
   failing any of those — a non-allow-listed source, OR an allow-listed source
   straying to an out-of-policy unit/register — fires. Allow-listing by
   source/unit/register, not "any write", keeps legitimate engineering writes quiet
-  (the OT-realism guardrail, PRD.md §8).
+  (the OT-realism guardrail, docs/design.md §8).
 references:
   - https://attack.mitre.org/techniques/T1692/001/
   - https://attack.mitre.org/techniques/T0836/
-  - PRD.md §5.1 (M1); detections/docs/M1-unauthorized-write.md
+  - docs/design.md §5.1 (M1); detections/docs/M1-unauthorized-write.md
 author: Substation
 date: 2026-06-04
 logsource:
@@ -50,7 +50,7 @@ detection:
   # An in-policy setpoint write: allow-listed writer AND permitted unit AND a
   # writable setpoint register (all three must hold). A write that fails ANY of
   # these is unauthorized — including an allow-listed source straying off-policy
-  # (PRD.md §5.1: "or to a register/unit outside policy").
+  # (docs/design.md §5.1: "or to a register/unit outside policy").
   in_policy_write:
     conn.orig_h:
       - '10.0.0.10' # hmi-1 — operator HMI

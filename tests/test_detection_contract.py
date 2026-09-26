@@ -1,6 +1,6 @@
 """The Detection Contract harness (Tier 1: Sigma over ``.jsonl``).
 
-This is the data-driven harness PRD.md §6.6 / the Engineering Checklist's
+This is the data-driven harness docs/design.md §6.6 / the Engineering Checklist's
 "Detection Definition of Done" call for. It is **fully metadata-driven**: it reads
 the detection registry (``detections/registry.yaml``) and every scenario under
 ``scenarios/``, then for each detection asserts — from that detection's own
@@ -10,7 +10,7 @@ scenarios) makes the fire/quiet cases appear here automatically; the one piece
 of test code a new *validated Tier-1* fire scenario must add is its exact-hit
 entry in ``_EXPECTED_FIRE_HITS`` below (the over-match regression net).
 
-Tier scoping (PRD.md §6.2): Tier-1 Sigma detections are evaluated directly over
+Tier scoping (docs/design.md §6.2): Tier-1 Sigma detections are evaluated directly over
 the generated JSON event log here. Tier-2 detections (Zeek/Suricata) execute in
 the Tier-2 runner over PCAP, so their fire/quiet cases are *skipped* here with a
 reason — but their contract linkage (a rule, ≥1 fire and ≥1 quiet scenario) is

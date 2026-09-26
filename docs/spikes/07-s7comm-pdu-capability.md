@@ -4,14 +4,14 @@
 S7comm/S7comm-plus/COTP application layer, so the S7 PCAP emitter assembles the
 TPKT / COTP / S7comm bytes itself, with the **header layout verified byte-for-byte
 against ICSNPP's own example captures**.
-**VERIFY gate:** `PRD.md` §6.4 / §7 — "scapy protocol-layer capability" (per-protocol);
-`PRD.md` §8 risk "scapy lacks solid S7comm/DNP3 layers" + "S7 complexity (no open spec)".
+**VERIFY gate:** `docs/design.md` §6.4 / §7 — "scapy protocol-layer capability" (per-protocol);
+`docs/design.md` §8 risk "scapy lacks solid S7comm/DNP3 layers" + "S7 complexity (no open spec)".
 **Date:** 2026-06-04 · **scapy:** 2.7.0 (pinned in `pyproject.toml`).
 
 ## Goal
 
 Decide whether scapy can assemble the S7comm/S7comm-plus PDUs the simulator needs,
-or whether we hand-build them / splice template PCAPs (the route `PRD.md` §6.4
+or whether we hand-build them / splice template PCAPs (the route `docs/design.md` §6.4
 reserves for protocols scapy does not cover — explicitly anticipated for S7).
 
 ## Method
@@ -26,7 +26,7 @@ reserves for protocols scapy does not cover — explicitly anticipated for S7).
 ## Result 1 — scapy has no S7 layer
 
 `scapy 2.7.0` `contrib/` ships `scada/iec104`, `scada/pcom`, `opc_da` — **no
-s7comm, no COTP, no TPKT**. Confirms the `PRD.md` §8 risk. So S7 PCAP =
+s7comm, no COTP, no TPKT**. Confirms the `docs/design.md` §8 risk. So S7 PCAP =
 **hand-assembled bytes** framed in scapy's generic `Ether`/`IP`/`TCP` (the same
 synthetic-TCP-stream approach as Modbus/DNP3).
 
@@ -80,7 +80,7 @@ below as the Tier-2 fidelity item.
   (CR/CC handshake and DT data) + S7comm/S7comm-plus bytes, framed with scapy
   `Ether`/`IP`/`TCP` on a synthetic but well-formed TCP stream (SYN → PSH/ACK → FIN),
   so captures reassemble cleanly. Output is byte-deterministic.
-- The **same scenario event model** drives the JSON and PCAP emitters (`PRD.md`
+- The **same scenario event model** drives the JSON and PCAP emitters (`docs/design.md`
   §6.1: `substation/protocols/s7comm.py` `build_events` → `S7Event`), so the two
   cannot drift — identical guarantee to Modbus/DNP3, different wire encoder.
 - **Tier-1 authority / Tier-2 fidelity boundary (documented honestly).** The Tier-1

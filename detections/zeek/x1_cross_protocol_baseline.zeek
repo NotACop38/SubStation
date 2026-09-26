@@ -1,6 +1,6 @@
 ##! Substation detection X1 — cross-protocol baseline deviation.
 ##!
-##! The flagship cross-protocol detection (PRD.md §5.4). Fires when a
+##! The flagship cross-protocol detection (docs/design.md §5.4). Fires when a
 ##! source/destination/function combination appears that is NOT in the learned
 ##! baseline, across ANY supported protocol (Modbus, DNP3, S7comm). Three
 ##! deviation classes, in precedence order:
@@ -18,7 +18,7 @@
 ##! at most once per notice_interval without changing the trusted baseline.
 ##! Sustained anomalous traffic remains detectable after suppression expires.
 ##!
-##! Engine: Zeek (PRD.md §6.5). X1 retains baseline sets across connections
+##! Engine: Zeek (docs/design.md §6.5). X1 retains baseline sets across connections
 ##! within one Zeek process and tests tuple membership across protocols. It
 ##! consumes native events, independently of Substation's JSON envelope.
 ##! Reinject the trusted baseline after restarting Zeek.
@@ -28,7 +28,7 @@
 ##!   * INJECTED (production + the Tier-2 runner): redef `known_talkers`,
 ##!     `known_pairs`, `known_funcs` with the allow-set derived from a known-good
 ##!     learning period (e.g. Substation's benign baseline scenarios). This is the
-##!     "learned state" of PRD.md §5.4 — computed once offline, then enforced.
+##!     "learned state" of docs/design.md §5.4 — computed once offline, then enforced.
 ##!   * SELF-LEARN (optional, standalone): set `learn_period` > 0; every tuple
 ##!     observed within `learn_period` of the first observed request seeds the baseline,
 ##!     and only deviations AFTER the window alert. Default is 0secs (off) so the
@@ -37,7 +37,7 @@
 ##!
 ##! ATT&CK for ICS: T0846 Remote System Discovery (tactic: Discovery, TA0102) — a
 ##! new talker / new asset pair is the network signature of an actor discovering
-##! and reaching OT assets it has not legitimately spoken to before. PRD.md §5.4
+##! and reaching OT assets it has not legitimately spoken to before. docs/design.md §5.4
 ##! also relates X1 to Lateral Movement (TA0109); the verified primary mapping is
 ##! Discovery/T0846 (matches M3/D4/S3, verified against the live matrix
 ##! 2026-06-04). Full rationale, mapping and FP profile:
@@ -68,7 +68,7 @@ export {
 		BaselineDeviation,
 	};
 
-	## The learned baseline (PRD.md §5.4 "learned state"). Inject the known-good
+	## The learned baseline (docs/design.md §5.4 "learned state"). Inject the known-good
 	## allow-set here (redef) from a learning period; membership in these sets is
 	## what keeps legitimate traffic quiet.
 	##

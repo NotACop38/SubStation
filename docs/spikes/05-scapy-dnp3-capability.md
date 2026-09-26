@@ -4,14 +4,14 @@
 DNP3 layer, so the DNP3 PCAP emitter assembles the data-link / transport /
 application bytes itself (over scapy's generic `IP`/`TCP`), with the DNP3 CRC
 **verified against a real capture**.
-**VERIFY gate:** `PRD.md` §6.4 / §7 — "scapy protocol-layer capability" (per-protocol);
-`PRD.md` §8 risk "scapy lacks solid S7comm/DNP3 layers."
+**VERIFY gate:** `docs/design.md` §6.4 / §7 — "scapy protocol-layer capability" (per-protocol);
+`docs/design.md` §8 risk "scapy lacks solid S7comm/DNP3 layers."
 **Date:** 2026-06-04 · **scapy:** 2.7.0 (pinned in `pyproject.toml`).
 
 ## Goal
 
 Decide whether scapy can assemble the DNP3/TCP PDUs the simulator needs, or whether
-we hand-build PDUs / splice template PCAPs (the route `PRD.md` §6.4 reserves for
+we hand-build PDUs / splice template PCAPs (the route `docs/design.md` §6.4 reserves for
 protocols scapy does not cover).
 
 ## Method
@@ -27,7 +27,7 @@ protocols scapy does not cover).
 ## Result 1 — scapy has no DNP3 layer
 
 `scapy 2.7.0` `contrib/` ships `scada/iec104`, `scada/pcom`, and `opc_da` — **no
-DNP3**. `from scapy.contrib import dnp3` → `ImportError`. Confirms the `PRD.md` §8
+DNP3**. `from scapy.contrib import dnp3` → `ImportError`. Confirms the `docs/design.md` §8
 risk. (Modbus, by contrast, has `scapy.contrib.modbus` — spike 02.) So DNP3 PCAP =
 **hand-assembled bytes** framed in scapy's generic `IP`/`TCP` (which we already use
 for the Modbus TCP stream).
@@ -65,7 +65,7 @@ memory.
   per-block CRCs + transport + application bytes, framed with scapy `Ether/IP/TCP`.
   Reuses the same synthetic-TCP-stream approach as the Modbus emitter (handshake →
   PSH/ACK data → FIN), so captures parse cleanly for the Tier-2 Zeek fidelity check.
-- The **same scenario event model** drives the JSON and PCAP emitters (`PRD.md`
+- The **same scenario event model** drives the JSON and PCAP emitters (`docs/design.md`
   §6.1), so the two cannot drift — identical guarantee to Modbus, different wire
   encoder.
 - **Friction noted** for `docs/adding-a-protocol.md`: the per-protocol PCAP path is

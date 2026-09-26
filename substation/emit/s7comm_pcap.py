@@ -1,7 +1,7 @@
 """PCAP emitter: shared S7 events -> hand-built TPKT/COTP/S7comm ``.pcap``.
 
 Consumes the **same** :class:`~substation.protocols.s7comm.S7Event` list as the JSON
-emitter (PRD §6.1: one model, dual emit, no drift). scapy ships no S7/COTP/TPKT layer
+emitter (docs/design.md §6.1: one model, dual emit, no drift). scapy ships no S7/COTP/TPKT layer
 (spike 07), so this module assembles the TPKT, COTP and S7comm/S7comm-plus bytes
 itself — with the framing and S7 header layout verified against ICSNPP's example
 captures. The synthetic TCP framing (handshake, PSH/ACK segments, teardown) is the

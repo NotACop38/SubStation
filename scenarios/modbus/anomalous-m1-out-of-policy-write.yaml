@@ -3,7 +3,7 @@
 # =============================================================================
 # Companion to anomalous-m1-unauthorized-write.yaml. That scenario covers the
 # SOURCE dimension of M1 (a non-allow-listed writer). This one covers the other
-# half of M1 (PRD.md §5.1: "or to a register/unit outside policy"): an
+# half of M1 (docs/design.md §5.1: "or to a register/unit outside policy"): an
 # ALLOW-LISTED writer (ews-1, 10.0.0.11) straying outside the permitted
 # unit/register. The source is sanctioned, but the target is not — so M1 must
 # still fire. This is the case the Codex review on PR #7 flagged.

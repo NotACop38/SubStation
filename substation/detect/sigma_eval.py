@@ -1,6 +1,6 @@
 """Tier-1 Sigma offline evaluator: run a Sigma rule directly over event dicts.
 
-This is the mechanism the Phase-0 spike confirmed
+This is the mechanism the Sigma evaluation spike confirmed
 (`docs/spikes/03-sigma-offline-evaluation.md`): pySigma parses a rule's YAML into
 a typed boolean condition tree (``ConditionAND``/``OR``/``NOT`` with
 ``ConditionFieldEqualsValueExpression`` leaves); a small recursive evaluator walks

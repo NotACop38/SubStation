@@ -1,8 +1,8 @@
 """Detection registry: the typed view of ``detections/registry.yaml``.
 
 The registry is the authoritative, machine-readable metadata index for every
-shipped detection (PRD.md §6.6 "coverage-map entry"). Both the Tier-1 pytest
-harness and the coverage generator (PRD.md §6.7) load it through here, so the
+shipped detection (docs/design.md §6.6 "coverage-map entry"). Both the Tier-1 pytest
+harness and the coverage generator (docs/design.md §6.7) load it through here, so the
 coverage map and Navigator layer are generated from one source and cannot drift
 from the detections.
 
@@ -54,8 +54,8 @@ REGISTRY_PATH = CONTENT_ROOT / "detections" / "registry.yaml"
 _ENGINES = {"sigma", "zeek", "suricata"}
 _TIERS = {1, 2}
 _STATUSES = {"validated", "partial", "tier2", "experimental"}
-# The closed v1 protocol set (PRD.md §5), plus "cross" for the flagship
-# cross-protocol detection (X1) whose baseline spans every protocol (PRD.md §5.4).
+# The closed v1 protocol set (docs/design.md §5), plus "cross" for the flagship
+# cross-protocol detection (X1) whose baseline spans every protocol (docs/design.md §5.4).
 # "cross" is a registry/coverage-map label only — scenarios remain single-protocol.
 _PROTOCOLS = {"modbus", "dnp3", "s7comm", "cross"}
 

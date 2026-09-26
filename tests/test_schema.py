@@ -3,7 +3,7 @@
 These tests are the gate's proof: the committed golden events validate, and
 representative malformed events are rejected. ``make ci`` additionally runs
 ``python -m substation.schema`` over ``tests/data/events`` so any emitted event
-that violates the schema fails the pipeline (`PRD.md` §6.3).
+that violates the schema fails the pipeline (`docs/design.md` §6.3).
 """
 
 from __future__ import annotations
@@ -262,7 +262,7 @@ def _a_valid_s7_request() -> dict[str, Any]:
 
 
 def test_s7_detail_frozen_accepts_valid() -> None:
-    # S7 detail is FROZEN (Phase 4): a valid envelope + S7 detail passes.
+    # S7 detail is FROZEN: a valid envelope + S7 detail passes.
     schema = load_event_schema()
     assert list(iter_event_errors(_a_valid_s7_request(), schema)) == []
 
@@ -297,7 +297,7 @@ def _a_valid_dnp3_request() -> dict[str, Any]:
 
 
 def test_dnp3_detail_frozen_accepts_valid() -> None:
-    # DNP3 detail is FROZEN (Phase 3): a valid envelope + DNP3 detail passes.
+    # DNP3 detail is FROZEN: a valid envelope + DNP3 detail passes.
     schema = load_event_schema()
     assert list(iter_event_errors(_a_valid_dnp3_request(), schema)) == []
 

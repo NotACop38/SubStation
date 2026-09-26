@@ -2,7 +2,7 @@
 # Benign Modbus baseline — the credible "quiet" ground truth for M1/M2/M3
 # =============================================================================
 # This is the realistic normal-operation scenario every Modbus detection must
-# stay SILENT on (PRD.md §6.4, §8: without a legitimate writer/master and
+# stay SILENT on (docs/design.md §6.4, §8: without a legitimate writer/master and
 # continuous polling the allow-list and sweep detections are untestable and not
 # credible). It models, on one PLC:
 #   * continuous HMI polling (reads, repeated over time), and
@@ -24,7 +24,7 @@ description: >-
   engineering workstation that polls and writes legitimate setpoints from an
   allow-listed source to in-policy registers. The canonical quiet baseline that
   M1 (unauthorized write), M2 (illegal function code) and M3 (function/unit
-  sweep) must all stay silent on (PRD.md §8).
+  sweep) must all stay silent on (docs/design.md §8).
 
 protocol: modbus
 label: benign
@@ -46,9 +46,8 @@ actors:
     port: 502
 
 exchanges:
-  # Exchanges are listed in chronological (monotonic-offset) order: write_jsonl
-  # emits in file order while write_pcap sorts packets by timestamp, so keeping
-  # offsets monotonic keeps the JSON log and the PCAP in lockstep (PRD.md §6.1).
+  # Exchanges are listed in chronological order for readability; both emitters
+  # order events by timestamp regardless (docs/design.md §6.1).
 
   # --- continuous HMI polling: the steady SCADA read cadence ----------------
   - source: hmi-1

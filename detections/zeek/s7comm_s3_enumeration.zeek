@@ -4,12 +4,12 @@
 ##! system-status lists (module identity, CPU characteristics, component
 ##! identification, memory/system areas, block types, …) against one PLC within a
 ##! short window — the enumeration signal of reconnaissance mapping a device's
-##! identity and configuration (PRD.md §5.3, S3). The signal is DIVERSITY,
+##! identity and configuration (docs/design.md §5.3, S3). The signal is DIVERSITY,
 ##! deliberately NOT request volume: an engineering tool legitimately reads module
-##! identity on connect, so a volume threshold fires on normal operation (PRD.md §8).
+##! identity on connect, so a volume threshold fires on normal operation (docs/design.md §8).
 ##! We count the number of *distinct* SZL-IDs requested per source, not requests.
 ##!
-##! Engine: Zeek (PRD.md §6.5). Enumeration needs durable per-source state — the set
+##! Engine: Zeek (docs/design.md §6.5). Enumeration needs durable per-source state — the set
 ##! of distinct SZL-IDs accumulated over a window — plus a set-membership /
 ##! cardinality test a stateless Sigma field-match cannot express. This is the S7
 ##! slice's Zeek rail, mirroring Modbus M3 / DNP3 D4. Full rationale, mapping and FP

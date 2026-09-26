@@ -1,6 +1,6 @@
-"""Typed internal scenario model (Phase 0).
+"""Typed internal scenario model.
 
-A *scenario* is the single source of truth for one simulator run (`PRD.md` §6.1).
+A *scenario* is the single source of truth for one simulator run (`docs/design.md` §6.1).
 It is authored as human-editable YAML under `scenarios/<proto>/` and loaded into
 the immutable dataclasses below, which feed the dual emitters (PCAP + JSON).
 Independent parser checks are required to verify output agreement.
@@ -36,7 +36,7 @@ def _empty_params() -> Mapping[str, object]:
 
 
 class Protocol(StrEnum):
-    """Supported industrial protocols (PRD.md §5). v1 set is closed."""
+    """Supported industrial protocols (docs/design.md §5). v1 set is closed."""
 
     MODBUS = "modbus"
     DNP3 = "dnp3"
@@ -55,11 +55,11 @@ class Label(StrEnum):
 
 
 class ActorRole(StrEnum):
-    """Network actor roles (PRD.md §6.4).
+    """Network actor roles (docs/design.md §6.4).
 
     Masters/HMIs/EWS initiate requests; outstations/PLCs respond. Modelling a
     legitimate writer (HMI/EWS) is required for credible allow-list and scan
-    detections (PRD.md §8), so the roles are first-class.
+    detections (docs/design.md §8), so the roles are first-class.
     """
 
     MASTER = "master"

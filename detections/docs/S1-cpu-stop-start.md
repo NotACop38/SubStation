@@ -3,7 +3,7 @@
 An S7comm run-state change — `PLC Stop` (function `0x29`) or `PLC Control`
 (function `0x28`, service `P_PROGRAM` = "PLC Start / Stop") — from a source that is
 **not** on the allow-list of permitted engineering workstations. The run-state
-detection for the S7 slice (`PRD.md` §5.3).
+detection for the S7 slice (`docs/design.md` §5.3).
 
 | | |
 |---|---|
@@ -35,12 +35,12 @@ source fires.
 
 **Sigma.** Authorization is decidable from a **single event**: `direction: request`,
 `func_name` is `PLC Stop` or `PLC Control`, and `conn.orig_h` is the issuer. No
-durable state or correlation is needed — Sigma-first per `PRD.md` §6.5. The same rule
+durable state or correlation is needed — Sigma-first per `docs/design.md` §6.5. The same rule
 needs normalization and independent SIEM backend qualification. (`detail.subfunction_name` carries the
 decoded PLC-control service — e.g. `PLC Start / Stop` — from ICSNPP's `s7comm.log`,
 available for richer policy but not needed for the authorization decision.)
 
-**Why allow-list, not "any stop" (the OT-realism guardrail, `PRD.md` §8).** Engineers
+**Why allow-list, not "any stop" (the OT-realism guardrail, `docs/design.md` §8).** Engineers
 legitimately stop/start a PLC during maintenance and commissioning; a command-only
 rule is pure false positives and discredits the project. The rule stays quiet on
 run-state changes from the **allow-listed EWS** and fires on everything else.
@@ -94,7 +94,7 @@ of the controller's operating mode (T0858). ATT&CK places T0858 under **Executio
 (cf. the DNP3 restart detection D1 → T0816), which the false-positive discipline below
 accounts for.
 
-> **VERIFY (`CLAUDE.md` gate).** Verified against the **live** ATT&CK-for-ICS matrix
+> **VERIFY (`AGENTS.md` gate).** Verified against the **live** ATT&CK-for-ICS matrix
 > on 2026-06-04: T0858 *Change Operating Mode* exists and is assigned to tactics
 > Execution (TA0104) and Evasion (TA0103). Sources:
 > <https://attack.mitre.org/techniques/T0858/>, tactic

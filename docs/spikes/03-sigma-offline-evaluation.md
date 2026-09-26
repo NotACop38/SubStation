@@ -3,14 +3,14 @@
 **Status:** RESOLVED. **Verdict:** evaluate the **pySigma-parsed condition AST**
 directly against event dicts in pytest. Working mechanism confirmed with a passing
 prototype.
-**VERIFY gate:** `PRD.md` §6.5 / §7 — "Sigma offline evaluation mechanism."
+**VERIFY gate:** `docs/design.md` §6.5 / §7 — "Sigma offline evaluation mechanism."
 **Date:** 2026-06-03 · **pySigma:** 1.3.3 (pinned in `pyproject.toml`).
 
 ## Goal
 
 Confirm a concrete, dependency-light way to evaluate Sigma rules **directly against
 our `.jsonl` event log inside pytest**, with **no SIEM** and no compile-to-query
-round trip — the Tier-1 headline path (`PRD.md` §6.2, Detection Contract §6.6).
+round trip — the Tier-1 headline path (`docs/design.md` §6.2, Detection Contract §6.6).
 
 ## Options considered
 
@@ -123,7 +123,7 @@ loader use PyYAML — single shared pin.)
 
 - Tier-1 harness evaluates Sigma via the **parsed-AST walk** above; production users
   compile the *same* rules to their SIEM with stock pySigma backends. One rule
-  source, two execution paths — exactly `PRD.md` §6.5.
+  source, two execution paths — exactly `docs/design.md` §6.5.
 - Record this mechanism in `docs/schema.md` notes when the Modbus schema is frozen.
 
 ## Nothing blocked
@@ -139,3 +139,14 @@ evaluated, including empty input; boolean shortcuts cannot hide an unsupported
 rule. Duplicate YAML keys are rejected. Parsed-file caching keys on content so
 rule edits take effect within the same process. This remains a small offline
 subset evaluator, not a claim of full Sigma/backend compatibility.
+
+## Current state, 2026-09-26
+
+The follow-ups above were resolved by narrowing, not by growing the evaluator.
+It supports typed field equality (a quoted value matches only strings, an
+unquoted number only numbers), `|cased`, the `|gt`, `|gte`, `|lt` and `|lte`
+comparisons, boolean logic and `1 of`/`all of` selections. Wildcards, `contains`,
+`startswith`, `endswith`, `re`, `cidr`, `|expand`, timestamp parts, field
+references, `null`, keyword searches and correlation rules are rejected when the
+rule is parsed. Sweeps such as M3 became stateful Zeek rules instead of Sigma
+correlations (`docs/design.md` §6.5).

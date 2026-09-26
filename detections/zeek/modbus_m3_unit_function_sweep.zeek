@@ -2,15 +2,15 @@
 ##!
 ##! Fires when a single source touches an anomalously *diverse* set of Modbus
 ##! function codes and/or unit IDs against one PLC within a short window — the
-##! sweep/enumeration signal of reconnaissance (PRD.md §5.1, M3). The signal is
+##! sweep/enumeration signal of reconnaissance (docs/design.md §5.1, M3). The signal is
 ##! DIVERSITY, deliberately NOT request volume: SCADA masters poll constantly, so
-##! a volume threshold fires on normal operation (PRD.md §8). We count the number
+##! a volume threshold fires on normal operation (docs/design.md §8). We count the number
 ##! of *distinct* function codes and *distinct* unit IDs per source, not requests.
 ##!
-##! Engine: Zeek (PRD.md §6.5). A sweep needs durable per-source state — sets of
+##! Engine: Zeek (docs/design.md §6.5). A sweep needs durable per-source state — sets of
 ##! distinct codes/units accumulated over a window — plus set-membership tests a
 ##! stateless Sigma field-match cannot express. This is the Modbus slice's
-##! mandated Zeek rail (the slice ships ≥1 Sigma and ≥1 Zeek, PRD.md §6.5). Full
+##! mandated Zeek rail (the slice ships ≥1 Sigma and ≥1 Zeek, docs/design.md §6.5). Full
 ##! rationale, mapping and FP profile: detections/docs/M3-unit-function-sweep.md.
 ##!
 ##! ATT&CK for ICS: T0846 Remote System Discovery (tactic: Discovery, TA0102) —

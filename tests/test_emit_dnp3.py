@@ -1,6 +1,6 @@
-"""Phase-3 DNP3 emission tests: one model -> matching PCAP + schema-valid JSON.
+"""DNP3 emission tests: one model -> matching PCAP + schema-valid JSON.
 
-These check the shared-model contract (PRD §6.1); native decoder tests provide
+These check the shared-model contract (docs/design.md §6.1); native decoder tests provide
 an independent check in test_dnp3_fidelity.py. We assert the JSON validates against
 the frozen schema, the hand-built
 DNP3 PCAP carries exactly one DNP3 link frame per JSON event with matching function

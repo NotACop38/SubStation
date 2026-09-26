@@ -1,6 +1,6 @@
 """Scenario model and YAML loader.
 
-A scenario is the single source of truth for one simulator run (`PRD.md` §6.1):
+A scenario is the single source of truth for one simulator run (`docs/design.md` §6.1):
 it declares actors, an ordered list of protocol exchanges, timing, a
 ``benign|anomalous`` label, and the detection IDs it exercises. The format is
 documented in ``docs/scenario-format.md`` with a fully commented example at

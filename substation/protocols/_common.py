@@ -1,4 +1,4 @@
-"""Helpers shared by the per-protocol semantic modules (PRD §6.1).
+"""Helpers shared by the per-protocol semantic modules (docs/design.md §6.1).
 
 Every protocol module (``modbus``/``dnp3``/``s7comm``) and the honeypot needs
 the same deterministic plumbing: Zeek-style connection uids, IPv4 validation,

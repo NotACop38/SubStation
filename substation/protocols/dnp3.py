@@ -1,8 +1,8 @@
-"""DNP3 semantics shared by the JSON and PCAP emitters (PRD §6.1, §6.4).
+"""DNP3 semantics shared by the JSON and PCAP emitters (docs/design.md §6.1, §6.4).
 
 :func:`build_events` turns a loaded :class:`~substation.scenarios.Scenario` into an
 ordered list of :class:`Dnp3Event` — the **single intermediate model both emitters
-consume**, with independent parser checks for agreement (PRD §6.1).
+consume**, with independent parser checks for agreement (docs/design.md §6.1).
 This mirrors ``substation.protocols.modbus``; only the
 protocol semantics differ.
 
@@ -14,7 +14,7 @@ importing no scapy, means JSON-only consumers never pull a packet library.
 
 Function-code names are the verified Zeek ``DNP3::function_codes`` spellings
 (``docs/spikes/04-icsnpp-dnp3-fields.md``); numeric codes are IEEE 1815 / DNP3 —
-taken from the verified source, never invented from memory (CLAUDE.md VERIFY gate).
+taken from the verified source, never invented from memory (AGENTS.md VERIFY gate).
 """
 
 from __future__ import annotations
@@ -191,7 +191,7 @@ _INTEROPERABLE_CONTROL_CODES = {0x00, 0x01, 0x03, 0x04, 0x41, 0x81}
 # **exact ICSNPP `dnp3_objects` device-type name** (consts.zeek, keyed by
 # group*256+variation — spike 04), so the JSON `object_type` string and the PCAP
 # group/variation are derived from one source and a Zeek decode of the PCAP resolves
-# the same name (no drift, PRD §6.1). `point_size` is the per-point response data
+# the same name (no drift, docs/design.md §6.1). `point_size` is the per-point response data
 # width in bytes for that variation, so the PCAP emits a well-formed object body.
 #
 # VERIFY (Tier-2 fidelity, 2026-06-04): the "with-flag" variations (groups 20/30

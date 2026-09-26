@@ -1,12 +1,12 @@
 # =============================================================================
 # Substation detection M2 — Illegal / abnormal Modbus function code
 # =============================================================================
-# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — docs/design.md §6.5).
 # Rationale, data source and the full false-positive profile live in
 # detections/docs/M2-illegal-function-code.md (the Detection Contract doc, §6.6).
 #
 # Keys on the function code / exception itself, NOT on source or request volume:
-# reserved/undefined codes surface as action_class `other` (docs/schema.md), and
+# undefined codes surface as action_class `other` (docs/schema.md), and
 # a compliant outstation answers an unsupported function or bad address with an
 # exception whose name the envelope carries in `error`.
 # -----------------------------------------------------------------------------
@@ -14,21 +14,21 @@ title: Modbus Illegal Or Abnormal Function Code
 id: 54731414-74bd-4d44-b00d-691c754150cf
 status: experimental
 description: |
-  A Modbus request carrying a reserved/undefined function code, or an exception
+  A Modbus request carrying an undefined function code, or an exception
   response indicating illegal-function / illegal-data-address probing. Substation
-  detection M2 (PRD.md §5.1): function-code probing / enumeration of which
+  detection M2 (docs/design.md §5.1): function-code probing / enumeration of which
   functions and addresses a device supports. Keys on the code/exception itself,
   not on source allow-listing or request volume.
 references:
   - https://attack.mitre.org/techniques/T0888/
-  - PRD.md §5.1 (M2); detections/docs/M2-illegal-function-code.md
+  - docs/design.md §5.1 (M2); detections/docs/M2-illegal-function-code.md
 author: Substation
 date: 2026-06-04
 logsource:
   product: ot
   service: modbus
 detection:
-  # A request whose function code is reserved/undefined: no standard
+  # A request whose function code is undefined: no standard
   # read/write/diagnostic class, so docs/schema.md maps it to action_class
   # `other`. Every supported standard code maps to read/write/diagnostic, so
   # `other` on a request is the abnormal-code signal.

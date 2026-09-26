@@ -1,12 +1,12 @@
 # =============================================================================
 # Anomalous (S1) — PLC CPU stop from an unexpected source
 # =============================================================================
-# S1 (PRD.md §5.3): an S7 run-state change (PLC Stop / PLC Control) from a source
+# S1 (docs/design.md §5.3): an S7 run-state change (PLC Stop / PLC Control) from a source
 # that is NOT the allow-listed engineering workstation — halting a PLC's CPU
 # changes its operating mode and stops the control program. Allow-list by source
 # (not "any stop"): a sanctioned stop/start from the real EWS is benign, so the
 # scenario keeps a legitimate EWS run-state change alongside the rogue stop to
-# prove the detection discriminates (PRD.md §8).
+# prove the detection discriminates (docs/design.md §8).
 #
 # Allow-list recap (see s7-benign-baseline.yaml): permitted EWS is ews-1
 # 10.0.4.10; PLC plc-1 10.0.4.50:102. rogue-1 (10.0.4.66) is NOT allow-listed.

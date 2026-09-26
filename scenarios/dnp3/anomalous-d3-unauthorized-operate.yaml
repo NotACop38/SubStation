@@ -1,10 +1,10 @@
 # =============================================================================
 # Anomalous (D3) — unauthorized control (operate / direct-operate)
 # =============================================================================
-# D3 (PRD.md §5.2): a DNP3 output-control command (SELECT / OPERATE /
+# D3 (docs/design.md §5.2): a DNP3 output-control command (SELECT / OPERATE /
 # DIRECT_OPERATE) — typically a Control-Relay-Output-Block driving a breaker or
 # setpoint — from a master that is NOT on the allow-list (Impair Process Control).
-# Per PRD.md §8 the rule is allow-list-by-source, NOT "any operate": operators
+# Per docs/design.md §8 the rule is allow-list-by-source, NOT "any operate": operators
 # legitimately issue controls, so the scenario keeps a legitimate operate from the
 # allow-listed master alongside the rogue control to prove the detection
 # discriminates.

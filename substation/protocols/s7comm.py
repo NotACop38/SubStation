@@ -1,8 +1,8 @@
-"""S7comm/S7comm-plus semantics shared by the JSON and PCAP emitters (PRD §6.1, §6.4).
+"""S7comm/S7comm-plus semantics shared by the JSON and PCAP emitters (docs/design.md §6.1, §6.4).
 
 :func:`build_events` turns a loaded :class:`~substation.scenarios.Scenario` into an
 ordered list of :class:`S7Event` — the **single intermediate model both emitters
-consume** (the LOCKED core design principle, PRD §6.1). Independent parsing checks
+consume** (the LOCKED core design principle, docs/design.md §6.1). Independent parsing checks
 whether those emitters agree. This mirrors ``substation.protocols.dnp3``; only the
 protocol semantics differ.
 
@@ -16,8 +16,8 @@ packet library.
 Function/sub-function names, ROSCTR names, COTP PDU names, SZL-ID names, block types
 and s7comm-plus opcodes/functions are the verified ICSNPP ``consts.zeek`` spellings
 (``docs/spikes/06-icsnpp-s7comm-fields.md``) — taken from the authoritative source,
-never invented from memory (CLAUDE.md VERIFY gate). S7comm/-plus have no open spec
-(PRD §9), so the ICSNPP parser and the Wireshark dissector are the references.
+never invented from memory (AGENTS.md VERIFY gate). S7comm/-plus have no open spec
+(docs/design.md §9), so the ICSNPP parser and the Wireshark dissector are the references.
 """
 
 from __future__ import annotations
@@ -391,7 +391,7 @@ def build_events(scenario: Scenario) -> list[S7Event]:
     Each (master, plc) connection opens with a COTP Connection Request / Confirm
     handshake (emitted once, on first use). Each scenario exchange then becomes a
     request event plus a matched response event. Both emitters consume the returned
-    list; independent parsing checks output agreement (PRD §6.1).
+    list; independent parsing checks output agreement (docs/design.md §6.1).
     """
     if scenario.protocol is not Protocol.S7COMM:
         raise S7Error(f"build_events: expected an s7comm scenario, got {scenario.protocol.value}")

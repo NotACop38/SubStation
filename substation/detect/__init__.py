@@ -1,11 +1,11 @@
 """Tier-1 Sigma evaluation over JSON event logs.
 
-Tier 1 (the headline path, PRD.md §6.2) is implemented here: :func:`run_detections`
+Tier 1 (the headline path, docs/design.md §6.2) is implemented here: :func:`run_detections`
 evaluates every registered **Tier-1 Sigma** detection directly over the ``.jsonl``
 event log via the offline evaluator (:mod:`substation.detect.sigma_eval`), the
 mechanism confirmed in ``docs/spikes/03-sigma-offline-evaluation.md``.
 
-Tier-2 Zeek/Suricata detections (PRD.md §6.5) are **not** executed in this
+Tier-2 Zeek/Suricata detections (docs/design.md §6.5) are **not** executed in this
 package — they run in the out-of-package Tier-2 runner (``scripts/verify/run.py``
 / ``make verify``) over PCAP and are skipped by :func:`run_detections`.
 

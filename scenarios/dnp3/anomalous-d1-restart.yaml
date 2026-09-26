@@ -1,12 +1,12 @@
 # =============================================================================
 # Anomalous (D1) — cold/warm restart issued from an unexpected source
 # =============================================================================
-# D1 (PRD.md §5.2): a DNP3 device-restart function (COLD_RESTART / WARM_RESTART)
+# D1 (docs/design.md §5.2): a DNP3 device-restart function (COLD_RESTART / WARM_RESTART)
 # from a source that is NOT the allow-listed master — forcing an outstation to
 # restart inhibits its response/reporting function. Allow-list by source (not
 # "any restart"): a sanctioned maintenance restart from the real master must stay
 # quiet, so the scenario keeps the legitimate master traffic alongside the rogue
-# restart to prove the detection discriminates (PRD.md §8).
+# restart to prove the detection discriminates (docs/design.md §8).
 #
 # Allow-list recap (see dnp3-benign-baseline.yaml): permitted master is
 # master-1 10.0.1.10; outstation rtu-1 10.0.1.50:20000. rogue-1 (10.0.1.77) is

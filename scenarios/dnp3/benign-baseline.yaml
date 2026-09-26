@@ -2,7 +2,7 @@
 # Benign DNP3 baseline — the credible "quiet" ground truth for D1–D4
 # =============================================================================
 # The realistic normal-operation scenario every DNP3 detection must stay SILENT
-# on (PRD.md §6.4, §8: without a legitimate master/control source and continuous
+# on (docs/design.md §6.4, §8: without a legitimate master/control source and continuous
 # polling, the allow-list and enumeration detections are untestable and not
 # credible). It models, on one outstation/RTU:
 #   * an allow-listed SCADA master that enables unsolicited reporting at startup,
@@ -44,8 +44,8 @@ actors:
     port: 20000
 
 exchanges:
-  # Exchanges are listed in chronological (monotonic-offset) order so the JSON log
-  # (file order) and the PCAP (timestamp-sorted) stay in lockstep (PRD.md §6.1).
+  # Exchanges are listed in chronological order for readability; both emitters
+  # order events by timestamp regardless (docs/design.md §6.1).
 
   # --- startup: master enables unsolicited reporting (legitimate) ------------
   - source: master-1

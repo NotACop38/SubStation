@@ -1,14 +1,14 @@
 # Spike 1 — ICSNPP Modbus parser field names & detail-log shapes
 
 **Status:** RESOLVED (verified against authoritative source — not frozen).
-**VERIFY gate:** `PRD.md` §6.3 / §7 — "ICSNPP field names / detail shapes."
+**VERIFY gate:** `docs/design.md` §6.3 / §7 — "ICSNPP field names / detail shapes."
 **Date:** 2026-06-03
 
 ## Goal
 
 Confirm the **current** ICSNPP Modbus parser field names and detail-log shapes so
 the Modbus `detail` object in `docs/schema.md` is drawn from real names, not memory
-(`ENGINEERING_CHECKLIST.md` Phase 0 + Phase 1 freeze gate).
+(the Modbus schema freeze gate).
 
 ## Source (authoritative)
 

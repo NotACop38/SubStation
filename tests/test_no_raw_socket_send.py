@@ -1,6 +1,6 @@
 """Codebase-wide files-only / no-raw-socket-send invariant (static AST scan).
 
-CLAUDE.md's non-negotiable safety invariant: the simulator is *files-only* — it
+AGENTS.md's non-negotiable safety invariant: the simulator is *files-only* — it
 never opens a sending socket or transmits on a live interface — and the optional
 honeypot is *passive* (it only listens/accepts and replies on already-accepted
 connections; it never initiates an outbound connection).

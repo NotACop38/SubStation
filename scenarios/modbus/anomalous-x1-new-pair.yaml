@@ -1,7 +1,7 @@
 # =============================================================================
 # Anomalous (X1) — cross-protocol baseline deviation: NEW ASSET PAIR
 # =============================================================================
-# X1 (PRD.md §5.4): a source/destination/function combination not in the learned
+# X1 (docs/design.md §5.4): a source/destination/function combination not in the learned
 # baseline. This scenario exercises the middle deviation class — a NEW ASSET PAIR
 # for a KNOWN talker (lateral movement to an asset that talker never legitimately
 # spoke to). It is distinct from anomalous-x1-new-talker.yaml: there the source

@@ -1,4 +1,4 @@
-"""Files-only invariant tests (PRD §6.4, CLAUDE.md safety invariant).
+"""Files-only invariant tests (docs/design.md §6.4, AGENTS.md safety invariant).
 
 The simulator must only ever write files — it must never open a sending socket or
 transmit on an interface. These tests prove two things together: (1) generation

@@ -1,13 +1,13 @@
 # =============================================================================
 # Substation detection S1 — Unauthorized S7 CPU stop / start (run-state change)
 # =============================================================================
-# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — docs/design.md §6.5).
 # Rationale, data source and the full false-positive profile live in
 # detections/docs/S1-cpu-stop-start.md (the Detection Contract doc, §6.6).
 #
 # Keys on the run-state command + an allow-list of permitted engineering sources,
 # NOT "any stop/start": a sanctioned stop/start from the real EWS is benign, so a
-# command-only rule would be false positives (PRD.md §8). An S7 PLC Stop or PLC
+# command-only rule would be false positives (docs/design.md §8). An S7 PLC Stop or PLC
 # Control (P_PROGRAM = PLC Start/Stop) request from a source that is not the
 # allow-listed EWS fires.
 # -----------------------------------------------------------------------------
@@ -17,13 +17,13 @@ status: experimental
 description: |
   An S7comm run-state change (PLC Stop, or PLC Control / P_PROGRAM = PLC Start/Stop)
   issued by a source that is not the allow-listed engineering workstation.
-  Substation detection S1 (PRD.md §5.3): halting or restarting a PLC CPU changes its
+  Substation detection S1 (docs/design.md §5.3): halting or restarting a PLC CPU changes its
   operating mode and stops the control program. Keyed by run-state command AND source
   allow-list, not "any stop", so a sanctioned stop/start from the real EWS stays quiet
-  (the OT-realism guardrail, PRD.md §8).
+  (the OT-realism guardrail, docs/design.md §8).
 references:
   - https://attack.mitre.org/techniques/T0858/
-  - PRD.md §5.3 (S1); detections/docs/S1-cpu-stop-start.md
+  - docs/design.md §5.3 (S1); detections/docs/S1-cpu-stop-start.md
 author: Substation
 date: 2026-06-04
 logsource:

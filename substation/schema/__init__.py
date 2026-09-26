@@ -1,7 +1,7 @@
 """Event-log schema: the binding contract for Substation's `.jsonl` output.
 
 This package ships the machine-readable JSON Schema (`event-log.schema.json`,
-draft 2020-12) for one event-log line — the normalized envelope (`PRD.md` §6.3)
+draft 2020-12) for one event-log line — the normalized envelope (`docs/design.md` §6.3)
 plus a per-protocol ``detail`` object modeled on **ICSNPP** fields (Modbus frozen
 against ``docs/spikes/01-icsnpp-modbus-fields.md``). The event log is
 newline-delimited JSON: one event object per line.

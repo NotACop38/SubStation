@@ -1,6 +1,6 @@
 """Optional research honeypot — a **passive, isolated** Modbus probe logger.
 
-This subpackage is the optional honeypot of ``PRD.md`` §6.10 / Phase 5: a minimal
+This subpackage is the optional honeypot of ``docs/design.md`` §6.10: a minimal
 Modbus/TCP responder that **only ever listens and answers** inbound probes and
 records them as schema-conforming event-log lines, so the same Substation
 detections (M1/M2/M3, …) can be run against captured probe traffic.

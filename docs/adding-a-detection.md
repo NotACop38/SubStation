@@ -1,9 +1,8 @@
 # Adding a detection
 
 A **finite, ordered checklist** for adding one detection to an *existing* protocol.
-It is the operational form of the **Detection Definition of Done**
-(`ENGINEERING_CHECKLIST.md`) / the **Detection Contract** (`PRD.md` §6.6): work the
-steps top to bottom and the contract is satisfied by construction. To add a whole
+It is the operational form of the **Detection Contract** (`docs/design.md` §6.6):
+work the steps top to bottom and the contract is satisfied by construction. To add a whole
 new protocol first, see [`adding-a-protocol.md`](./adding-a-protocol.md).
 
 > **The Detection Contract — a detection is "done" only when it has all of:**
@@ -19,11 +18,11 @@ below keys off it.
 
 1. **Describe the behaviour and pick the tactic.** Write one sentence: *what
    network behaviour fires this, and why is it credible OT-wise?* Name the
-   ATT&CK-for-ICS **tactic** (tactics are stable — `CLAUDE.md`). Sanity-check the
-   OT-realism guardrails (`PRD.md` §8): never "any write = bad" or "scanning =
+   ATT&CK-for-ICS **tactic**. Sanity-check the
+   OT-realism guardrails (`docs/design.md` §8): never "any write = bad" or "scanning =
    volume"; key on allow-list / diversity / illegal-code signals.
 
-2. **Choose the engine (and record why).** Per the engine policy (`PRD.md` §6.5):
+2. **Choose the engine (and record why).** Per the engine policy (`docs/design.md` §6.5):
    - **Sigma (Tier 1)** for a stateless field match over the JSON envelope
      (allow-list source, illegal code, a specific control command). Default here.
    - **Zeek (Tier 2)** only when **real state** is required — learned baselines,
@@ -42,7 +41,7 @@ below keys off it.
      header comment, as M3/D4/S3/X1 do).
 
 4. **Verify the ATT&CK mapping.** Confirm the **technique ID(s)** against the
-   **live** ATT&CK-for-ICS matrix (`CLAUDE.md` VERIFY gate — never from memory).
+   **live** ATT&CK-for-ICS matrix (`AGENTS.md` VERIFY gate — never from memory).
    Record the ID(s), the tactic, and the verification date + source URLs; you cite
    them in the registry and the doc.
 
@@ -50,7 +49,7 @@ below keys off it.
    [`scenario-format.md`](./scenario-format.md)). The contract needs **both**:
    - ≥1 **anomalous** (`label: anomalous`) scenario listing your ID under
      `exercises.fires`. Include legitimate background traffic so the detection
-     proves it *discriminates* (`PRD.md` §8), not just that it fires.
+     proves it *discriminates* (`docs/design.md` §8), not just that it fires.
    - ≥1 **benign** (`label: benign`) scenario listing your ID under
      `exercises.quiet` — usually the protocol's `benign-baseline.yaml` (add your ID
      to its `quiet:` list).
@@ -63,15 +62,18 @@ below keys off it.
    Navigator layer and the harness all read it. Pick `status`:
    - `validated` — Tier-1 Sigma, fire **and** quiet proven by the harness.
    - `tier2` — Zeek/Suricata; fire/quiet runs in the Tier-2 runner (linkage still
-     enforced here).
+     enforced here). For a Zeek rule, also map its ID to the `Notice::Type` it
+     raises in `_NOTICE_TOKEN` (`scripts/verify/run.py`) so `make verify` can
+     assert it fires and stays quiet.
    - `partial` — quiet proven, fire blocked on an emitter/harness gap (note why).
+   - `experimental` — authored but not yet held to the full contract.
 
 7. **Run the harness.** `make test` (or `pytest`). The metadata-driven harness
    auto-discovers your detection from the registry. It asserts: rule + doc exist,
    ≥1 fire and ≥1 quiet scenario, `exercises` reference known IDs, Sigma
    `logsource`+tags match the registry, and (Tier 1) fire-on-anomaly +
-   quiet-on-benign over real emitted telemetry. Tier-2 fire/quiet is skipped with
-   a reason. One deliberate test-code step remains: a **validated Tier-1** fire
+   quiet-on-benign over real emitted telemetry. Tier-2 fire/quiet is skipped here
+   and runs in real Zeek under `make verify`. One deliberate test-code step remains: a **validated Tier-1** fire
    scenario must pin its exact hit indices in `_EXPECTED_FIRE_HITS`
    (`tests/test_detection_contract.py`) — the completeness check tells you the
    missing entry, and the indices come from the failing assertion message. This
@@ -85,15 +87,17 @@ below keys off it.
    could trip it and why it does not here. The FP profile is mandatory.
 
 9. **Regenerate the coverage map.** `make coverage-build` rewrites the committed
-   snapshot (`docs/coverage/`) and the Navigator layer from the registry. Commit
-   it; `make coverage-check` is the drift gate.
+   snapshot in `docs/coverage/` (table, JSON, Navigator layer and SVG matrix) from
+   the registry. Commit it; `make coverage-check` is the drift gate.
 
-10. **Run the full gate once.** `make ci` (format-check, lint, type-check, tests,
-    schema, coverage). Green = the Detection Contract is satisfied. Open a PR using
-    the PR template, which itemizes every contract element.
+10. **Run the gates.** `make ci` (format check, lint, type check, tests, schema,
+    coverage, security); for a Zeek rule, also `make verify
+    VERIFY_ARGS=--require-complete`. Green means the Detection Contract is
+    satisfied. Open a PR using the PR template, which itemizes every contract
+    element.
 
 ## Done when
 
-Every box of the Detection Definition of Done is ticked, `make ci` is green, and
-the coverage map shows your new row (and any newly-covered tactic flips from ⬜ gap
-to ✅ covered).
+Every element of the Detection Contract is in place, `make ci` (and, for a Tier-2
+rule, `make verify`) is green, and the coverage map shows your new row, with any
+newly covered tactic moving from "no mapping" to "mapped".

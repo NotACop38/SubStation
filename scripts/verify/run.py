@@ -64,8 +64,8 @@ _CACHE = _REPO_ROOT / ".verify-cache"
 # Pinned to a commit for reproducibility. s7comm is intentionally absent — it is a
 # compiled C++ plugin (see module docstring).
 _ICSNPP = {
-    # The hex strings are upstream git COMMIT PINS (not secrets) — allowlisted for
-    # the secret scanner's high-entropy detector.
+    # The hex strings are upstream git COMMIT PINS (not secrets), recorded as
+    # reviewed lines in scripts/security/reviewed-hash-lines.json.
     "modbus": (
         "https://github.com/cisagov/icsnpp-modbus",
         "64559be1640dd91b888aed993531a06156deaed0",
@@ -77,7 +77,7 @@ _ICSNPP = {
 }
 
 # Per Tier-2 Zeek detection: the Notice::Type token it raises, and whether it needs
-# the (unavailable) S7comm plugin to observe its protocol.
+# the ICSNPP S7comm plugin to observe its protocol.
 _NOTICE_TOKEN = {
     "M3": "ModbusSweep::Sweep",
     "M4": "ModbusReadSweep::ReadSweep",
@@ -85,9 +85,7 @@ _NOTICE_TOKEN = {
     "S3": "S7Enum::Enumeration",
     "X1": "CrossProtoBaseline::BaselineDeviation",
 }
-_NEEDS_S7 = {
-    "S3"
-}  # X1 runs over Modbus/DNP3; its S7 path is skipped per-scenario without the plugin.
+_NEEDS_S7 = {"S3"}  # X1's S7 scenarios need the plugin too; they are checked per scenario.
 # Optional user-supplied image with icsnpp-s7comm built in (see docs/tier2.md). When
 # set, verify uses it instead of building the S7 plugin image from pinned sources.
 _S7_ZEEK_IMAGE_ENV = "SUBSTATION_ZEEK_S7_IMAGE"

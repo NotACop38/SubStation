@@ -178,7 +178,7 @@ binding requires explicit opt-ins and network isolation.
 
 - [Event schema](docs/schema.md) · [Scenario format](docs/scenario-format.md)
 - [Add a detection](docs/adding-a-detection.md) · [Add a protocol](docs/adding-a-protocol.md)
-- [PRD](PRD.md) · [Engineering checklist](ENGINEERING_CHECKLIST.md) · [Agent instructions](AGENTS.md)
+- [PRD](docs/design.md) · [Engineering checklist](ENGINEERING_CHECKLIST.md) · [Agent instructions](AGENTS.md)
 
 [MIT license](LICENSE). Built with [Sigma](https://sigmahq.io/),
 [Zeek/ICSNPP](https://github.com/cisagov/icsnpp), [Scapy](https://scapy.net/) and

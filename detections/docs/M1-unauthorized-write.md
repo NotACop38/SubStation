@@ -3,7 +3,7 @@
 A Modbus write-class function that is **not** an in-policy setpoint write — either
 from a source that is **not** an allow-listed writer (HMI/EWS), or from an
 allow-listed source straying to an **out-of-policy unit/register**. The
-unauthorized-command-message detection for the Modbus slice (`PRD.md` §5.1).
+unauthorized-command-message detection for the Modbus slice (`docs/design.md` §5.1).
 
 | | |
 |---|---|
@@ -31,12 +31,12 @@ it is a Modbus write request (`action_class: write`, `direction: request`),
 `conn.orig_h` says who sent it, and `detail.unit` / `detail.address` say what it
 targets — everything the policy needs is on the one event. No durable state,
 correlation window, or multi-event join is needed, so this is the simplest engine
-that expresses the behavior correctly — Sigma-first per `PRD.md` §6.5. Standard Sigma equality and comparison selectors encode the ten legal starting
+that expresses the behavior correctly — Sigma-first per `docs/design.md` §6.5. Standard Sigma equality and comparison selectors encode the ten legal starting
 addresses with their maximum write lengths. No custom arithmetic field is needed.
 A production backend still needs field mapping and site-specific policy; raw
 ICSNPP transaction logs do not have Substation's request/response envelope.
 
-**Why allow-list, not "any write" (the OT-realism guardrail, `PRD.md` §8).**
+**Why allow-list, not "any write" (the OT-realism guardrail, `docs/design.md` §8).**
 Engineers legitimately write setpoints; a rule that fires on every write is pure
 false positives and discredits the project. The rule therefore stays quiet on
 **in-policy** writes (allow-listed source, permitted unit, writable register) and
@@ -57,10 +57,15 @@ Tier-1 `.jsonl` event log (`docs/schema.md`):
   register; `detail.quantity` determines the complete affected span.
 - `conn.resp_h` / `conn.resp_p` and `func_code` — asset, service and address space.
 
-Raw ICSNPP `modbus_detailed.log` combines transaction fields and uses flat
-`id.orig_h` / `id.resp_h` keys. Before using these rules on sensor logs, normalize
-direction and connection fields, map the numeric function code, and retain
-`unit`, `address`, and `quantity`. Substation does not yet ship that adapter.
+Raw ICSNPP `modbus_detailed.log` combines request and response in one
+transaction record with flat `id.orig_h` / `id.resp_h` keys. `substation
+import-modbus` projects it into this schema for the eight core functions (see
+[the deployment guide](../../docs/deployment.md)); other sensors need the same
+normalization of direction, connection fields and function codes.
+
+`action_class: write` also covers mask-write, read/write-multiple and write-file
+records, and the Modbus programming and firmware-replacement functions, which
+change controller logic. Outside the policy they fire M1 too.
 
 ## Detection logic
 
@@ -106,7 +111,7 @@ those writes target setpoint/holding registers, T0836 Modify Parameter also
 applies — its live page cites *"modification of system settings by reading and
 writing to registers via Modbus commands."*
 
-> **VERIFY (`CLAUDE.md` gate).** Verified against the **live** ATT&CK-for-ICS
+> **VERIFY (`AGENTS.md` gate).** Verified against the **live** ATT&CK-for-ICS
 > matrix on 2026-06-04. Note the matrix has been restructured since older
 > references: the former *T0855 Unauthorized Command Message* is now
 > **T1692.001** *Unauthorized Message: Command Message*. Sources:

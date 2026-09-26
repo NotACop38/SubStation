@@ -1,4 +1,4 @@
-"""Tests for the scenario model + YAML loader (Phase 0)."""
+"""Tests for the scenario model + YAML loader."""
 
 from __future__ import annotations
 

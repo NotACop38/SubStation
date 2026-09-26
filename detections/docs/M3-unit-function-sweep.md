@@ -2,7 +2,7 @@
 
 One source touching an anomalously **diverse** set of Modbus function codes
 and/or unit IDs against a single PLC in a short window — the sweep/enumeration
-detection for the Modbus slice (`PRD.md` §5.1). **Diversity, not volume.**
+detection for the Modbus slice (`docs/design.md` §5.1). **Diversity, not volume.**
 
 | | |
 |---|---|
@@ -12,7 +12,7 @@ detection for the Modbus slice (`PRD.md` §5.1). **Diversity, not volume.**
 | **Status** | experimental · **Notice** | `ModbusSweep::Sweep` |
 
 This is the Modbus slice's **mandated Zeek detection** — the slice ships at least
-one Sigma and one Zeek example to prove both rails (`PRD.md` §6.5). M1 and M2 are
+one Sigma and one Zeek example to prove both rails (`docs/design.md` §6.5). M1 and M2 are
 Sigma; M3 is Zeek.
 
 ## Behavior
@@ -30,9 +30,9 @@ which requires durable per-source state (sets) and set-membership tests. A
 stateless Sigma field-match cannot express "distinct things seen so far," and a
 simple Sigma **count** correlation would key on request *volume* — exactly the
 wrong signal: SCADA masters poll constantly, so a volume threshold fires on
-normal operation (`PRD.md` §8). Counting *diversity* (distinct codes/units), not
+normal operation (`docs/design.md` §8). Counting *diversity* (distinct codes/units), not
 *rate*, is what keeps this credible, and that needs the durable state Zeek
-provides (`PRD.md` §6.5: "any scanning detection that needs durable state beyond
+provides (`docs/design.md` §6.5: "any scanning detection that needs durable state beyond
 a correlation window").
 
 ## Data source
@@ -46,10 +46,16 @@ Zeek's **base** Modbus analyzer (no ICSNPP dependency required):
   are counted; the matched response comes from the PLC and would inflate the
   source's apparent diversity.
 
-> **VERIFY (`CLAUDE.md` gate).** The `modbus_message` signature and the
+> **VERIFY (`AGENTS.md` gate).** The `modbus_message` signature and the
 > `ModbusHeaders` field names (`function_code`, `uid`) were verified against the
 > live `zeek/zeek` source (`base/protocols/modbus`) on 2026-06-04, not recalled
 > from memory.
+
+> **Port.** Zeek attaches its Modbus analyzer only to `Modbus::ports`, which is
+> `{ 502/tcp }`, and ships no dynamic protocol detection signature for Modbus
+> (checked in the pinned Zeek 8.2 image, 2026-09-26). For devices on another
+> port, add `redef Modbus::ports += { 5020/tcp };` to the sensor, or this rule
+> sees nothing.
 
 ## Detection logic
 
@@ -84,10 +90,9 @@ does not trip it.
   — each source uses 3 distinct function codes on a single unit (1): below both
   thresholds.
 
-> **Status note.** M3 executes in **Tier 2** (containerized Zeek over the PCAP).
-> The Tier-2 runner is a Phase-2 `ENGINEERING_CHECKLIST.md` item, so M3's
-> fire/quiet test runs there; the rule here is authored against the verified base
-> Zeek Modbus API.
+> **Status note.** M3 executes in **Tier 2**: `make verify` runs the rule in real
+> Zeek over the fire and quiet PCAPs. The rule is authored against the verified
+> base Zeek Modbus API.
 
 ## ATT&CK-for-ICS mapping
 
@@ -102,7 +107,7 @@ logical identifier on a network"). The **function-code** breadth dimension
 additionally relates to T0888 (enumerating supported functions), the same
 technique M2 maps to.
 
-> **VERIFY (`CLAUDE.md` gate).** Verified against the **live** ATT&CK-for-ICS
+> **VERIFY (`AGENTS.md` gate).** Verified against the **live** ATT&CK-for-ICS
 > matrix on 2026-06-04. Sources: <https://attack.mitre.org/techniques/T0846/>,
 > <https://attack.mitre.org/techniques/T0888/>,
 > tactic <https://attack.mitre.org/tactics/TA0102/>.

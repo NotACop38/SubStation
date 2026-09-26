@@ -1,7 +1,7 @@
 # =============================================================================
 # Substation detection S2 — Unauthorized S7 program / data-block write or download
 # =============================================================================
-# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — docs/design.md §6.5).
 # Rationale, data source and the full false-positive profile live in
 # detections/docs/S2-program-write-download.md (the Detection Contract doc, §6.6).
 #

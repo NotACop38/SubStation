@@ -1,7 +1,7 @@
 # =============================================================================
 # Anomalous (M2) — illegal / abnormal function code
 # =============================================================================
-# M2 (PRD.md §5.1): use of a reserved/undefined Modbus function code, or the
+# M2 (docs/design.md §5.1): use of an undefined Modbus function code, or the
 # exception responses (ILLEGAL_FUNCTION / illegal-address) that such probing
 # provokes. This keys on the function code / exception itself (docs/schema.md:
 # detail.exception_code and the `other` action_class for undefined codes), NOT
@@ -18,16 +18,16 @@
 # base Zeek's `Modbus::function_codes` table names 0x09 the legacy "PROGRAM_484"
 # (verified against base/protocols/modbus/consts.zeek) — i.e. 0x09 is a *defined*
 # Modicon function, NOT undefined. A genuinely undefined request code is one
-# absent from that table; this scenario uses 0x42 (66), which Zeek renders
-# `unknown-66` via the table's `&default = fmt("unknown-%d", i)`. The emitter now
-# encodes such undefined codes (action_class `other`) and the ILLEGAL_FUNCTION
-# exception a compliant outstation returns (Modbus Application Protocol spec
-# v1.1b3, PRD.md §9), so this scenario now GENERATES and fires M2 in Tier 1.
+# absent from that table; this scenario uses 0x42 (66), a user-defined code, which
+# Zeek renders `unknown-66` via the table's `&default = fmt("unknown-%d", i)`. The
+# emitter encodes such undefined codes (action_class `other`) and the
+# ILLEGAL_FUNCTION exception a compliant outstation returns (`unknown-194`, as
+# Zeek names it; Modbus Application Protocol spec v1.1b3, docs/design.md §9).
 # -----------------------------------------------------------------------------
 
 name: modbus-anomalous-m2-illegal-function
 description: >-
-  A host probes the PLC with a reserved/undefined Modbus function code (0x42),
+  A host probes the PLC with an undefined (user-defined) Modbus function code (0x42),
   the kind of traffic that draws an ILLEGAL_FUNCTION exception. Fires M2
   (illegal/abnormal function code); stays quiet on M1 (not a write) and M3 (a
   single abnormal code is not a sweep).
@@ -70,7 +70,7 @@ exchanges:
 
 exercises:
   fires:
-    - M2   # reserved/undefined function code (and its ILLEGAL_FUNCTION exception).
+    - M2   # undefined function code (and its ILLEGAL_FUNCTION exception).
   quiet:
     - M1   # an undefined code is not a recognized write; allow-list rule idle.
     - M3   # one abnormal code to one unit is not a function/unit sweep.

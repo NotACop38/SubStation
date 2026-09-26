@@ -1,4 +1,4 @@
-"""Scenario YAML loader (Phase 0).
+"""Scenario YAML loader.
 
 Parses a human-editable scenario file into the typed :mod:`model`. The loader is
 strict: it rejects unknown top-level keys, unknown actor roles/protocols/labels,

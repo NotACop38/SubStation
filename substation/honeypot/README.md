@@ -2,7 +2,7 @@
 
 > **Read this before you run anything here.** This is an **opt-in research tool**,
 > not part of the Substation headline path. It is the optional honeypot of
-> [`PRD.md` §6.10](../../PRD.md) / Phase 5, and it is deliberately kept out of
+> [`docs/design.md` §6.10](../../docs/design.md), and it is deliberately kept out of
 > `make demo` and the one-command Tier-1 loop.
 
 A minimal **passive Modbus/TCP probe logger**. It listens for inbound Modbus

@@ -1,4 +1,4 @@
-"""Files-only invariant guard (PRD §6.4, CLAUDE.md safety invariant).
+"""Files-only invariant guard (docs/design.md §6.4, AGENTS.md safety invariant).
 
 The simulator must **only ever write files**: it never opens a sending socket and
 never transmits on a live interface. That is a non-negotiable safety boundary, so
@@ -62,7 +62,7 @@ def _blocked(name: str) -> Callable[..., Any]:
     def guarded(*_args: Any, **_kwargs: Any) -> Any:
         raise FilesOnlyViolation(
             f"{name}() is forbidden: the Substation simulator is files-only and must "
-            "never open a network path or start a process that could (PRD §6.4)."
+            "never open a network path or start a process that could (docs/design.md §6.4)."
         )
 
     guarded.__name__ = name.rpartition(".")[2]

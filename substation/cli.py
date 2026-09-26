@@ -1,7 +1,7 @@
 """Substation command-line entrypoint — the single front door.
 
 The Tier-1 loop is **generate telemetry -> run detections -> render coverage
-map** (`PRD.md` §6.8). The `demo` command runs the full path end to end: it
+map** (`docs/design.md` §6.8). The `demo` command runs the full path end to end: it
 emits live PCAP + JSON from the scenario model, runs the Sigma detections
 over the JSON event log, and prints the hits plus the real ATT&CK-for-ICS
 coverage map (registry-driven). The bundled demo runs a benign baseline (which
@@ -16,7 +16,7 @@ normalized JSONL), ``import-modbus`` (normalize sensor logs), ``policy``
 ``coverage`` (the generated ATT&CK coverage artifacts; also ``python -m
 substation.coverage``). Tier-2 validation runs from a checkout (``make verify``).
 
-Safety invariant (PRD.md §6.4): nothing here ever opens a sending socket or
+Safety invariant (docs/design.md §6.4): nothing here ever opens a sending socket or
 transmits on a live interface. The simulator is files-only, always.
 """
 

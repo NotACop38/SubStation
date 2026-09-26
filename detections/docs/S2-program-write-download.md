@@ -105,7 +105,7 @@ controllers. Writing data blocks specifically also relates to *Modify Parameter*
 the marquee transfer technique and notes the others here rather than over-claiming a
 second tactic in the coverage map.
 
-> **VERIFY (`CLAUDE.md` gate).** Verified against the **live** ATT&CK-for-ICS matrix
+> **VERIFY (`AGENTS.md` gate).** Verified against the **live** ATT&CK-for-ICS matrix
 > on 2026-06-04: T0843 *Program Download* exists and is assigned to tactic Lateral
 > Movement (TA0109). Sources: <https://attack.mitre.org/techniques/T0843/>, tactic
 > <https://attack.mitre.org/tactics/TA0109/>.

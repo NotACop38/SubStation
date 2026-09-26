@@ -49,6 +49,12 @@ Zeek's **base** Modbus analyzer (no ICSNPP dependency), request events only:
 > `base/bif/plugins/Zeek_Modbus.events.bif.zeek` (in the pinned verification
 > image) on 2026-09-26, not recalled from memory.
 
+> **Port.** Zeek attaches its Modbus analyzer only to `Modbus::ports`, which is
+> `{ 502/tcp }`, and ships no dynamic protocol detection signature for Modbus
+> (checked in the pinned Zeek 8.2 image, 2026-09-26). For devices on another
+> port, add `redef Modbus::ports += { 5020/tcp };` to the sensor, or this rule
+> sees nothing.
+
 ## Detection logic
 
 State is kept per **(source, PLC, unit, table)**, where the table is coils,

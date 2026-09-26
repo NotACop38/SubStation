@@ -1,15 +1,15 @@
 # =============================================================================
 # Anomalous (S3) — module-info / block enumeration (recon)
 # =============================================================================
-# S3 (PRD.md §5.3): reading PLC identity/module info and enumerating blocks
+# S3 (docs/design.md §5.3): reading PLC identity/module info and enumerating blocks
 # (reconnaissance). The signal is DIVERSITY, deliberately NOT request volume:
 # engineering tools legitimately read module identity, so a single Read SZL is
 # benign (the baseline does exactly that). One source sweeping MANY distinct
 # SZL-IDs (module identification, component identification, CPU characteristics,
 # memory/areas, block types, …) plus block listings and an S7comm-plus Explore is
-# the enumeration signature (PRD.md §8 — diversity, not volume).
+# the enumeration signature (docs/design.md §8 — diversity, not volume).
 #
-# S3 is the S7 slice's Zeek rail (PRD.md §6.5; mirrors Modbus M3 / DNP3 D4): a
+# S3 is the S7 slice's Zeek rail (docs/design.md §6.5; mirrors Modbus M3 / DNP3 D4): a
 # per-source SZL-ID / recon-function diversity count needs durable state a stateless
 # Sigma field-match cannot express. Its fire/quiet runs in the Tier-2 runner.
 # -----------------------------------------------------------------------------

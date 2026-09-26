@@ -2,7 +2,7 @@
 
 A source/destination/function combination that is **not in the learned baseline**,
 across **any** supported protocol (Modbus, DNP3, S7comm) — the flagship
-cross-protocol detection (`PRD.md` §5.4). Three deviation classes: **new talker**,
+cross-protocol detection (`docs/design.md` §5.4). Three deviation classes: **new talker**,
 **new asset pair**, **new function for a pair**.
 
 | | |
@@ -42,7 +42,7 @@ unapproved activity remains detectable after suppression expires.
 ## Engine choice + rationale
 
 **Zeek**, because X1 is the canonical "real state" case the engine policy reserves
-Zeek for (`PRD.md` §6.5). It needs two things a stateless Sigma field-match cannot
+Zeek for (`docs/design.md` §6.5). It needs two things a stateless Sigma field-match cannot
 express:
 
 - **Learned state** — known talkers, pairs and functions retained across connections
@@ -78,11 +78,15 @@ User-Data functions such as List Blocks. Read SZL keeps the existing
 `szl_id`-specific observation so new module-identity probes remain visible at the
 same precision as before.
 
-> **VERIFY (`CLAUDE.md` gate).** The event signatures are the same ones verified
+> **VERIFY (`AGENTS.md` gate).** The event signatures are the same ones verified
 > for M3 / D4 / S3 against live sources on 2026-06-04 (`modbus_message` and
 > `dnp3_application_request_header` against `zeek/zeek` base; `s7comm_header`,
 > `s7comm_read_szl`, and `s7comm_plus_header` against `cisagov/icsnpp-s7comm`,
 > spike 06).
+
+> **Port.** X1's Modbus path sees only what Zeek's Modbus analyzer parses, and
+> that analyzer is attached to `Modbus::ports` (`{ 502/tcp }`) with no dynamic
+> detection signature. Devices on other ports need `redef Modbus::ports`.
 
 ## Detection logic — learned state + set membership
 
@@ -92,7 +96,7 @@ supplied two ways (use either or both):
 - **Injected (production + the Tier-2 runner).** `redef` the three sets with the
   allow-set computed from a known-good learning period — for Substation, the
   union of tuples observed in the **benign baseline scenarios**
-  (`scenarios/*/benign-baseline.yaml`). This is the "learned state" of `PRD.md`
+  (`scenarios/*/benign-baseline.yaml`). This is the "learned state" of `docs/design.md`
   §5.4: learned once offline, then enforced. The Tier-2 runner derives the
   baseline from the synthetic JSON events, redefs it, then runs the anomalous PCAP and
   expects the deviation to fire.
@@ -164,15 +168,15 @@ stays quiet) while the novel tuple is not (so X1 fires).
 A new talker / new asset pair is the network signature of an actor **discovering
 and reaching** OT assets it has not legitimately spoken to before — T0846 ("a
 listing of other systems by IP address, hostname, or other logical identifier on a
-network"). `PRD.md` §5.4 also relates X1 to **Lateral Movement (TA0109)** (the
+network"). `docs/design.md` §5.4 also relates X1 to **Lateral Movement (TA0109)** (the
 new-asset-pair class especially); the registry's data model records one verified
 tactic per detection, and the verified primary mapping is Discovery/T0846 — the
 same already-verified mapping used by M3/D4/S3.
 
-> **VERIFY (`CLAUDE.md` gate).** Verified against the **live** ATT&CK-for-ICS
+> **VERIFY (`AGENTS.md` gate).** Verified against the **live** ATT&CK-for-ICS
 > matrix on 2026-06-04. Sources: <https://attack.mitre.org/techniques/T0846/>,
 > tactic <https://attack.mitre.org/tactics/TA0102/>. The Lateral Movement relation
-> (TA0109) is noted from `PRD.md` §5.4 and not asserted as the primary mapping.
+> (TA0109) is noted from `docs/design.md` §5.4 and not asserted as the primary mapping.
 
 ## False-positive profile
 

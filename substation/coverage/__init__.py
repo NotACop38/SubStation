@@ -7,7 +7,7 @@ Two surfaces live here:
 * the metadata-driven **coverage generator** (:mod:`substation.coverage.builder`,
   run via ``python -m substation.coverage``) — emits the markdown/JSON coverage
   table and the ATT&CK Navigator layer from ``detections/registry.yaml``
-  (PRD.md §6.7). Those artifacts are generated, never hand-edited.
+  (docs/design.md §6.7). Those artifacts are generated, never hand-edited.
 """
 
 from __future__ import annotations

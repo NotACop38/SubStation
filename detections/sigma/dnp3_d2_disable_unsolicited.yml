@@ -1,7 +1,7 @@
 # =============================================================================
 # Substation detection D2 — DNP3 disable unsolicited responses (blinding)
 # =============================================================================
-# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — docs/design.md §6.5).
 # Rationale, data source and the full false-positive profile live in
 # detections/docs/D2-disable-unsolicited.md (the Detection Contract doc, §6.6).
 #
@@ -15,14 +15,14 @@ id: 2a9d4c70-8e51-4b3a-9f6d-0c4b2e7a15de
 status: experimental
 description: |
   A DNP3 DISABLE_UNSOLICITED request from a source that is not the allow-listed
-  master. Substation detection D2 (PRD.md §5.2): disabling unsolicited responses
+  master. Substation detection D2 (docs/design.md §5.2): disabling unsolicited responses
   suppresses the outstation's spontaneous event/telemetry reporting, blinding the
   operator (Inhibit Response Function). Keyed by command AND source allow-list, so
-  a sanctioned maintenance disable from the real master stays quiet (PRD.md §8).
+  a sanctioned maintenance disable from the real master stays quiet (docs/design.md §8).
 references:
   - https://attack.mitre.org/techniques/T1691/002/
   - https://attack.mitre.org/techniques/T0878/
-  - PRD.md §5.2 (D2); detections/docs/D2-disable-unsolicited.md
+  - docs/design.md §5.2 (D2); detections/docs/D2-disable-unsolicited.md
 author: Substation
 date: 2026-06-04
 logsource:
