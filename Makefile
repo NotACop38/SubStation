@@ -11,7 +11,7 @@ SRC := substation tests scripts setup.py
 .DEFAULT_GOAL := help
 
 .PHONY: help check-python dev ci format format-check lint type test schema coverage-build \
-        coverage-check security demo verify verify-sigma release hooks clean corpus lock
+        coverage-check security demo verify verify-image verify-sigma release hooks clean corpus lock
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -88,8 +88,11 @@ corpus: check-python ## Check attributed corpus hashes and labeled detection met
 verify-sigma: check-python ## Compare authored/exported Sigma hits with the official SQLite backend
 	$(PY) scripts/verify/sigma_backend.py
 
-verify: check-python ## Tier-2 validation: real Zeek/ICSNPP fidelity + Zeek/Suricata detections (Docker)
+verify: check-python ## Tier-2 validation: Zeek/ICSNPP field checks + Zeek rules (Docker; builds the S7 image once)
 	$(PY) scripts/verify/run.py $(VERIFY_ARGS)
+
+verify-image: check-python ## Build the Tier-2 Zeek image with the pinned, patched ICSNPP S7comm plugin
+	$(PY) scripts/verify/build_s7.py --docker
 
 release: check-python ## Cut a local release: gate -> bump + artifacts -> build -> commit + tag
 	$(PY) scripts/release/run.py $(RELEASE_ARGS)

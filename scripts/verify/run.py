@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tier-2 field/request parity + detection validation (real Zeek/ICSNPP).
 
-This is the Tier-2 half of the two-tier execution model (PRD §6.5, §6.8). Where
+This is the Tier-2 half of the two-tier execution model (docs/design.md §6.2). Where
 Tier 1 evaluates Sigma over the emitted ``.jsonl`` in-process, Tier 2 runs the
 **real** engines against the emitted PCAPs:
 
@@ -17,14 +17,16 @@ Tier 1 evaluates Sigma over the emitted ``.jsonl`` in-process, Tier 2 runs the
      injected via ``redef`` (exactly the mechanism the X1 doc describes).
   3. **Suricata.** None shipped. Adding rules without a runner fails validation.
 
-Honest scoping: the ICSNPP **S7comm** analyzer is a compiled C++ Zeek plugin, so
-anything that needs it (S3, X1's S7 path, S7 fidelity) requires a Zeek image with
-a compiled plugin and loadable scripts. When that plugin is unavailable the runner SKIPS those checks
-with a loud, explicit reason — it never silently passes them. Likewise Suricata is
-reported as "no rules" when the repo ships none (``detections/suricata`` empty).
+S7 needs the ICSNPP **S7comm** analyzer, a compiled C++ Zeek plugin. In Docker
+mode the runner builds it once into a local image on top of the pinned Zeek image
+(``scripts/verify/build_s7.py``); with ``--native`` the host must provide it. When
+the plugin is unavailable the runner SKIPS the S7 checks (S3, X1's S7 path, S7
+fidelity) with an explicit reason — it never silently passes them. Suricata is
+reported as "no rules" while the repo ships none (``detections/suricata`` empty).
 
-Run: ``make verify`` with Docker, or ``make verify VERIFY_ARGS=--native``.
-Use --require-complete for qualification; missing shipped checks then fail.
+Run: ``make verify`` (Docker) or ``make verify VERIFY_ARGS=--native``. Use
+--require-complete for qualification; any skipped shipped check then fails.
+See docs/tier2.md.
 """
 
 from __future__ import annotations
@@ -83,8 +85,8 @@ _NOTICE_TOKEN = {
 _NEEDS_S7 = {
     "S3"
 }  # X1 runs over Modbus/DNP3; its S7 path is skipped per-scenario without the plugin.
-# Optional local image with icsnpp-s7comm built in (see docs/verify-s7.md). When set
-# and pullable, verify prefers it over the stock ZEEK_IMAGE for S7-capable runs.
+# Optional user-supplied image with icsnpp-s7comm built in (see docs/tier2.md). When
+# set, verify uses it instead of building the S7 plugin image from pinned sources.
 _S7_ZEEK_IMAGE_ENV = "SUBSTATION_ZEEK_S7_IMAGE"
 _NATIVE_ZEEK: str | None = None
 
@@ -338,10 +340,10 @@ def fidelity_check(proto: str, results: Results) -> None:
     """Diff emitted JSON vs real Zeek/ICSNPP logs for every scenario of a protocol."""
     if proto not in {*_ICSNPP, "s7comm"}:
         # Only Modbus/DNP3 have vendored ICSNPP *script* packages; S7comm fidelity
-        # needs the compiled plugin + a fidelity mapping (see docs/verify-s7.md).
+        # needs the compiled plugin + a fidelity mapping (see docs/tier2.md).
         results.skip(
             f"fidelity[{proto}]: no vendored ICSNPP scripts / fidelity mapping "
-            f"(enable via docs/verify-s7.md when using an icsnpp-s7comm image)"
+            f"(enable via docs/tier2.md when using an icsnpp-s7comm image)"
         )
         return
     if proto == "s7comm":
@@ -553,7 +555,7 @@ def detection_check(
     if det.id in _NEEDS_S7 and not s7_available:
         results.skip(
             f"detection[{det.id}]: needs the icsnpp-s7comm C++ plugin (not built in "
-            f"{ZEEK_IMAGE}); see docs/verify-s7.md to enable"
+            f"{ZEEK_IMAGE}); see docs/tier2.md to enable"
         )
         return
 
@@ -572,7 +574,7 @@ def detection_check(
             if needs_s7_path and not s7_available:
                 results.skip(
                     f"detection[{det.id}] {scenario_file.name}: S7 path needs the "
-                    "s7comm plugin (docs/verify-s7.md)"
+                    "s7comm plugin (docs/tier2.md)"
                 )
                 continue
             with tempfile.TemporaryDirectory() as td:
@@ -618,7 +620,7 @@ def suricata_check(results: Results) -> None:
     if not rules:
         results.skip(
             "suricata: no Suricata rules shipped (detections/suricata is empty) — "
-            "nothing to execute (Suricata is optional, PRD §6.5)"
+            "nothing to execute (Suricata is optional, docs/design.md §6.5)"
         )
         return
     results.fail(f"suricata: {len(rules)} rule file(s) found but the Suricata runner is not wired")
@@ -627,12 +629,31 @@ def suricata_check(results: Results) -> None:
 # --- s7 plugin probe ---------------------------------------------------------
 
 
-def _active_zeek_image() -> str:
-    """Return the Zeek image to use (optional S7-capable override via env)."""
+def _image_override() -> str:
+    """Return a user-selected S7-capable image from the environment, if any."""
     import os
 
-    override = os.environ.get(_S7_ZEEK_IMAGE_ENV, "").strip()
-    return override or ZEEK_IMAGE
+    return os.environ.get(_S7_ZEEK_IMAGE_ENV, "").strip()
+
+
+def _ensure_s7_image(base: str) -> str | None:
+    """Return the locally built S7 plugin image for ``base``, building it once.
+
+    The image is ``base`` plus the pinned, patched ICSNPP S7comm plugin (see
+    ``scripts/verify/build_s7.py``). A build failure is reported and returns
+    ``None``: the S7 checks are then skipped, which ``--require-complete`` fails.
+    """
+    from scripts.verify.build_s7 import build_image, image_tag
+
+    tag = image_tag(base)
+    if subprocess.run(["docker", "image", "inspect", tag], capture_output=True).returncode == 0:
+        return tag
+    print(f"verify: building {tag} (Zeek + pinned ICSNPP S7comm plugin; first run only) ...")
+    try:
+        return build_image(base)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+        print(f"verify: could not build the S7 plugin image: {exc}", file=sys.stderr)
+        return None
 
 
 def _s7_plugin_probe(image: str) -> tuple[bool, list[str]]:
@@ -673,6 +694,11 @@ def main() -> int:
     parser.add_argument(
         "--require-complete", action="store_true", help="Fail if a shipped check is skipped."
     )
+    parser.add_argument(
+        "--no-s7-build",
+        action="store_true",
+        help="Do not build the S7 plugin image; S7 checks are then skipped.",
+    )
     args = parser.parse_args()
     global ZEEK_IMAGE, _NATIVE_ZEEK
     _NATIVE_ZEEK = shutil.which("zeek") if args.native else None
@@ -693,10 +719,17 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 2
-        ZEEK_IMAGE = _active_zeek_image()
+        override = _image_override()
+        ZEEK_IMAGE = override or ZEEK_IMAGE
         if not _image_present():
             print(f"verify: could not obtain {ZEEK_IMAGE}", file=sys.stderr)
             return 2
+        if not override and not args.no_s7_build:
+            # The S7 image is the pinned base plus one plugin, so it serves every
+            # protocol's checks; without it, only the S7 checks are skipped.
+            s7_image = _ensure_s7_image(ZEEK_IMAGE)
+            if s7_image is not None:
+                ZEEK_IMAGE = s7_image
 
     results = Results()
     s7_available, s7_loads = _s7_plugin_probe(ZEEK_IMAGE)
@@ -704,11 +737,11 @@ def main() -> int:
     print(f"verify: {engine}; icsnpp-s7comm available: {s7_available}\n")
     if not s7_available:
         print(
-            "verify: S7 Tier-2 path disabled — see docs/verify-s7.md "
+            "verify: S7 Tier-2 path disabled — see docs/tier2.md "
             f"(optional {_S7_ZEEK_IMAGE_ENV}=...)\n"
         )
 
-    print("== Modbus fields; DNP3/S7 request identity/count parity ==")
+    print("== Protocol field comparisons and external corpus ==")
     fidelity_check("modbus", results)
     corpus_check(results)
     fidelity_check("dnp3", results)
@@ -717,7 +750,7 @@ def main() -> int:
     else:
         results.skip(
             "fidelity[s7comm]: needs a loadable icsnpp-s7comm plugin with the "
-            "substation-bounds-v1 patch (docs/verify-s7.md)"
+            "substation-bounds-v1 patch (docs/tier2.md)"
         )
 
     print("\n== Zeek detections (real engine, fire/quiet) ==")
