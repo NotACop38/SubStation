@@ -12,9 +12,11 @@ initiate an outbound connection (``connect`` / ``connect_ex``, including through
 ``getattr``), (b) create a socket anywhere but the honeypot, which may create only
 a TCP one, (c) reference a raw-socket constant or scapy's socket factories
 (``L2socket`` / ``L3socket``), (d) import or call a scapy wire-transmit or capture
-function, however imported or aliased, or (e) start a process (``subprocess``,
-``os.system``, ``os.exec*``, ...). Passive replies on an accepted socket
-(``sendall`` on a server-side connection) are allowed in the honeypot only.
+function, or (e) start a process (``subprocess``, ``multiprocessing``,
+``os.system``, ``os.exec*``, ...). Aliases, ``getattr`` and imports by name
+(``importlib.import_module``, ``__import__``) are resolved. Passive replies on an
+accepted socket (``sendall`` on a server-side connection) are allowed in the
+honeypot only.
 Catching this at the source level means a future edit cannot quietly add a send
 path without tripping the gate.
 """
@@ -42,8 +44,9 @@ _OUTBOUND_CALLS = {"connect", "connect_ex"}
 _SCAPY_TRANSMIT_FUNCS = {"send", "sendp", "sendpfast", "sr", "sr1", "srp", "srp1", "sniff"}
 _SOCKET_TRANSMIT_METHODS = {"send", "sendall", "sendto", "sendmsg", "sendfile"}
 _PASSIVE_REPLY_MODULE = _PKG_ROOT / "honeypot" / "modbus.py"
-# The runtime guard imports subprocess only to disable it during emission.
+# The runtime guard imports these only to disable them during emission.
 _GUARD_MODULE = _PKG_ROOT / "emit" / "guard.py"
+_GUARD_IMPORTS = {"subprocess", "_posixsubprocess"}
 
 # Socket constructors. Only the honeypot may create a socket, and only a TCP one.
 _SOCKET_FACTORIES = {"socket", "socketpair", "fromfd", "create_connection", "create_server"}
@@ -51,9 +54,20 @@ _SOCKET_FACTORIES = {"socket", "socketpair", "fromfd", "create_connection", "cre
 # Names that must never appear: raw-socket constants and scapy's socket factories.
 _FORBIDDEN_NAMES = {"SOCK_RAW", "AF_PACKET", "L2socket", "L3socket", "L2listen"}
 
-# Modules whose import alone is a send or spawn path in a files-only package.
-_FORBIDDEN_MODULES = {"_socket", "subprocess", "pty", "scapy.sendrecv"}
-# Process creation outside subprocess: os.* and asyncio.* spawners.
+# Modules whose import alone (or of anything inside them) is a send or spawn path
+# in a files-only package.
+_FORBIDDEN_MODULES = {
+    "_posixsubprocess",
+    "_socket",
+    "concurrent.futures.process",
+    "multiprocessing",
+    "pty",
+    "scapy.sendrecv",
+    "subprocess",
+}
+# Calls that import a module by name.
+_DYNAMIC_IMPORTS = {"import_module", "__import__"}
+# Process creation outside those modules: os.*, asyncio.* and executor spawners.
 _SPAWN_CALLS = {
     "system",
     "popen",
@@ -63,6 +77,9 @@ _SPAWN_CALLS = {
     "posix_spawnp",
     "create_subprocess_exec",
     "create_subprocess_shell",
+    "subprocess_exec",
+    "subprocess_shell",
+    "ProcessPoolExecutor",
     *(f"{kind}{suffix}" for kind in ("exec", "spawn") for suffix in ("l", "le", "lp", "lpe")),
     *(f"{kind}{suffix}" for kind in ("exec", "spawn") for suffix in ("v", "ve", "vp", "vpe")),
 }
@@ -105,12 +122,27 @@ def _is_tcp_socket(node: ast.Call) -> bool:
     )
 
 
-def _imported_modules(node: ast.AST) -> list[str]:
+def _imported_modules(node: ast.AST, aliases: dict[str, str]) -> list[str]:
+    """Modules ``node`` imports: statements, and ``import_module``/``__import__`` by name."""
     if isinstance(node, ast.Import):
         return [alias.name for alias in node.names]
     if isinstance(node, ast.ImportFrom) and node.module:
         return [node.module, *(f"{node.module}.{alias.name}" for alias in node.names)]
+    if (
+        isinstance(node, ast.Call)
+        and _called_name(node.func, aliases) in _DYNAMIC_IMPORTS
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    ):
+        return [node.args[0].value]
     return []
+
+
+def _is_forbidden_module(module: str) -> bool:
+    """Whether ``module`` is a forbidden module or lies inside one."""
+    parts = module.split(".")
+    return any(".".join(parts[:end]) in _FORBIDDEN_MODULES for end in range(1, len(parts) + 1))
 
 
 def _violations(tree: ast.AST, source: Path) -> list[str]:
@@ -126,10 +158,10 @@ def _violations(tree: ast.AST, source: Path) -> list[str]:
     }
     for node in ast.walk(tree):
         line = getattr(node, "lineno", 0)
-        for module in _imported_modules(node):
-            if source == _GUARD_MODULE and module == "subprocess":
+        for module in _imported_modules(node, aliases):
+            if source == _GUARD_MODULE and module in _GUARD_IMPORTS:
                 continue
-            if module in _FORBIDDEN_MODULES or module.split(".")[0] in _FORBIDDEN_MODULES:
+            if _is_forbidden_module(module):
                 found.append(f"line {line}: forbidden import '{module}'")
         if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("scapy"):
             for alias in node.names:
@@ -185,11 +217,39 @@ def test_no_outbound_or_raw_socket_calls(source: Path) -> None:
         ("import os\nos.system('tcpreplay x.pcap')\n", "forbidden process creation 'system()'"),
         ("import os\nos.execvp('nc', ['nc'])\n", "forbidden process creation 'execvp()'"),
         ("import _socket\n", "forbidden import '_socket'"),
+        ("import os\nos.forkpty()\n", "forbidden process creation 'forkpty()'"),
+        ("import multiprocessing\n", "forbidden import 'multiprocessing'"),
+        ("from multiprocessing.pool import Pool\n", "forbidden import 'multiprocessing.pool'"),
+        ("from concurrent.futures import process\n", "'concurrent.futures.process'"),
+        (
+            "from concurrent.futures import ProcessPoolExecutor as P\nP()\n",
+            "forbidden process creation 'ProcessPoolExecutor()'",
+        ),
+        (
+            "async def f(loop):\n    await loop.subprocess_exec(proto, 'nc')\n",
+            "forbidden process creation 'subprocess_exec()'",
+        ),
+        (
+            "import importlib\nimportlib.import_module('subprocess').run(['nc'])\n",
+            "forbidden import 'subprocess'",
+        ),
+        (
+            "from importlib import import_module as load\nload('multiprocessing.pool')\n",
+            "forbidden import 'multiprocessing.pool'",
+        ),
+        ("__import__('_posixsubprocess')\n", "forbidden import '_posixsubprocess'"),
     ],
 )
 def test_scan_catches_indirect_send_paths(code: str, expected: str) -> None:
     violations = _violations(ast.parse(code), _PKG_ROOT / "emit" / "future.py")
     assert any(expected in violation for violation in violations), violations
+
+
+def test_guard_may_import_only_the_modules_it_disables() -> None:
+    allowed = "import subprocess\nimport _posixsubprocess\n"
+    assert _violations(ast.parse(allowed), _GUARD_MODULE) == []
+    assert _violations(ast.parse("import multiprocessing\n"), _GUARD_MODULE)
+    assert _violations(ast.parse("import subprocess\n"), _PKG_ROOT / "emit" / "future.py")
 
 
 def test_honeypot_may_only_create_a_tcp_socket() -> None:

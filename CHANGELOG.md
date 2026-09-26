@@ -104,9 +104,10 @@ Releases are cut **locally** with `make release` (there is no cloud CI/CD); the
 
 ### Security
 
-- The files-only guard refuses socket and process creation during emission; the
-  static scan resolves aliases and `getattr`, and forbids raw sockets, scapy
-  socket factories and process spawning.
+- The files-only guard refuses socket and process creation during emission,
+  including `os.forkpty` and multiprocessing's spawn and forkserver start
+  methods; the static scan resolves aliases, `getattr` and imports by name, and
+  forbids raw sockets, scapy socket factories and process spawning.
 - The secret scanner ignores inline allow comments and refuses in-tree gitleaks
   configuration; every reviewed exception must match a current line.
 - Tier 2 refuses cached parser checkouts whose edits are hidden from

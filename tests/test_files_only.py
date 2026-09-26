@@ -9,9 +9,13 @@ on existing sockets, and process creation.
 
 from __future__ import annotations
 
+import _posixsubprocess
+import multiprocessing
 import os
 import socket
 import subprocess
+from collections.abc import Callable
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 
 import pytest
@@ -98,6 +102,18 @@ def test_guard_blocks_sendfile(tmp_path: Path) -> None:
         sock.close()
 
 
+def _assert_fork_refused(fork: Callable[[], object]) -> None:
+    """Assert the guard refuses ``fork``; if it does not, the child exits at once."""
+    try:
+        result = fork()
+    except FilesOnlyViolation:
+        return
+    pid = result[0] if isinstance(result, tuple) else result
+    if pid == 0:  # a regression forked the test run: the child must not continue it
+        os._exit(1)
+    pytest.fail(f"{fork.__name__}() was not refused")
+
+
 def test_guard_blocks_process_creation() -> None:
     # A child process (tcpreplay, nc, ...) could transmit on the emitter's behalf.
     with files_only_guard():
@@ -108,7 +124,25 @@ def test_guard_blocks_process_creation() -> None:
         with pytest.raises(FilesOnlyViolation):
             os.popen("true")  # noqa: S605,S607
         with pytest.raises(FilesOnlyViolation):
-            os.fork()
+            _posixsubprocess.fork_exec()  # type: ignore[call-arg]
+        _assert_fork_refused(os.fork)
+        _assert_fork_refused(os.forkpty)
+
+
+@pytest.mark.parametrize(
+    "process_class",
+    [
+        multiprocessing.get_context("spawn").Process,
+        multiprocessing.get_context("forkserver").Process,
+    ],
+    ids=["spawn", "forkserver"],
+)
+def test_guard_blocks_multiprocessing(process_class: type[BaseProcess]) -> None:
+    # These start methods launch the interpreter through _posixsubprocess.fork_exec,
+    # bypassing subprocess.Popen and os.fork; forkserver also needs a Unix socket.
+    process = process_class(target=int)
+    with files_only_guard(), pytest.raises(FilesOnlyViolation):
+        process.start()
 
 
 def test_guard_restores_everything_on_exit() -> None:
@@ -117,15 +151,20 @@ def test_guard_restores_everything_on_exit() -> None:
         "connect": socket.socket.connect,
         "init": socket.socket.__init__,
         "popen": subprocess.Popen.__init__,
+        "fork_exec": _posixsubprocess.fork_exec,
         "system": os.system,
+        "forkpty": os.forkpty,
     }
     with files_only_guard():
         assert socket.socket.send is not originals["send"]  # patched inside
+        assert _posixsubprocess.fork_exec is not originals["fork_exec"]
     assert socket.socket.send is originals["send"]  # restored after
     assert socket.socket.connect is originals["connect"]
     assert socket.socket.__init__ is originals["init"]
     assert subprocess.Popen.__init__ is originals["popen"]
+    assert _posixsubprocess.fork_exec is originals["fork_exec"]
     assert os.system is originals["system"]
+    assert os.forkpty is originals["forkpty"]
     socket.socket(socket.AF_INET, socket.SOCK_DGRAM).close()
 
 

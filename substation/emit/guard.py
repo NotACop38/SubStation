@@ -10,13 +10,15 @@ of reaching the network raise :class:`FilesOnlyViolation`:
 * creating a socket (``socket.socket`` and everything built on it, including
   scapy's layer-2/3 sockets, ``socketpair``, ``fromfd`` and ``create_connection``);
 * connecting or transmitting on a socket that already exists;
-* starting a process (``subprocess``, ``os.system``, ``os.popen``, ``os.fork``,
-  ``os.posix_spawn`` and the ``exec`` family), which could transmit on its behalf.
+* starting a process (``subprocess``, ``multiprocessing``, ``os.system``,
+  ``os.popen``, ``os.fork``, ``os.forkpty``, ``os.posix_spawn`` and the ``exec``
+  family), which could transmit on its behalf.
 
 Emission runs inside the guard, so an accidental network path fails loudly instead
 of putting packets on the wire. Writing PCAP/JSON uses ordinary file I/O
-(``open``), which the guard leaves untouched. ``subprocess`` is imported only so
-the guard can disable it (hence the bandit B404 suppression).
+(``open``), which the guard leaves untouched. ``subprocess`` and
+``_posixsubprocess`` are imported only so the guard can disable them (hence the
+bandit B404 suppression).
 
 The guard patches process-wide attributes and is therefore not thread-safe; the
 emitters are single-threaded by design, and the complementary static AST scan
@@ -29,9 +31,13 @@ from __future__ import annotations
 import os
 import socket
 import subprocess  # nosec B404
+import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
+
+if sys.platform != "win32":
+    import _posixsubprocess
 
 __all__ = ["FilesOnlyViolation", "files_only_guard"]
 
@@ -55,8 +61,16 @@ _BLOCKED_SOCKET_METHODS = (
     "sendfile",
 )
 # Process creation: a child process could transmit on the emitter's behalf.
-# os.popen and the other exec variants route through these.
-_BLOCKED_OS_FUNCTIONS = ("system", "fork", "posix_spawn", "posix_spawnp", "execv", "execve")
+# os.popen and the other exec and spawn variants route through these.
+_BLOCKED_OS_FUNCTIONS = (
+    "system",
+    "fork",
+    "forkpty",
+    "posix_spawn",
+    "posix_spawnp",
+    "execv",
+    "execve",
+)
 
 
 def _blocked(name: str) -> Callable[..., Any]:
@@ -77,6 +91,10 @@ def files_only_guard() -> Iterator[None]:
         (socket.socket, name, f"socket.socket.{name}") for name in _BLOCKED_SOCKET_METHODS
     ]
     targets.append((subprocess.Popen, "__init__", "subprocess.Popen"))
+    if sys.platform != "win32":
+        # The primitive under subprocess and under multiprocessing's spawn and
+        # forkserver start methods, which bypass both Popen and os.fork.
+        targets.append((_posixsubprocess, "fork_exec", "_posixsubprocess.fork_exec"))
     targets += [(os, name, f"os.{name}") for name in _BLOCKED_OS_FUNCTIONS]
     saved: list[tuple[Any, str, Any]] = []
     try:
