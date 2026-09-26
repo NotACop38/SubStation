@@ -1,20 +1,46 @@
 #!/usr/bin/env bash
 # Substation pre-push hook — the local "continuous" gate.
 #
-# Runs `make ci` and blocks the push if it fails. This is intentional: there is
-# NO cloud CI / GitHub Actions for this project, so this hook is how we keep the
-# default branch green. Enable it once with `make hooks`.
-#
+# There is no cloud CI for this project, so this hook keeps pushed branches
+# green: it runs `make ci` with the interpreter recorded by `make hooks` and
+# blocks the push if the gate fails. The gate tests the working tree, so every
+# pushed ref must be the checked-out commit and the tree must be clean.
+# Install or refresh it with `make hooks`.
 set -euo pipefail
+
+python=@PYTHON@
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-echo "pre-push: running 'make ci' before push..."
-if ! make ci; then
-    echo
-    echo "pre-push: 'make ci' FAILED — push blocked." >&2
-    echo "Fix the failures and try again." >&2
+head="$(git rev-parse HEAD)"
+pushed=0
+while read -r local_ref local_sha _remote_ref _remote_sha; do
+    if [[ "$local_sha" =~ ^0+$ ]]; then
+        continue  # deleting a remote ref: nothing to test
+    fi
+    pushed=1
+    commit="$(git rev-parse --verify --quiet "${local_sha}^{commit}" || true)"
+    if [[ "$commit" != "$head" ]]; then
+        echo "pre-push: $local_ref is not the checked-out commit, so 'make ci' cannot test it." >&2
+        echo "pre-push: check it out and push again." >&2
+        exit 1
+    fi
+done
+if [[ "$pushed" -eq 0 ]]; then
+    exit 0
+fi
+
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "pre-push: the working tree has uncommitted or untracked changes, so 'make ci'" >&2
+    echo "pre-push: would not test the commit being pushed. Commit or stash them first." >&2
+    exit 1
+fi
+
+echo "pre-push: running 'make ci' with $python"
+if ! make ci PY="$python"; then
+    echo >&2
+    echo "pre-push: 'make ci' FAILED — push blocked. Fix the failures and try again." >&2
     exit 1
 fi
 

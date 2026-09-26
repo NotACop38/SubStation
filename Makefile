@@ -1,10 +1,11 @@
 # Substation — pipeline single source of truth.
 #
-# CI/CD for this project is LOCAL and Codex-driven. There is NO cloud CI and
-# NO GitHub Actions. `make ci` is the gate; the git pre-push hook (see `make
-# hooks`) runs it before every push. Keep it that way.
+# CI/CD for this project is LOCAL. There is NO cloud CI and NO GitHub Actions.
+# `make ci` is the gate; the git pre-push hook (see `make hooks`) runs it before
+# every push. Keep it that way.
 
-PY ?= python3
+# The project virtualenv when present, else python3. Override with PY=...
+PY ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 PKG := substation
 SRC := substation tests scripts setup.py
 
@@ -100,7 +101,7 @@ release: check-python ## Cut a local release: gate -> bump + artifacts -> build 
 ## ---------------------------------------------------------------------------
 ## Local "continuous" gate
 ## ---------------------------------------------------------------------------
-hooks: check-python ## Install the git pre-push hook that runs `make ci`
+hooks: check-python ## Install the pre-push hook that runs `make ci` with this PY
 	$(PY) scripts/install_hooks.py
 
 clean: ## Remove caches and build artifacts
