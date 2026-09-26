@@ -33,6 +33,26 @@ def test_real_evidence_has_transitive_edges_and_all_leaves() -> None:
     edges = {node["ref"]: node["dependsOn"] for node in bom["dependencies"]}
     assert components["diskcache"]["bom-ref"] in edges[components["pysigma"]["bom-ref"]]
     assert all(c["bom-ref"] in edges and c["hashes"] for c in components.values())
+    # Standard CycloneDX scope: runtime dependencies are required, tooling excluded.
+    assert components["pysigma"]["scope"] == "required"
+    assert components["pytest"]["scope"] == "excluded"
+
+
+def test_sbom_serial_number_tracks_the_application_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts.security import lockfile, sbom
+
+    real = lockfile.load_evidence
+
+    def bumped(root: Path) -> Any:
+        project, *rest = real(root)
+        return ({**project, "version": "999.0.0"}, *rest)
+
+    first = sbom.build_sbom()["serialNumber"]
+    assert sbom.build_sbom()["serialNumber"] == first  # deterministic
+    monkeypatch.setattr(sbom, "load_evidence", bumped)
+    assert sbom.build_sbom()["serialNumber"] != first
 
 
 def test_missing_transitive_dependency_and_version_conflict_fail() -> None:
