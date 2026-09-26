@@ -106,3 +106,59 @@ def test_s7_plugin_requires_reviewed_bounds_patch(monkeypatch: pytest.MonkeyPatc
         ),
     )
     assert verify_run._s7_plugin_probe("unused") == (False, [])
+
+
+def _pinned_repo(path: Path) -> tuple[str, Any]:
+    def git(*args: str) -> str:
+        return subprocess.run(  # noqa: S603
+            ["git", *args],  # noqa: S607
+            cwd=path,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    git("init", "--quiet")
+    git("config", "user.name", "Synthetic Test")
+    git("config", "user.email", "synthetic@example.test")
+    (path / ".gitignore").write_text("*.log\n")
+    (path / "main.zeek").write_text("# parser fixture\n")
+    git("add", ".gitignore", "main.zeek")
+    git("commit", "--quiet", "-m", "fixture")
+    return git("rev-parse", "HEAD"), git
+
+
+@pytest.mark.parametrize("flag", ["--assume-unchanged", "--skip-worktree"])
+def test_index_flags_cannot_hide_a_modified_parser(tmp_path: Path, flag: str) -> None:
+    from scripts.verify.checkout import checkout_problem
+
+    pinned, git = _pinned_repo(tmp_path)
+    git("update-index", flag, "main.zeek")
+    (tmp_path / "main.zeek").write_text("# changed parser\n")
+    assert git("status", "--porcelain") == ""  # status alone is fooled
+    problem = checkout_problem(tmp_path, pinned)
+    assert problem is not None and "index flags hide edits" in problem
+
+
+def test_ignored_files_count_unless_untracked_files_are_allowed(tmp_path: Path) -> None:
+    from scripts.verify.checkout import checkout_problem
+
+    pinned, _ = _pinned_repo(tmp_path)
+    (tmp_path / "debug.log").write_text("ignored, but present\n")
+    assert checkout_problem(tmp_path, pinned) == "the checkout has local changes or extra files"
+    assert checkout_problem(tmp_path, pinned, allow_untracked=True) is None
+
+
+def test_checkout_check_never_runs_a_configured_fsmonitor(tmp_path: Path) -> None:
+    from scripts.verify.checkout import checkout_problem
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    pinned, git = _pinned_repo(repo)
+    marker = tmp_path / "fsmonitor-ran"
+    hook = tmp_path / "fsmonitor.sh"
+    hook.write_text(f"#!/bin/sh\ntouch {marker}\nexit 1\n")
+    hook.chmod(0o755)
+    git("config", "core.fsmonitor", str(hook))
+    assert checkout_problem(repo, pinned) is None
+    assert not marker.exists()

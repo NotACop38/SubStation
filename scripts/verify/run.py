@@ -49,6 +49,8 @@ from substation.detect.x1_tokens import x1_norm_func  # noqa: E402
 from substation.emit import write_artifacts  # noqa: E402
 from substation.scenarios import Scenario, load_scenario  # noqa: E402
 
+from scripts.verify.checkout import checkout_problem  # noqa: E402
+
 # --- configuration -----------------------------------------------------------
 
 ZEEK_IMAGE = "zeek/zeek:8.2@sha256:32b90c30cb87d66748c3a6776ad2c0f5502aae7c12da9766cfdd426453c58838"
@@ -132,17 +134,7 @@ def _image_present() -> bool:
 
 
 def _at_commit(dest: Path, commit: str) -> bool:
-    head = subprocess.run(
-        ["git", "-C", str(dest), "rev-parse", "HEAD"], capture_output=True, text=True
-    )
-    if head.returncode != 0 or head.stdout.strip() != commit:
-        return False
-    status = subprocess.run(
-        ["git", "-C", str(dest), "status", "--porcelain", "--untracked-files=all"],
-        capture_output=True,
-        text=True,
-    )
-    return status.returncode == 0 and not status.stdout.strip()
+    return checkout_problem(dest, commit) is None
 
 
 def _checkout(dest: Path, commit: str) -> bool:
