@@ -1,8 +1,8 @@
-"""S7comm/S7comm-plus semantics shared by the JSON and PCAP emitters (PRD §6.1, §6.4).
+"""S7comm/S7comm-plus semantics shared by the JSON and PCAP emitters (docs/design.md §6.1, §6.4).
 
 :func:`build_events` turns a loaded :class:`~substation.scenarios.Scenario` into an
 ordered list of :class:`S7Event` — the **single intermediate model both emitters
-consume** (the LOCKED core design principle, PRD §6.1). Independent parsing checks
+consume** (the LOCKED core design principle, docs/design.md §6.1). Independent parsing checks
 whether those emitters agree. This mirrors ``substation.protocols.dnp3``; only the
 protocol semantics differ.
 
@@ -16,15 +16,15 @@ packet library.
 Function/sub-function names, ROSCTR names, COTP PDU names, SZL-ID names, block types
 and s7comm-plus opcodes/functions are the verified ICSNPP ``consts.zeek`` spellings
 (``docs/spikes/06-icsnpp-s7comm-fields.md``) — taken from the authoritative source,
-never invented from memory (CLAUDE.md VERIFY gate). S7comm/-plus have no open spec
-(PRD §9), so the ICSNPP parser and the Wireshark dissector are the references.
+never invented from memory (AGENTS.md VERIFY gate). S7comm/-plus have no open spec
+(docs/design.md §9), so the ICSNPP parser and the Wireshark dissector are the references.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from substation.protocols import _common
@@ -193,6 +193,8 @@ _JOB_OPS: dict[str, tuple[int, str, str]] = {
 _UPLOAD_DOWNLOAD_FUNCS = {0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F}
 # Download functions carry a block spec (filename/type/number) in their request.
 _DOWNLOAD_BLOCK_FUNCS = {0x1A, 0x1B}
+# PLC Control services whose PI parameter names a block (activation, deletion).
+_PI_BLOCK_SERVICES = frozenset({"_INSE", "_DELE"})
 
 # User-Data functions: token -> (ud_function_group, subfunction, subfunction_name, action_class).
 _USERDATA_OPS: dict[str, tuple[int, int, str, str]] = {
@@ -314,6 +316,17 @@ def _opt_block_number(params: Mapping[str, object], where: str) -> str:
     return block_number
 
 
+def _opt_block(params: Mapping[str, object], where: str) -> tuple[str, str]:
+    """The (block type code, five-digit block number) a transfer or PI service names."""
+    block_type_code = _opt_str(params, "block_type", where, "0A").upper()
+    if block_type_code not in BLOCK_TYPES:
+        raise S7Error(
+            f"{where}.block_type: unknown S7 block type {block_type_code!r}; "
+            f"valid: {', '.join(sorted(BLOCK_TYPES))}"
+        )
+    return block_type_code, _opt_block_number(params, where)
+
+
 # --- connection bookkeeping (mirrors dnp3) -----------------------------------
 
 
@@ -378,7 +391,7 @@ def build_events(scenario: Scenario) -> list[S7Event]:
     Each (master, plc) connection opens with a COTP Connection Request / Confirm
     handshake (emitted once, on first use). Each scenario exchange then becomes a
     request event plus a matched response event. Both emitters consume the returned
-    list; independent parsing checks output agreement (PRD §6.1).
+    list; independent parsing checks output agreement (docs/design.md §6.1).
     """
     if scenario.protocol is not Protocol.S7COMM:
         raise S7Error(f"build_events: expected an s7comm scenario, got {scenario.protocol.value}")
@@ -391,7 +404,7 @@ def build_events(scenario: Scenario) -> list[S7Event]:
         where = f"exchanges[{idx}] ({exchange.function})"
         token = resolve_function(exchange.function)
         allowed = {
-            "plccontrol": {"service"},
+            "plccontrol": {"service", "block_type", "block_number"},
             "requestdownload": {"block_type", "block_number"},
             "downloadblock": {"block_type", "block_number"},
             "readszl": {"szl_id", "szl_index"},
@@ -437,7 +450,7 @@ def build_events(scenario: Scenario) -> list[S7Event]:
         else:
             _append_plus(events, conn, token, exchange.params, msg_ts, where)
 
-    return events
+    return [replace(event, ts=_common.quantize_ts(event.ts)) for event in events]
 
 
 # --- COTP / S7comm / S7comm-plus event builders ------------------------------
@@ -483,21 +496,26 @@ def _append_job(
         plc_control = _opt_plc_control_service(params, where)
         subfunction_code = plc_control
         subfunction_name = PLC_CONTROL_SERVICES[plc_control]
+        if plc_control in _PI_BLOCK_SERVICES:
+            # Block activation/deletion names its block in the PI parameter.
+            block_type_code, block_number = _opt_block(params, where)
+            block_filename = f"_{block_type_code}{block_number}P"
+        elif {"block_type", "block_number"} & set(params):
+            raise S7Error(
+                f"{where}: block_type/block_number apply only to the "
+                f"{'/'.join(sorted(_PI_BLOCK_SERVICES))} services"
+            )
     if function in _UPLOAD_DOWNLOAD_FUNCS:
         upload_download = {
             "rosctr": ROSCTR_NAMES[ROSCTR_JOB],
             "function_name": func_name,
             "function_status": "0x00",
-            "session_id": 256,
+            # Downloads always use session 0; an upload continues the id that the
+            # Start Upload acknowledgement assigned (1 here).
+            "session_id": 1 if function in (0x1E, 0x1F) else 0,
         }
         if function in _DOWNLOAD_BLOCK_FUNCS:
-            block_type_code = _opt_str(params, "block_type", where, "0A").upper()
-            if block_type_code not in BLOCK_TYPES:
-                raise S7Error(
-                    f"{where}.block_type: unknown S7 block type {block_type_code!r}; "
-                    f"valid: {', '.join(sorted(BLOCK_TYPES))}"
-                )
-            block_number = _opt_block_number(params, where)
+            block_type_code, block_number = _opt_block(params, where)
             block_filename = f"_{block_type_code}{block_number}P"
             upload_download.update(
                 {

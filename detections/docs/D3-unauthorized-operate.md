@@ -3,7 +3,7 @@
 A DNP3 output-control request (`SELECT` / `OPERATE` / `DIRECT_OPERATE` /
 `DIRECT_OPERATE_NR`) — typically a Control-Relay-Output-Block driving a breaker or
 setpoint — from a master that is **not** on the allow-list. The
-unauthorized-control detection for the DNP3 slice (`PRD.md` §5.2).
+unauthorized-control detection for the DNP3 slice (`docs/design.md` §5.2).
 
 | | |
 |---|---|
@@ -33,12 +33,12 @@ process. The detection keys on the **write policy for control**: who may operate
 
 **Sigma.** Authorization is decidable from a **single event**: `direction: request`,
 `func_name` is one of the four output-control commands, and `conn.orig_h` is the
-issuer. No durable state or correlation is needed — Sigma-first per `PRD.md` §6.5.
+issuer. No durable state or correlation is needed — Sigma-first per `docs/design.md` §6.5.
 A SIEM deployment needs normalization and backend qualification. (Richer per-command detail
 — index, operation type, trip code — is available in `detail.control` from ICSNPP
 `dnp3_control.log`, but is not needed for the authorization decision.)
 
-**Why allow-list, not "any operate" (the OT-realism guardrail, `PRD.md` §8).**
+**Why allow-list, not "any operate" (the OT-realism guardrail, `docs/design.md` §8).**
 Operators legitimately issue controls all the time; a control-only rule is pure
 false positives and discredits the project. The rule stays quiet on controls from
 the **allow-listed master** and fires on everything else.
@@ -67,14 +67,21 @@ fire when:         output_control AND NOT authorized_channel
 ## Scenarios
 
 - **Fires:** [`dnp3-anomalous-d3-unauthorized-operate.yaml`](../../scenarios/dnp3/anomalous-d3-unauthorized-operate.yaml)
-  — `rogue-1` (10.0.1.77, not allow-listed) issues `OPERATE` and `DIRECT_OPERATE`
-  CROB commands amid a **legitimate operate from the allow-listed master**.
-  Validated: D3 fires on exactly the two rogue controls and stays silent on the
-  master's legitimate operate.
+  — `rogue-1` (10.0.1.77, not allow-listed) trips breaker 7 with a correct
+  select-before-operate (`SELECT` then `OPERATE`, Trip + Pulse On) and pulses
+  output 8 with `DIRECT_OPERATE`, amid a **legitimate select-before-operate from the
+  allow-listed master**. Validated: D3 fires on exactly the three rogue requests and
+  stays silent on the master's controls.
 - **Quiet:** [`dnp3-benign-baseline.yaml`](../../scenarios/dnp3/benign-baseline.yaml)
+  and [`dnp3-benign-master-startup.yaml`](../../scenarios/dnp3/benign-master-startup.yaml)
   — the allow-listed master polls and operates legitimately. Validated: 0 hits. Also
   quiet on the D1/D2/D4 anomalous scenarios (none issue an operate from a
   non-allow-listed source).
+
+The modeled outstation echoes each control block with a status, as a device
+would: `Success`, `No Select` for an `OPERATE` without its matching `SELECT`, or
+`Not Supported` for a non-interoperable control code. D3 keys on the request, so
+it fires whether or not the device accepted the command.
 
 ## ATT&CK-for-ICS mapping
 
@@ -87,7 +94,7 @@ message which instructs control system assets to perform actions outside of thei
 intended functionality* (T1692.001) — the same technique as the Modbus
 unauthorized-write detection M1, here over DNP3 control.
 
-> **VERIFY (`CLAUDE.md` gate).** Verified against the **live** ATT&CK-for-ICS matrix
+> **VERIFY (`AGENTS.md` gate).** Verified against the **live** ATT&CK-for-ICS matrix
 > on 2026-06-04. Note the matrix was **restructured**: the former *T0855 Unauthorized
 > Command Message* is now **T1692.001** *Unauthorized Message: Command Message*
 > (sub-technique of T1692, under Impair Process Control). Sources:

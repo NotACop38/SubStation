@@ -1,4 +1,4 @@
-"""Helpers shared by the per-protocol semantic modules (PRD §6.1).
+"""Helpers shared by the per-protocol semantic modules (docs/design.md §6.1).
 
 Every protocol module (``modbus``/``dnp3``/``s7comm``) and the honeypot needs
 the same deterministic plumbing: Zeek-style connection uids, IPv4 validation,
@@ -22,6 +22,7 @@ from collections.abc import Mapping
 
 __all__ = [
     "EPHEMERAL_BASE",
+    "quantize_ts",
     "zeek_uid",
     "normalize_function",
     "ipv4_host",
@@ -37,6 +38,15 @@ EPHEMERAL_BASE = 49152
 
 _U16 = 0xFFFF
 _B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+
+def quantize_ts(ts: float) -> float:
+    """Round a timestamp to microseconds, the resolution a classic PCAP records.
+
+    The JSON log and the capture then carry the same instant, and sums of
+    scenario offsets never surface as ``3.0749999999999997``.
+    """
+    return round(ts, 6)
 
 
 def zeek_uid(key: str) -> str:

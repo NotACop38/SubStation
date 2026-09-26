@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from substation.detect.registry import RegistryError, load_registry
 
 
@@ -88,8 +89,31 @@ def test_sigma_rule_uuids_are_unique_and_present() -> None:
     for det in load_registry():
         if det.engine != "sigma":
             continue
-        rule = load_rule(det.rule_path)
+        rule = load_rule(det.rule_path).sigma
         assert rule.id is not None, f"{det.id}: Sigma rule {det.rule} has no id: UUID"
         uuid = str(rule.id)
         assert uuid not in seen, f"{det.id}: Sigma rule UUID {uuid} duplicates {seen[uuid]}'s rule"
         seen[uuid] = det.id
+
+
+def test_registry_rejects_a_tactic_name_that_contradicts_its_id(tmp_path: Path) -> None:
+    # Navigator placement uses the name and the tactic table uses the ID; a
+    # mismatch would make the generated coverage artifacts disagree.
+    body = _minimal_registry().replace("tactic: Discovery", "tactic: Execution")
+    with pytest.raises(RegistryError, match="does not match TA0102"):
+        load_registry(_write_registry(tmp_path, body))
+
+
+@pytest.mark.parametrize(("engine", "tier"), [("sigma", 2), ("zeek", 1), ("suricata", 1)])
+def test_registry_rejects_an_engine_in_the_wrong_tier(
+    tmp_path: Path, engine: str, tier: int
+) -> None:
+    # Neither tier would run such a rule: Tier 1 evaluates only Sigma, and the
+    # Tier-2 runner only Zeek/Suricata.
+    body = (
+        _minimal_registry()
+        .replace("engine: sigma", f"engine: {engine}")
+        .replace("tier: 1", f"tier: {tier}")
+    )
+    with pytest.raises(RegistryError, match=f"{engine} rules run in tier"):
+        load_registry(_write_registry(tmp_path, body))

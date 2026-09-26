@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,18 +8,25 @@ version = "0.1.0"
 description = "Defensive ICS detection-content pack (Modbus/DNP3/S7) with a files-only protocol traffic simulator."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Substation contributors" }]
 keywords = ["ics", "ot", "modbus", "dnp3", "s7comm", "sigma", "zeek", "attack", "detection"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Environment :: Console",
     "Intended Audience :: Information Technology",
-    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Security",
+    "Typing :: Typed",
 ]
 
-# Runtime deps (Tier 1 headline path is pure-Python). Pinned per Phase 0.
+# Runtime deps (the Tier-1 path is pure Python). Exact pins; see requirements.lock.
 dependencies = [
     "scapy==2.7.0",
     "pysigma==1.3.3",
@@ -39,19 +46,24 @@ dev = [
     "build==1.5.0",  # sdist + wheel builder for `make release` (PyPA build).
     "setuptools==84.0.0",  # release uses --no-isolation; install the backend explicitly.
     "wheel==0.48.0",
-    "Pillow==12.3.0",  # optional: `make demo-gif` headless GIF render.
 ]
 
 [project.scripts]
 substation = "substation.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/notacop38/substation"
+Homepage = "https://github.com/NotACop38/SubStation"
+Documentation = "https://github.com/NotACop38/SubStation/blob/main/docs/design.md"
+Repository = "https://github.com/NotACop38/SubStation"
+Issues = "https://github.com/NotACop38/SubStation/issues"
+Changelog = "https://github.com/NotACop38/SubStation/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 include = ["substation*"]
 
 [tool.setuptools.package-data]
+# PEP 561: the package ships inline type annotations.
+"substation" = ["py.typed"]
 # Ship the machine-readable event-log JSON Schema with the package so the
 # validator (and external tools) can load it from an installed distribution.
 "substation.schema" = ["*.json"]
@@ -63,7 +75,7 @@ include = ["substation*"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-src = ["substation", "tests"]
+src = ["."]  # the repository root, so substation/, scripts/ and tests/ are first-party
 
 [tool.ruff.lint]
 # Format + lint are both driven by ruff (see Makefile).
@@ -73,6 +85,10 @@ select = ["E", "F", "I", "W", "B", "UP", "SIM", "C4", "S"]
 [tool.ruff.lint.per-file-ignores]
 # Tests may use asserts (S101) and fixtures freely.
 "tests/**" = ["S101"]
+# Tooling scripts run fixed git/docker/zeek/cmake argument lists without a shell
+# (bandit skips B603/B607 for scripts/ too) and put the checkout on sys.path
+# before importing the package.
+"scripts/**" = ["S603", "S607", "E402"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -84,7 +100,7 @@ disallow_untyped_defs = true
 disallow_any_generics = true
 no_implicit_reexport = true
 show_error_codes = true
-files = ["substation", "tests"]
+files = ["substation", "tests", "scripts"]
 
 [[tool.mypy.overrides]]
 # Third-party libs without type stubs (revisited as code lands). pytest ships

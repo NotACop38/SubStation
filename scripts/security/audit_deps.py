@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-"""Audit Substation's *declared, pinned* dependency closure with pip-audit.
+"""Audit Substation's locked dependency closure with pip-audit.
 
 Why not bare ``pip-audit``? With no arguments pip-audit audits whatever happens
 to be installed in the ambient interpreter — in a dev container that includes
 dozens of OS/system packages Substation neither ships nor controls, so the gate
 would fail on advisories that have nothing to do with the product. This script
-scopes the audit to exactly the dependencies declared in ``pyproject.toml``
-(runtime ``dependencies`` + the ``dev`` extra), resolves their real transitive
-closure, and applies a small, **documented** ignore-list for advisories that are
-transitive, unfixed upstream, and unreachable in our usage. The result is a
-deterministic, product-scoped supply-chain gate.
+audits exactly the hash-locked closure in ``requirements.lock`` after checking
+that it satisfies the requirements declared in ``pyproject.toml`` (runtime
+``dependencies`` + the ``dev`` extra), and applies a small, **documented**
+ignore-list for advisories that are transitive, unfixed upstream, and
+unreachable in our usage. A missing or drifted lock fails the gate.
 
 Run: ``python scripts/security/audit_deps.py`` (invoked by ``make security``).
 """
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
-import tempfile
 import tomllib
 from pathlib import Path
 
@@ -54,7 +52,7 @@ _IGNORED: dict[str, str] = {
     "PYSEC-2025-69872": "same advisory as CVE-2025-69872 (PYSEC alias)",
 }
 
-# Prefer a committed lockfile when present so the audit matches the locked closure.
+# The committed, hash-locked closure this gate audits.
 _LOCKFILE = _REPO_ROOT / "requirements.lock"
 
 
@@ -85,25 +83,6 @@ def _print_process_output(result: subprocess.CompletedProcess[str]) -> None:
         print(result.stderr, end="" if result.stderr.endswith("\n") else "\n", file=sys.stderr)
 
 
-def _write_requirements(path: Path, requirements: list[str]) -> None:
-    path.write_text("\n".join(requirements) + "\n", encoding="utf-8")
-
-
-def _read_resolver_report(path: Path) -> list[str]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    resolved: set[str] = set()
-    for package in data.get("install", []):
-        metadata = package.get("metadata", {})
-        name = metadata.get("name")
-        version = metadata.get("version")
-        if not isinstance(name, str) or not isinstance(version, str):
-            raise ValueError("missing package name/version in pip resolver report")
-        resolved.add(f"{name}=={version}")
-    if not resolved:
-        raise ValueError("pip resolver report did not contain resolved packages")
-    return sorted(resolved, key=str.casefold)
-
-
 def _looks_like_tool_failure(result: subprocess.CompletedProcess[str]) -> bool:
     output = f"{result.stdout}\n{result.stderr}".lower()
     return (
@@ -111,15 +90,6 @@ def _looks_like_tool_failure(result: subprocess.CompletedProcess[str]) -> bool:
         or "traceback" in output
         or "calledprocesserror" in output
         or "no module named pip_audit" in output
-    )
-
-
-def _report_resolver_failure(result: subprocess.CompletedProcess[str]) -> None:
-    _print_process_output(result)
-    print(
-        "audit_deps: FAILED — dependency resolver could not complete. This is a "
-        "tooling failure, not a confirmed vulnerability finding.",
-        file=sys.stderr,
     )
 
 
@@ -168,96 +138,50 @@ def _check_locked_requirements(declared: list[str], locked: list[str]) -> None:
             raise ValueError(f"requirements.lock does not satisfy {line}; regenerate the lock")
 
 
+def _locked_requirements(declared: list[str]) -> list[str]:
+    """The committed lock's exact pins, checked against the declared requirements."""
+    pins = parse_lock(_LOCKFILE.read_text(encoding="utf-8"))
+    locked = [f"{name}=={pin['version']}" for name, pin in pins.items()]
+    if not locked:
+        raise ValueError(f"{_LOCKFILE.name} pins no packages")
+    _check_locked_requirements(declared, locked)
+    return locked
+
+
 def main() -> int:
-    reqs = _pinned_requirements()
+    try:
+        locked = _locked_requirements(_pinned_requirements())
+    except (OSError, ValueError) as exc:
+        print(f"audit_deps: FAILED — {exc}", file=sys.stderr)
+        return 2
     print(
-        f"audit_deps: auditing {len(reqs)} pinned dependencies "
+        f"audit_deps: auditing {len(locked)} locked package(s) from {_LOCKFILE.name} "
         f"(ignoring {len(_IGNORED)} documented advisory id(s))"
     )
-    with tempfile.TemporaryDirectory() as tmpdir:
-        declared_req_file = Path(tmpdir) / "declared-requirements.txt"
-        resolver_report = Path(tmpdir) / "resolver-report.json"
-        resolved_req_file = Path(tmpdir) / "resolved-requirements.txt"
-        _write_requirements(declared_req_file, reqs)
-
-        if _LOCKFILE.is_file():
-            # Prefer the committed lockfile's resolved pins when available.
-            try:
-                pins = parse_lock(_LOCKFILE.read_text(encoding="utf-8"))
-                locked = [f"{name}=={pin['version']}" for name, pin in pins.items()]
-            except ValueError as exc:
-                print(f"audit_deps: FAILED — {exc}", file=sys.stderr)
-                return 2
-            if locked:
-                try:
-                    _check_locked_requirements(reqs, locked)
-                except ValueError as exc:
-                    print(f"audit_deps: FAILED — {exc}", file=sys.stderr)
-                    return 2
-                _write_requirements(resolved_req_file, locked)
-                print(
-                    f"audit_deps: using committed {_LOCKFILE.name} "
-                    f"({len(locked)} locked package(s))"
-                )
-            else:
-                locked = []
-        else:
-            locked = []
-
-        if not locked:
-            resolver_cmd = [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "--dry-run",
-                "--ignore-installed",
-                "--no-input",
-                "--keyring-provider=subprocess",
-                "--report",
-                str(resolver_report),
-                "-r",
-                str(declared_req_file),
-            ]
-            resolver = _run(resolver_cmd)
-            if resolver.returncode != 0:
-                _report_resolver_failure(resolver)
-                return resolver.returncode
-
-            try:
-                resolved = _read_resolver_report(resolver_report)
-            except (OSError, ValueError, json.JSONDecodeError) as exc:
-                print(
-                    f"audit_deps: FAILED — dependency resolver produced an "
-                    f"unreadable report: {exc}",
-                    file=sys.stderr,
-                )
-                return 2
-
-            _write_requirements(resolved_req_file, resolved)
-            print(f"audit_deps: resolved {len(resolved)} packages in the declared closure")
-
-        cmd = _add_ignored(
+    # The hash-locked file is audited as-is. --strict: a package pip-audit cannot
+    # collect fails the audit instead of being skipped with a warning.
+    result = _run(
+        _add_ignored(
             [
                 sys.executable,
                 "-m",
                 "pip_audit",
                 "-r",
-                str(resolved_req_file),
-                "--no-deps",
+                str(_LOCKFILE),
+                "--require-hashes",
                 "--disable-pip",
+                "--strict",
                 "--progress-spinner",
                 "off",
             ]
         )
-        result = _run(cmd)
-        if result.returncode == 0:
-            _print_process_output(result)
-            print("audit_deps: OK — no actionable vulnerabilities in the declared closure")
-            return 0
-
-        _report_failure(result)
-        return result.returncode
+    )
+    if result.returncode == 0:
+        _print_process_output(result)
+        print("audit_deps: OK — no actionable vulnerabilities in the locked closure")
+        return 0
+    _report_failure(result)
+    return result.returncode
 
 
 if __name__ == "__main__":

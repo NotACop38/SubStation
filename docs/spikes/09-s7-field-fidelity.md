@@ -67,4 +67,4 @@ No timing or cross-log arrival ordering claim, process-tag value semantics,
 valid uploaded/downloaded program, complete transfer session, physical PLC
 behavior, S7-plus integrity, encryption or sensor normalization is qualified.
 The synthetic bodies remain minimal parser fixtures. Native Zeek results do not
-qualify a Docker image. See [execution instructions](../verify-s7.md).
+qualify a Docker image. See [execution instructions](../tier2.md).

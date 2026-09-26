@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from substation.cli import main as cli_main
 from substation.detect import run_detections
 from substation.emit import write_artifacts

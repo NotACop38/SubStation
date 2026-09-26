@@ -1,10 +1,11 @@
-"""Tests for the scenario model + YAML loader (Phase 0)."""
+"""Tests for the scenario model + YAML loader."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
+
 from substation.scenarios import (
     ActorRole,
     Label,
@@ -20,12 +21,12 @@ _EXAMPLE = _REPO_ROOT / "scenarios" / "modbus" / "benign-poll.yaml"
 
 def test_bundled_example_loads_and_validates() -> None:
     scenario = load_scenario(_EXAMPLE)
-    assert scenario.name == "benign-poll"
+    assert scenario.name == "modbus-benign-poll"
     assert scenario.protocol is Protocol.MODBUS
     assert scenario.label is Label.BENIGN
     assert len(scenario.actors) == 3
     assert len(scenario.exchanges) == 3
-    assert scenario.exercises.quiet == ("M1", "M2", "M3")
+    assert scenario.exercises.quiet == ("M1", "M2", "M3", "M4")
     assert scenario.exercises.fires == ()
     # Every exchange references a declared actor.
     ids = {a.id for a in scenario.actors}
@@ -44,7 +45,7 @@ def test_actor_lookup_and_roles() -> None:
 
 def test_load_scenarios_finds_bundled_modbus() -> None:
     scenarios = load_scenarios(_REPO_ROOT / "scenarios" / "modbus")
-    assert any(s.name == "benign-poll" for s in scenarios)
+    assert any(s.name == "modbus-benign-poll" for s in scenarios)
 
 
 def _write(tmp_path: Path, text: str) -> Path:
@@ -267,3 +268,17 @@ def test_unused_protocol_parameters_do_not_silently_change_fixture_intent(
     scenario = load_scenario(_write(tmp_path, text))
     with pytest.raises(ValueError, match="unknown/unused"):
         write_artifacts(scenario, tmp_path / "out")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "? [a, b]\n: c\n",  # an unhashable (sequence) mapping key
+        "x: " + "[" * 3000 + "]" * 3000 + "\n",  # nesting deeper than the parser allows
+    ],
+)
+def test_pathological_yaml_fails_as_a_scenario_error(tmp_path: Path, body: str) -> None:
+    path = tmp_path / "scenario.yaml"
+    path.write_text(body)
+    with pytest.raises(ScenarioError, match="invalid YAML"):
+        load_scenario(path)

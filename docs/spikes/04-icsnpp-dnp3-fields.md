@@ -1,7 +1,7 @@
 # Spike 4 — ICSNPP DNP3 parser field names & detail-log shapes
 
 **Status:** RESOLVED (verified against authoritative source — frozen for Phase 3).
-**VERIFY gate:** `PRD.md` §6.3 / §7 — "ICSNPP field names / detail shapes."
+**VERIFY gate:** `docs/design.md` §6.3 / §7 — "ICSNPP field names / detail shapes."
 **Date:** 2026-06-04
 
 **Correction, 2026-09-10:** operation labels below now follow the executable
@@ -12,7 +12,7 @@ for the transaction-log loss and object-filtering limits missed by this field-on
 
 Confirm the **current** Zeek + ICSNPP DNP3 field names and detail-log shapes so the
 DNP3 `detail` object in `docs/schema.md` is drawn from real names, not memory
-(`ENGINEERING_CHECKLIST.md` Phase 3; `CLAUDE.md` VERIFY gate).
+(the DNP3 schema freeze gate; `AGENTS.md` VERIFY gate).
 
 ## Sources (authoritative)
 

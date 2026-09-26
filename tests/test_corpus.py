@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+
 from substation.schema import SchemaValidationError
 
 ROOT = Path(__file__).resolve().parents[1] / "tests/data/corpus/modbus"
@@ -82,3 +83,33 @@ def test_committed_captures_preserve_payloads_and_only_synthetic_headers() -> No
             assert {packet[TCP].sport, packet[TCP].dport} == {43000, 502}
             assert not packet[TCP].options
             assert 1 <= packet.time < 2
+
+
+def test_corpus_derivation_requires_the_reviewed_clean_parser_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    from scripts.corpus import derive_modbus
+
+    source = tmp_path / "icsnpp-modbus"
+    source.mkdir()
+    for args in (
+        ["init", "--quiet"],
+        ["config", "user.name", "Synthetic Test"],
+        ["config", "user.email", "synthetic@example.test"],
+        ["commit", "--allow-empty", "--quiet", "-m", "Synthetic parser"],
+    ):
+        subprocess.run(["git", "-C", str(source), *args], check=True, capture_output=True)  # noqa: S603,S607
+    with pytest.raises(ValueError, match="reviewed revision"):
+        derive_modbus.derive(source, tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+
+    rev_parse = ["git", "-C", str(source), "rev-parse", "HEAD"]
+    head = subprocess.run(rev_parse, check=True, capture_output=True, text=True).stdout.strip()  # noqa: S603
+    monkeypatch.setattr(derive_modbus, "SOURCE_REVISION", head)
+    derive_modbus.verify_source(source)
+    (source / "tracked.zeek").write_text("event zeek_init() {}\n")
+    subprocess.run(["git", "-C", str(source), "add", "tracked.zeek"], check=True)  # noqa: S603,S607
+    with pytest.raises(ValueError, match="local changes"):
+        derive_modbus.verify_source(source)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 
 import pytest
+
 from substation import cli
 
 PACKAGES = [
@@ -30,5 +31,5 @@ def test_cli_demo_succeeds() -> None:
     assert cli.main(["demo"]) == 0
 
 
-def test_cli_verify_help_succeeds() -> None:
-    assert cli.main(["verify"]) == 0
+def test_cli_help_points_to_tier2() -> None:
+    assert "make verify" in cli._build_parser().format_help()

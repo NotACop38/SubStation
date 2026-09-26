@@ -2,14 +2,14 @@
 
 **Status:** RESOLVED. **Verdict: use scapy** for Modbus PCAP emission — no
 hand-built PDUs or template-PCAP splicing required for v1 Modbus.
-**VERIFY gate:** `PRD.md` §6.4 / §7 — "scapy protocol-layer capability (Modbus first)."
+**VERIFY gate:** `docs/design.md` §6.4 / §7 — "scapy protocol-layer capability (Modbus first)."
 **Date:** 2026-06-03 · **scapy:** 2.7.0 (pinned in `pyproject.toml`).
 
 ## Goal
 
 Decide whether scapy can assemble the Modbus/TCP PDUs the simulator needs
 (read/write coils & registers, exception responses), or whether we must hand-build
-PDUs / splice template PCAPs (`PRD.md` §8 risk: "scapy's Modbus is uneven").
+PDUs / splice template PCAPs (`docs/design.md` §8 risk: "scapy's Modbus is uneven").
 
 ## Method
 
@@ -79,7 +79,7 @@ the intended Modbus exception (breaking M2 exception scenarios).
 - **Modbus PCAP emitter = scapy `contrib.modbus`.** Hand-built/template-splice paths
   are **not** needed for Modbus and stay reserved for DNP3/S7 (their own spikes).
 - The PCAP emitter and the JSON emitter are driven from the same scenario model
-  (`PRD.md` §6.4); the field-name table above feeds the Modbus encoder.
+  (`docs/design.md` §6.4); the field-name table above feeds the Modbus encoder.
 
 ## Nothing blocked
 

@@ -3,12 +3,12 @@
 ##! Fires when a single source issues an anomalously *diverse* set of DNP3
 ##! application function codes against one outstation within a short window — the
 ##! enumeration signal of reconnaissance mapping which functions a device supports
-##! (PRD.md §5.2, D4). The signal is DIVERSITY, deliberately NOT request volume:
+##! (docs/design.md §5.2, D4). The signal is DIVERSITY, deliberately NOT request volume:
 ##! SCADA masters poll constantly, so a volume threshold fires on normal operation
-##! (PRD.md §8). We count the number of *distinct* request function codes per
+##! (docs/design.md §8). We count the number of *distinct* request function codes per
 ##! source, not requests.
 ##!
-##! Engine: Zeek (PRD.md §6.5). Enumeration needs durable per-source state — the set
+##! Engine: Zeek (docs/design.md §6.5). Enumeration needs durable per-source state — the set
 ##! of distinct function codes accumulated over a window — plus a set-membership /
 ##! cardinality test a stateless Sigma field-match cannot express. This is the DNP3
 ##! slice's Zeek rail, mirroring Modbus M3. Full rationale, mapping and FP profile:
@@ -40,12 +40,13 @@ export {
 	## long run never accrues a false enumeration.
 	const enum_window = 60sec &redef;
 
-	## Distinct request function codes from one source to one outstation within the
-	## window that constitute enumeration. Tuned conservatively above a
-	## busy-but-legitimate master's working set (READ, WRITE, ENABLE/DISABLE
-	## unsolicited, SELECT/OPERATE, an occasional restart) so routine multi-function
-	## operation stays quiet (see the doc's FP profile).
-	const func_code_threshold = 6 &redef;
+	## Distinct request function codes (CONFIRM excluded) from one source to one
+	## outstation within the window that constitute enumeration. Set above a busy
+	## master's working set: a full startup (disable unsolicited, integrity poll,
+	## time sync, delay measurement, class assignment, enable unsolicited) plus
+	## select-before-operate and direct operate uses nine codes in a minute (see the
+	## doc's FP profile and scenarios/dnp3/benign-master-startup.yaml).
+	const func_code_threshold = 10 &redef;
 }
 
 # Per (source, outstation) state for one window: the distinct request function
@@ -70,7 +71,8 @@ event dnp3_application_request_header(c: connection, is_orig: bool, application_
 	{
 	# Only requests reveal what a source is probing; the matched response comes from
 	# the outstation and carries fc 0x81 regardless, which would not reflect probing.
-	if ( ! is_orig )
+	# CONFIRM (fc 0) only acknowledges a response, so it is not a probe either.
+	if ( ! is_orig || fc == 0 )
 		return;
 
 	local src = c$id$orig_h;

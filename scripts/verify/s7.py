@@ -20,6 +20,28 @@ LOGS = (
 )
 
 
+def _envelope_mismatch(event: Mapping[str, Any]) -> str | None:
+    """Check the envelope function (what S1/S2 match) against the parsed detail.
+
+    The detail is compared with the parser below; this ties the envelope to it:
+    COTP frames use the PDU, S7comm the function, and S7comm-plus the opcode with
+    the function name.
+    """
+    detail = event["detail"]
+    if "plus" in detail:
+        plus = detail["plus"]
+        want = (int(plus["opcode"], 16), plus["function_name"])
+    elif "function_code" in detail:
+        want = (int(detail["function_code"], 16), detail["function_name"])
+    else:
+        cotp = detail["cotp"]
+        want = (int(cotp["pdu_code"], 16), cotp["pdu_name"])
+    got = (event["func_code"], event["func_name"])
+    if got == want:
+        return None
+    return f"envelope {got!r} differs from its detail {want!r}"
+
+
 def compare_s7_events(
     events: Iterable[Mapping[str, Any]], observed: Mapping[str, list[dict[str, str]]]
 ) -> list[str]:
@@ -30,6 +52,9 @@ def compare_s7_events(
     never accept either byte order opportunistically. See spike 09.
     """
     expected: dict[str, list[dict[str, str]]] = {name: [] for name in LOGS}
+    differences = [
+        mismatch for event in events if (mismatch := _envelope_mismatch(event)) is not None
+    ]
     for event in events:
         conn = event["conn"]
         source, target = ("orig", "resp") if event["is_orig"] else ("resp", "orig")
@@ -76,7 +101,6 @@ def compare_s7_events(
             result[tuple(sorted(clean.items()))] += 1
         return result
 
-    differences = []
     for name in sorted(set(LOGS) | observed.keys()):
         want = rows_by_connection(expected.get(name, []))
         got = rows_by_connection(observed.get(name, []))

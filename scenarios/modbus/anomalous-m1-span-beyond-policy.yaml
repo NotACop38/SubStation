@@ -5,7 +5,7 @@
 # fire even when the writer, PLC, unit and starting address are permitted.
 # -----------------------------------------------------------------------------
 
-name: anomalous-m1-span-beyond-policy
+name: modbus-anomalous-m1-span-beyond-policy
 description: >-
   An allow-listed EWS issues WriteMultipleRegisters starting at setpoint
   register 45 with quantity 10 (span ends past policy register 49). M1 rejects
@@ -43,3 +43,4 @@ exercises:
   quiet:
     - M2
     - M3
+    - M4

@@ -1,185 +1,220 @@
 # ![Substation](docs/assets/hero.svg)
 
-**Test ICS detection rules without a PLC lab.**
+**ICS detection rules you can test without a PLC lab.**
 
-Substation pairs experimental Sigma and Zeek rules with benign and anomalous
-scenarios for **Modbus, DNP3 and Siemens S7**. Each scenario produces a packet
-capture and a JSON event log, so you can inspect the traffic, see why a rule
-fired, and test what happens when you change the scenario or policy.
+Substation is a defensive detection-content pack for **Modbus, DNP3 and Siemens
+S7**. It ships twelve detections mapped to MITRE ATT&CK for ICS, each paired with
+anomalous and benign traffic scenarios, and a simulator that turns each scenario
+into a packet capture and a JSON event log. Every rule is tested to fire on its
+attack scenario and to stay silent on the legitimate traffic around it, and real
+Zeek and CISA ICSNPP parsers confirm that the generated packets decode to the
+fields the event log records.
 
-The simulator only writes files. The default demo runs offline after installation,
-using Python packages; it needs no hardware, Docker or sensor engine.
+The simulator only writes files. It never opens a socket or transmits on a
+network.
 
-[Quick start](#quick-start) · [Detections](#detection-examples) ·
-[Validation](#validation-and-limits) · [Contributing](CONTRIBUTING.md)
+[Quick start](#quick-start) · [How it works](#how-it-works) ·
+[Detections](#detections) · [Your own data](#run-the-rules-on-your-own-data) ·
+[Validation](#validation-and-limits) · [Documentation](#documentation)
 
 ## Quick start
 
-Use **Python 3.11+** on Linux or macOS. The first installation downloads packages.
+Requires Python 3.11, 3.12 or 3.13 on Linux or macOS. Installation downloads
+Scapy, pySigma and PyYAML with their dependencies (16 packages); everything after
+that runs offline.
 
 ```sh
-git clone https://github.com/NotACop38/SubStation.git substation
-cd substation
+git clone https://github.com/NotACop38/SubStation.git
+cd SubStation
 python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e .
-substation demo
+.venv/bin/python -m pip install -e .
+.venv/bin/substation demo
 ```
 
-Expect a quiet Modbus baseline and alerts from M1, M2 and D1. Excerpt from the
-default run:
+The demo generates four scenarios, runs the Sigma rules over each event log and
+prints a verdict per scenario, then the ATT&CK-for-ICS coverage map
+([full output](docs/demo-output.txt)):
 
 ```text
-[benign   ] benign-baseline                    18 events -> quiet (no hits)
-[anomalous] anomalous-m1-unauthorized-write    10 events -> FIRED 2 hit(s) -> M1
-[anomalous] anomalous-m2-illegal-function       4 events -> FIRED 2 hit(s) -> M2
-[anomalous] dnp3-anomalous-d1-restart           7 events -> FIRED 1 hit(s) -> D1
+[benign   ] modbus-benign-baseline                   18 events -> quiet (no hits)
+[anomalous] modbus-anomalous-m1-unauthorized-write   10 events -> FIRED 2 hit(s) -> M1
+[anomalous] modbus-anomalous-m2-illegal-function      4 events -> FIRED 2 hit(s) -> M2
+[anomalous] dnp3-anomalous-d1-restart                 8 events -> FIRED 1 hit(s) -> D1
+
+Result: quiet on the benign baseline; fired 3 detection(s) on the anomalies (D1, M1, M2).
 ```
 
-The demo writes `.pcap` and `.jsonl` files to `./artifacts/` and prints an
-ATT&CK-for-ICS mapping table. Applicable Zeek rules are marked **not-run** because
-they need the separate Tier-2 checks. The default demo exercises Modbus and DNP3;
-S7 scenarios are also [included](scenarios/s7).
-
-Inspect the unauthorized-write example:
+It exits non-zero if any scenario's expected result does not hold. Each
+scenario's `.pcap` and `.jsonl` are written to `./artifacts/`; open a capture in
+Wireshark beside its event log to see exactly what a rule matched.
 
 ```sh
-substation validate artifacts/anomalous-m1-unauthorized-write.jsonl
-substation detect artifacts/anomalous-m1-unauthorized-write.jsonl --detection M1
+.venv/bin/substation detect artifacts/modbus-anomalous-m1-unauthorized-write.jsonl
+.venv/bin/substation list    # every detection and scenario
 ```
-
-Open the matching PCAP in a packet analyzer to compare the bytes with the events.
-`detect` accepts [Substation-schema JSONL](docs/schema.md) and prints one JSON
-object per hit, including a zero-based `event_index` into the input log.
 
 ## How it works
 
-One scenario model feeds two emitters. The default path evaluates Sigma rules
-over JSON. A separate Zeek run checks the packet encoding and the rules that
-need state, such as function sweeps and baseline changes.
-
 <picture>
   <source media="(max-width: 600px)" srcset="docs/assets/pipeline-mobile.svg">
-  <img src="docs/assets/pipeline.svg" alt="One YAML scenario model emits JSONL for Tier 1 Sigma tests and PCAP for Tier 2 Zeek/ICSNPP field checks and stateful rules." width="800">
+  <img src="docs/assets/pipeline.svg" alt="One YAML scenario model emits JSONL, which Tier 1 evaluates with Sigma rules, and PCAP, which Tier 2 checks with Zeek and ICSNPP." width="800">
 </picture>
 
-**Tier 1 — Python.** The local evaluator runs seven Sigma rules over validated
-JSON and checks the scenarios' expected fire/quiet results. This is what
-`substation demo` runs. Rules and scenarios are included in the wheel, so the
-installed CLI also works outside a checkout.
+A scenario is a YAML file that names the actors (HMI, engineering workstation,
+PLC or outstation, attacker) and the protocol exchanges between them. One model
+drives both emitters, so the capture and the event log always describe the same
+traffic.
 
-**Tier 2 — Zeek/ICSNPP.** `make verify` checks modeled protocol fields against
-independent parsers and runs four stateful Zeek rules. It uses Docker by default
-or an explicitly selected native Zeek installation. S7 needs a compiled,
-patched plugin; follow the [setup guide](docs/verify-s7.md).
+- **Tier 1 (Python).** `substation demo` and `substation detect` evaluate the
+  seven Sigma rules over the JSON event log, in-process. No sensor, Docker or
+  hardware is involved.
+- **Tier 2 (Zeek).** `make verify` parses every capture with pinned Zeek and
+  ICSNPP parsers, compares the decoded fields with the event log, and runs the
+  five Zeek rules over their scenarios. It runs in Docker and builds the S7
+  parser plugin on first use ([Tier-2 guide](docs/tier2.md)).
 
-## Detection examples
+Single-event conditions are written in Sigma; behavior that needs state across
+events (sweeps, enumeration, learned baselines) is written for Zeek. Each
+detection's documentation records the choice and the reason.
 
-The eleven examples below include a rule, benign and anomalous scenarios, engine
-rationale, and a description of likely false positives. Follow a rule ID for its
-assumptions and examples.
+## Detections
 
-| Rule | Matches | Engine |
-|---|---|---|
-| [M1](detections/docs/M1-unauthorized-write.md) | Modbus writes outside permitted channels or spans | Sigma |
-| [M2](detections/docs/M2-illegal-function-code.md) | Undefined Modbus functions or illegal-function/address errors | Sigma |
-| [M3](detections/docs/M3-unit-function-sweep.md) | Modbus function-code or unit-ID sweeps | Zeek |
-| [D1](detections/docs/D1-unauthorized-restart.md) | DNP3 restart outside approved channels | Sigma |
-| [D2](detections/docs/D2-disable-unsolicited.md) | Disabling DNP3 unsolicited reporting outside policy | Sigma |
-| [D3](detections/docs/D3-unauthorized-operate.md) | DNP3 control outside approved channels | Sigma |
-| [D4](detections/docs/D4-function-enumeration.md) | DNP3 function enumeration | Zeek |
-| [S1](detections/docs/S1-cpu-stop-start.md) | S7 CPU stop/start outside approved channels | Sigma |
-| [S2](detections/docs/S2-program-write-download.md) | S7 program downloads or object writes outside policy | Sigma |
-| [S3](detections/docs/S3-enumeration.md) | S7 module-information enumeration | Zeek |
-| [X1](detections/docs/X1-cross-protocol-baseline.md) | New talker, asset pair or function across protocols | Zeek |
+| ID | Detects | ATT&CK for ICS | Engine |
+|---|---|---|---|
+| [M1](detections/docs/M1-unauthorized-write.md) | Modbus writes outside the permitted source, PLC, unit and register span | Impair Process Control · T1692.001 | Sigma |
+| [M2](detections/docs/M2-illegal-function-code.md) | Undefined Modbus function codes; illegal-function and illegal-address exceptions | Discovery · T0888 | Sigma |
+| [M3](detections/docs/M3-unit-function-sweep.md) | One source sweeping Modbus function codes or unit IDs | Discovery · T0846 | Zeek |
+| [M4](detections/docs/M4-read-sweep.md) | One source reading a Modbus address space page by page | Collection · T0801 | Zeek |
+| [D1](detections/docs/D1-unauthorized-restart.md) | DNP3 cold or warm restart outside the approved master channel | Inhibit Response Function · T0816 | Sigma |
+| [D2](detections/docs/D2-disable-unsolicited.md) | DNP3 unsolicited reporting disabled outside the approved channel | Inhibit Response Function · T1691.002 | Sigma |
+| [D3](detections/docs/D3-unauthorized-operate.md) | DNP3 select, operate or direct operate outside the approved channel | Impair Process Control · T1692.001 | Sigma |
+| [D4](detections/docs/D4-function-enumeration.md) | One source enumerating DNP3 function codes | Discovery · T0888 | Zeek |
+| [S1](detections/docs/S1-cpu-stop-start.md) | S7 CPU stop or start outside the approved channel | Execution · T0858 | Sigma |
+| [S2](detections/docs/S2-program-write-download.md) | S7 block download or block activation outside the approved channel | Lateral Movement · T0843 | Sigma |
+| [S3](detections/docs/S3-enumeration.md) | One source enumerating S7 module information | Discovery · T0888 | Zeek |
+| [X1](detections/docs/X1-cross-protocol-baseline.md) | A new talker, asset pair or function against a reviewed baseline, across all three protocols | Discovery · T0846 | Zeek |
 
-The [generated catalog](docs/coverage/coverage.md) contains the ATT&CK-for-ICS
-mappings and tactic gaps. It shares a registry with the
-[Navigator layer](docs/coverage/navigator-layer.json) and
-[JSON report](docs/coverage/coverage.json). These mappings describe the content;
-they do not measure protection against an entire technique.
+The rules encode two OT realities. Engineers legitimately write setpoints and
+issue controls, so the allow-list rules key on source, destination and service,
+never on "any write". SCADA masters poll constantly, so the sweep rules count
+distinct codes, units or address pages from one source, never request volume.
 
-## Use your own policy or telemetry
+![ATT&CK-for-ICS coverage: twelve detections across six of the twelve tactics](docs/coverage/coverage-matrix.svg)
 
-The bundled permissions are examples. Adapt the source, destination and service
-allowlists to your environment; Modbus write permissions also cover the unit,
-address space and complete write span. IP-based permissions cannot distinguish
-a legitimate operator from a compromised approved host. X1 reports novelty
-relative to a reviewed baseline; a new asset or function can be legitimate.
+The matrix, the [coverage table](docs/coverage/coverage.md), the
+[JSON report](docs/coverage/coverage.json) and the
+[ATT&CK Navigator layer](docs/coverage/navigator-layer.json) are generated from
+[`detections/registry.yaml`](detections/registry.yaml), and `make ci` fails if
+they are stale. Every technique ID was re-checked against the live ATT&CK matrix
+on 2026-09-26. A mapping states which technique the content targets, not that it
+detects every instance of it.
 
-- **Site permissions:** write a versioned policy, use it with `detect --policy`,
-  or export the resulting Sigma rules with `substation policy compile`.
-- **Modbus sensor logs:** `substation import-modbus` accepts supported, matched
-  ICSNPP transactions in JSON or TSV and records their origin in the output.
-- **Scenario edits:** pass edited YAML files to `substation demo --scenario` and
-  add `--strict` to fail on a violated Tier-1 fire/quiet expectation.
+## Run the rules on your own data
 
-Start with the [policy and import guide](docs/independent-validation.md) or the
-[scenario format](docs/scenario-format.md). General DNP3/S7 sensor import remains
-unqualified.
+The allow-list rules ship with the demo's example addresses. Describe your site
+in a versioned policy, then evaluate sensor logs against it or export the rules
+as standard Sigma for your SIEM:
+
+```sh
+substation import-modbus modbus_detailed.log --out events.jsonl
+substation detect events.jsonl --policy site.yaml
+substation policy compile site.yaml --out site-rules
+```
+
+`import-modbus` converts CISA ICSNPP Modbus logs (Zeek JSON or TSV) into the
+[event schema](docs/schema.md). DNP3 and S7 sensor import are not available yet.
+The [deployment guide](docs/deployment.md) covers the policy format and the
+importer's behavior on real sensor output.
+
+To model your own traffic, write a scenario and run it with `--strict`, which
+fails if a detection listed under `exercises` does not behave as declared:
+
+```yaml
+name: modbus-my-hmi-poll
+protocol: modbus
+label: benign
+actors:
+  - {id: hmi-1, role: hmi, host: 10.0.0.10}
+  - {id: plc-1, role: plc, host: 10.0.0.50}
+exchanges:
+  - {source: hmi-1, target: plc-1, function: ReadHoldingRegisters, params: {address: 0, quantity: 10}}
+exercises:
+  quiet: [M1, M2]
+```
+
+```sh
+.venv/bin/substation demo --scenario my-hmi-poll.yaml --strict
+```
+
+The [scenario format](docs/scenario-format.md) lists every protocol function and
+parameter.
 
 ## Validation and limits
 
-Substation is an **offline regression and teaching toolkit**. Passing a scenario
-establishes how a rule behaves on that fixture. Production recall, false-positive
-rates and alert volume still need representative, independently labeled traffic.
-The rules remain experimental.
+Substation is an offline regression and teaching toolkit, and every rule is
+`experimental`. What its checks establish:
 
-Independent checks cover core Modbus transactions, DNP3 message/object fields,
-and modeled S7 request/response details. The repository also includes a small,
-attributed [external Modbus corpus](tests/data/corpus/modbus). The simulator does
-not model a PLC process, complete device sessions or encrypted S7 traffic.
+- **Rule behavior on its scenarios.** The Detection Contract harness requires,
+  for every detection, a rule, documentation, at least one scenario it must fire
+  on and one it must stay quiet on, and a verified ATT&CK mapping. Each Sigma
+  rule must hit exactly the expected events, so over-matching fails.
+- **Protocol fidelity.** Tier 2 shows that real Zeek and ICSNPP parsers decode
+  every generated capture to the fields the event log claims, with no parser
+  diagnostics, and that the Zeek rules fire and stay quiet as declared.
+- **Independent evidence.** An attributed external Modbus corpus scores M1 and
+  M2 per event, and the official pySigma SQLite backend reproduces the Tier-1
+  evaluator's hits on the catalogue and corpus events.
 
-SIEM deployment needs its own validation. The
-[SQLite backend comparison](docs/spikes/10-sigma-backend-qualification.md) agrees
-on the scoped fixtures but exposes missing-field and large-policy limits.
-The [current validation record](docs/reviews/2026-09-10-validation-closeout.md)
-lists the tested versions, results and remaining gaps, including Docker S7
-qualification.
+What they do not establish: false-positive rates or recall on real plant
+traffic, packet timing, complete protocol sessions, device behavior, or
+deployment on a SIEM other than the SQLite comparison. The
+[validation record](docs/validation.md) has the numbers from the latest run and
+the full list of limits.
 
 ## Development
 
-With the virtual environment active:
-
 ```sh
-make dev       # install hash-locked development dependencies
-make hooks     # install the pre-push gate
-make ci        # formatting, lint, types, tests, schema, coverage and security
+make dev                                     # hash-locked install with dev tooling
+make hooks                                   # pre-push hook: runs `make ci` on the pushed commit
+make ci                                      # format, lint, types, tests, schema, coverage, security
+make verify VERIFY_ARGS=--require-complete   # Tier 2 in Docker
 ```
 
-CI runs locally. The pre-push hook runs `make ci`; there are no GitHub Actions or
-cloud CI jobs. `make corpus` checks the external Modbus fixtures;
-`make verify-sigma` runs the SQLite comparison.
-
-For Tier 2, complete the [Zeek/S7 setup](docs/verify-s7.md), then run:
-
-```sh
-make verify VERIFY_ARGS=--require-complete
-```
-
-This fails if a required check cannot run. The stock Docker image lacks the S7
-plugin. Native Zeek is supported with `VERIFY_ARGS='--native --require-complete'`.
-
-See [Contributing](CONTRIBUTING.md) for the detection contract and
-[Makefile](Makefile) for all commands, including local release builds.
+CI runs locally: `make ci` is the gate, enforced by the pre-push hook, and there
+are no cloud CI jobs. Releases are cut locally with
+`make release RELEASE_ARGS="--version X.Y.Z"`. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before adding a detection or protocol.
 
 ## Safety
 
-The simulator writes PCAP and JSON files and never transmits on a live interface.
-Socket guards and tests enforce that boundary. Fixtures model observable protocol
-signatures; they contain no exploit payloads or operational PLC programs. Keep
-captures for offline analysis and do not replay them toward real OT equipment.
+- **Files only.** The simulator writes PCAP and JSON and never opens a socket,
+  transmits on an interface or starts a process that could. A runtime guard and
+  a static scan of the package enforce this.
+- **Defensive only.** Scenarios reproduce the network signature of malicious
+  behavior so rules can detect it. There are no exploits, payloads or PLC
+  programs. Do not replay the captures toward real equipment.
+- **Passive honeypot.** The optional [Modbus honeypot](substation/honeypot/README.md)
+  is separate from the simulator and the demo. It listens on loopback by default;
+  an external bind requires explicit opt-ins and an isolated network.
 
-The optional [Modbus honeypot](substation/honeypot/README.md) is a separate passive
-listener, outside the simulator and demo. It binds loopback by default; external
-binding requires explicit opt-ins and network isolation.
+Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 
-## Reference
+## Documentation
 
-- [Event schema](docs/schema.md) · [Scenario format](docs/scenario-format.md)
-- [Add a detection](docs/adding-a-detection.md) · [Add a protocol](docs/adding-a-protocol.md)
-- [PRD](PRD.md) · [Engineering checklist](ENGINEERING_CHECKLIST.md) · [Agent instructions](AGENTS.md)
+| Document | Contents |
+|---|---|
+| [Design](docs/design.md) | Scope, architecture, decisions and roadmap |
+| [Validation record](docs/validation.md) | What the checks establish, with numbers, and what they do not |
+| [Tier 2](docs/tier2.md) | Running and interpreting `make verify` |
+| [Deployment](docs/deployment.md) | Sensor import, site policies and Sigma export |
+| [Event schema](docs/schema.md) | The JSONL event format rules match against |
+| [Scenario format](docs/scenario-format.md) | Scenario YAML, functions and parameters |
+| [Adding a detection](docs/adding-a-detection.md) · [Adding a protocol](docs/adding-a-protocol.md) | Contributor checklists |
+| [Changelog](CHANGELOG.md) | Release notes |
 
-[MIT license](LICENSE). Built with [Sigma](https://sigmahq.io/),
-[Zeek/ICSNPP](https://github.com/cisagov/icsnpp), [Scapy](https://scapy.net/) and
-[MITRE ATT&CK for ICS](https://attack.mitre.org/matrices/ics/).
+## License
+
+[MIT](LICENSE). Substation builds on [Sigma](https://sigmahq.io/) and
+[pySigma](https://github.com/SigmaHQ/pySigma), [Zeek](https://zeek.org/) and
+[CISA ICSNPP](https://github.com/cisagov/icsnpp), [Scapy](https://scapy.net/),
+and [MITRE ATT&CK for ICS](https://attack.mitre.org/matrices/ics/).

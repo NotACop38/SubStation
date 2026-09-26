@@ -4,7 +4,7 @@ A single source reading an anomalously **diverse** set of S7comm SZL system-stat
 lists (module identity, CPU characteristics, component identification, memory/system
 areas, block types, …) — plus block listings and an S7comm-plus `Explore` — against
 one PLC within a short window. The reconnaissance/enumeration detection for the S7
-slice (`PRD.md` §5.3).
+slice (`docs/design.md` §5.3).
 
 | | |
 |---|---|
@@ -23,11 +23,11 @@ Blocks` / `Get Block Info` and an S7comm-plus `Explore`) maps the device's ident
 configuration. The signal is **diversity** — the number of *distinct* SZL-IDs one
 source requests — deliberately **not** request volume: an engineering tool legitimately
 reads module identity on connect, so a volume threshold would fire on normal operation
-(`PRD.md` §8).
+(`docs/design.md` §8).
 
 ## Engine choice + rationale
 
-**Zeek (the S7 slice's stateful rail, `PRD.md` §6.5; mirrors Modbus M3 / DNP3 D4).**
+**Zeek (the S7 slice's stateful rail, `docs/design.md` §6.5; mirrors Modbus M3 / DNP3 D4).**
 Enumeration needs durable **per-source state** — the set of distinct SZL-IDs
 accumulated over a window — plus a set-cardinality test. A stateless Sigma field-match
 cannot express "this source has now touched ≥ N *distinct* SZL-IDs." The Zeek script
@@ -37,7 +37,7 @@ counts distinct SZL-IDs per (source, PLC) over a 60 s window, and raises one
 carried over).
 
 Because Zeek/Suricata detections require their engine, S3 executes in **Tier 2** over
-the emitted PCAP (`PRD.md` §6.2). The Tier-1 harness still enforces S3's contract
+the emitted PCAP (`docs/design.md` §6.2). The Tier-1 harness still enforces S3's contract
 linkage (a rule, ≥1 fire and ≥1 quiet scenario); its fire/quiet run in the Tier-2
 runner.
 
@@ -82,7 +82,7 @@ and configuration is *Remote System Information Discovery* (T0888); enumerating 
 device/block inventory is *Remote System Discovery* (T0846). Both sit under the
 Discovery tactic — the same mapping as the DNP3 enumeration detection D4.
 
-> **VERIFY (`CLAUDE.md` gate).** Verified against the **live** ATT&CK-for-ICS matrix
+> **VERIFY (`AGENTS.md` gate).** Verified against the **live** ATT&CK-for-ICS matrix
 > on 2026-06-04: T0888 *Remote System Information Discovery* and T0846 *Remote System
 > Discovery* both exist and are assigned to tactic Discovery (TA0102). Sources:
 > <https://attack.mitre.org/techniques/T0888/>,

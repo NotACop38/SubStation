@@ -1,10 +1,10 @@
 # =============================================================================
 # Anomalous (M3) — function-code / unit-ID sweep (diversity, NOT volume)
 # =============================================================================
-# M3 (PRD.md §5.1, §8): ONE source touching many function codes and/or sweeping
+# M3 (docs/design.md §5.1, §8): ONE source touching many function codes and/or sweeping
 # unit IDs in a short window. The signal is DIVERSITY/SWEEP, deliberately NOT raw
 # request rate — SCADA masters poll constantly, so a volume threshold would fire
-# on normal operation (PRD.md §8). This scenario therefore uses only a handful of
+# on normal operation (docs/design.md §8). This scenario therefore uses only a handful of
 # requests, each a DIFFERENT function code against a DIFFERENT unit id, in a tight
 # window: low volume, high diversity.
 #
@@ -14,7 +14,7 @@
 #     the breadth of codes/units from one source, not any illegal code).
 # -----------------------------------------------------------------------------
 
-name: anomalous-m3-sweep
+name: modbus-anomalous-m3-sweep
 description: >-
   A single scanning host (10.0.0.66) walks several Modbus function codes across
   several unit ids on the PLC in a short window — high function/unit diversity at
@@ -77,3 +77,4 @@ exercises:
   quiet:
     - M1   # the sweep is read-only — no write functions.
     - M2   # every function code is legal; the anomaly is breadth, not illegality.
+    - M4   # one-address reads per unit: diversity of units, not address coverage.

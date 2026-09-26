@@ -1,7 +1,7 @@
 """Event-log schema: the binding contract for Substation's `.jsonl` output.
 
 This package ships the machine-readable JSON Schema (`event-log.schema.json`,
-draft 2020-12) for one event-log line — the normalized envelope (`PRD.md` §6.3)
+draft 2020-12) for one event-log line — the normalized envelope (`docs/design.md` §6.3)
 plus a per-protocol ``detail`` object modeled on **ICSNPP** fields (Modbus frozen
 against ``docs/spikes/01-icsnpp-modbus-fields.md``). The event log is
 newline-delimited JSON: one event object per line.
@@ -41,6 +41,7 @@ __all__ = [
     "validate_jsonl_file",
     "parse_json_event",
     "iter_jsonl_lines",
+    "json_line",
     "MAX_JSONL_BYTES",
     "MAX_JSONL_LINES",
 ]
@@ -143,6 +144,16 @@ def iter_jsonl_lines(
                 yield line_no, raw.decode("utf-8")
             except UnicodeDecodeError as exc:
                 raise SchemaValidationError(f"{p}:{line_no}: not valid UTF-8: {exc}") from exc
+
+
+def json_line(raw: str) -> str | None:
+    """Return one JSONL line without surrounding JSON whitespace, or None if blank.
+
+    Only JSON's own whitespace (space, tab, CR, LF) is insignificant, so
+    ``validate`` and ``detect`` accept and reject exactly the same lines.
+    """
+    stripped = raw.strip(" \t\r\n")
+    return stripped or None
 
 
 def _type_name(value: Any) -> str:
@@ -279,8 +290,8 @@ def iter_jsonl_errors(path: str | Path, schema: dict[str, Any] | None = None) ->
     p = Path(path)
     try:
         for lineno, raw in iter_jsonl_lines(p):
-            stripped = raw.strip()
-            if not stripped:
+            stripped = json_line(raw)
+            if stripped is None:
                 continue
             try:
                 event = parse_json_event(stripped)

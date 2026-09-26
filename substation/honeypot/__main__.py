@@ -17,6 +17,7 @@ from substation.honeypot.modbus import (
     HoneypotConfig,
     HoneypotConfigError,
     ModbusHoneypot,
+    ProbeLogError,
 )
 from substation.protocols.modbus import DEFAULT_MODBUS_PORT
 
@@ -32,7 +33,7 @@ _BANNER = (
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m substation.honeypot",
-        description="Passive, isolated Modbus/TCP honeypot that logs inbound probes (PRD §6.10).",
+        description="Passive, isolated Modbus/TCP honeypot that logs inbound probes.",
         epilog=_BANNER,
     )
     parser.add_argument(
@@ -67,6 +68,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Rotate the probe log to <log>.1 when it would exceed this size "
         "(default: 50 MiB; 0 disables rotation).",
     )
+    parser.add_argument(
+        "--connection-timeout",
+        type=float,
+        default=HoneypotConfig.__dataclass_fields__["connection_timeout"].default,
+        help="Close any connection open longer than this many seconds (default: 60).",
+    )
     return parser
 
 
@@ -80,13 +87,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         port=args.port,
         allow_external=args.allow_external,
         log_max_bytes=args.log_max_bytes,
+        connection_timeout=args.connection_timeout,
     )
     try:
-        honeypot = ModbusHoneypot(config)
-    except HoneypotConfigError as exc:
+        ModbusHoneypot(config).serve_forever()
+    except (HoneypotConfigError, ProbeLogError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    honeypot.serve_forever()
     return 0
 
 

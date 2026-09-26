@@ -1,5 +1,5 @@
 {
-  "declarations_sha256": "ac8e6c7400a7e4a888b7a4227c9e635597891437c2692d3c3662500c0951cc12",
+  "declarations_sha256": "8e3996804f0e305b5ddadd6bab71557b841d03af72517375a78471aa9ddc70d9",
   "environment": {
     "implementation_name": "cpython",
     "implementation_version": "3.12.14",
@@ -13,7 +13,7 @@
     "python_version": "3.12",
     "sys_platform": "darwin"
   },
-  "lock_sha256": "a61bbff8682676405cb3c160d22afe80f5cf90c07b275dad75f538ddcddbf5f0",
+  "lock_sha256": "ce377f011ae611365314286a47d2514b1b5087732cfa2ad81827ccdbbc7afbb0",
   "packages": {
     "bandit": {
       "artifact": {
@@ -447,43 +447,6 @@
       ],
       "requires_python": ">=3.9",
       "version": "1.1.1"
-    },
-    "pillow": {
-      "artifact": {
-        "filename": "pillow-12.3.0-cp312-cp312-macosx_11_0_arm64.whl",
-        "metadata_sha256": "8fc07146cab33ef7582361dab6eac596d340b03ec648f18217da7894f73838c8",
-        "sha256": "ffd0c5368496f41b0944be820fcb7a838aa6e623d250b01acf2643939c3f99d7",
-        "url": "https://files.pythonhosted.org/packages/d8/66/9a386a92561f402389a4fc70c18838bf6d35eb5eb5c6850b4b2dc64f5048/pillow-12.3.0-cp312-cp312-macosx_11_0_arm64.whl"
-      },
-      "requires_dist": [
-        "furo; extra == \"docs\"",
-        "olefile; extra == \"docs\"",
-        "sphinx>=8.2; extra == \"docs\"",
-        "sphinx-autobuild; extra == \"docs\"",
-        "sphinx-copybutton; extra == \"docs\"",
-        "sphinx-inline-tabs; extra == \"docs\"",
-        "sphinxext-opengraph; extra == \"docs\"",
-        "olefile; extra == \"fpx\"",
-        "olefile; extra == \"mic\"",
-        "arro3-compute; extra == \"test-arrow\"",
-        "arro3-core; extra == \"test-arrow\"",
-        "nanoarrow; extra == \"test-arrow\"",
-        "pyarrow; extra == \"test-arrow\"",
-        "coverage>=7.4.2; extra == \"tests\"",
-        "defusedxml; extra == \"tests\"",
-        "markdown2; extra == \"tests\"",
-        "olefile; extra == \"tests\"",
-        "packaging; extra == \"tests\"",
-        "pytest; extra == \"tests\"",
-        "pytest-cov; extra == \"tests\"",
-        "pytest-timeout; extra == \"tests\"",
-        "pytest-xdist; extra == \"tests\"",
-        "setuptools; extra == \"tests\"",
-        "trove-classifiers>=2024.10.12; extra == \"tests\"",
-        "defusedxml; extra == \"xmp\""
-      ],
-      "requires_python": ">=3.10",
-      "version": "12.3.0"
     },
     "pip": {
       "artifact": {

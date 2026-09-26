@@ -16,16 +16,28 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scapy.all import Ether, IP, Raw, TCP, rdpcap, wrpcap
+from scapy.layers.inet import IP, TCP
+from scapy.layers.l2 import Ether
+from scapy.packet import Raw
+from scapy.utils import rdpcap, wrpcap
 
 from scripts.verify import run
+from scripts.verify.checkout import checkout_problem
 from substation.ingest.modbus import load_modbus_log
 
 SOURCE_SHA256 = "a84656f9af62b2c948200ec288d51b81f03037c277a31a40efee0cfb244f1e30"
-SOURCE_REVISION = "27f22b41fd9839c0bad1b98df9c6289e578fd02a"  # pragma: allowlist secret
+SOURCE_REVISION = "27f22b41fd9839c0bad1b98df9c6289e578fd02a"
+
+
+def verify_source(source: Path) -> None:
+    """Require a clean upstream checkout at the reviewed parser revision."""
+    problem = checkout_problem(source, SOURCE_REVISION, allow_untracked=True)
+    if problem is not None:
+        raise ValueError(f"upstream checkout is not the reviewed revision: {problem}")
 
 
 def derive(source: Path, destination: Path) -> None:
+    verify_source(source)
     trace = source / "testing/traces/modbus_example.pcap"
     if hashlib.sha256(trace.read_bytes()).hexdigest() != SOURCE_SHA256:
         raise ValueError("upstream capture hash differs from reviewed source")

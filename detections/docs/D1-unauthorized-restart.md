@@ -3,7 +3,7 @@
 A DNP3 device-restart function (`COLD_RESTART` / `WARM_RESTART`) issued by a source
 that is **not** the allow-listed master. Forcing an outstation to restart inhibits
 its response and reporting function — the DNP3 restart detection for the DNP3 slice
-(`PRD.md` §5.2).
+(`docs/design.md` §5.2).
 
 | | |
 |---|---|
@@ -35,9 +35,9 @@ than the permitted master fires.
 is a DNP3 request (`direction: request`), `func_name` is the restart command, and
 `conn.orig_h` says who sent it. No durable state, correlation window, or multi-event
 join is needed, so this is the simplest engine that expresses the behavior correctly
-— Sigma-first per `PRD.md` §6.5. Sensor logs require normalization, and a SIEM backend requires independent qualification.
+— Sigma-first per `docs/design.md` §6.5. Sensor logs require normalization, and a SIEM backend requires independent qualification.
 
-**Why allow-list, not "any restart" (the OT-realism guardrail, `PRD.md` §8).**
+**Why allow-list, not "any restart" (the OT-realism guardrail, `docs/design.md` §8).**
 Engineers legitimately restart outstations during maintenance/commissioning. A rule
 that fires on every restart would be false positives during planned work. The rule
 stays quiet on restarts from the **allow-listed master** and fires on everything
@@ -49,8 +49,10 @@ Tier-1 `.jsonl` event log (`docs/schema.md`):
 
 - `proto` = `dnp3`, `direction` = `request`, `func_name` ∈
   {`COLD_RESTART`, `WARM_RESTART`}. `func_name` carries Zeek's
-  `DNP3::function_codes[fc]` name (spike 04), so the rule transfers to production
-  Zeek `dnp3.log` (`fc_request`) unchanged.
+  `DNP3::function_codes[fc]` name (spike 04), the same string Zeek's `dnp3.log`
+  records in `fc_request`. The log itself still needs mapping: it has no `proto`,
+  `direction` or `conn.*` fields and can merge consecutive requests (spike 08), so
+  the rule does not apply to it unchanged.
 - `conn.orig_h` — the issuing source. On a **request** (`is_orig: true`) the
   originator *is* the source (`docs/schema.md` → `conn`), so `conn.orig_h` is the
   master that issued the restart.
@@ -87,7 +89,7 @@ Forcing a DNP3 outstation to restart is precisely *forcibly restart or shutdown 
 device in an ICS environment to disrupt and potentially negatively impact physical
 processes* (T0816). While the device is down its function is denied (T0814).
 
-> **VERIFY (`CLAUDE.md` gate).** Verified against the **live** ATT&CK-for-ICS matrix
+> **VERIFY (`AGENTS.md` gate).** Verified against the **live** ATT&CK-for-ICS matrix
 > on 2026-06-04: T0816 and T0814 are both listed under the Inhibit Response Function
 > tactic (TA0107). Sources: <https://attack.mitre.org/techniques/T0816/>,
 > <https://attack.mitre.org/techniques/T0814/>, tactic

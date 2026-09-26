@@ -38,6 +38,25 @@ def test_sdist_rebuilds_wheel_with_detection_content(tmp_path: Path) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data.read())
     source = next(unpack.iterdir())
+    # Every tracked file a source build needs is in the archive: MANIFEST.in
+    # omissions otherwise surface only when someone builds from the sdist.
+    tracked = (
+        subprocess.run(
+            ["git", "ls-files", "-z"],  # noqa: S607
+            cwd=_REPO,
+            capture_output=True,
+            check=True,
+        )
+        .stdout.decode()
+        .split("\0")
+    )
+    repository_only = (".agents/", ".claude/", ".github/", ".gitignore")
+    missing = [
+        path
+        for path in tracked
+        if path and not path.startswith(repository_only) and not (source / path).is_file()
+    ]
+    assert missing == [], f"MANIFEST.in omits {missing}"
     # The source distribution must retain the protocol/backend verification gates.
     for relative in (
         "scripts/verify/dnp3-observe.zeek",

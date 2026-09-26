@@ -46,3 +46,14 @@ def test_x1_s7_tokens_match_zeek_normalizers() -> None:
     assert "s7comm:rosctr=0x01,function=0x28,plc_control=P_PROGRAM" in tokens
     # COTP-only frames must not produce tokens (Zeek never observes them as s7comm).
     assert all(t is not None and t.startswith("s7comm") for t in tokens)
+
+
+def test_x1_s7_absent_subfunction_marker_is_ignored_like_zeek() -> None:
+    # ICSNPP logs 0xff when a Job/ACK header has no subfunction; the Zeek rule
+    # drops it, so the Python baseline must produce the same token.
+    event = {
+        "proto": "s7comm",
+        "is_orig": True,
+        "detail": {"rosctr_code": 1, "function_code": "0x04", "subfunction_code": "0xff"},
+    }
+    assert x1_norm_func(event) == "s7comm:rosctr=0x01,function=0x04"

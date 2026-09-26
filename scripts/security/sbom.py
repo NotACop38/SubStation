@@ -38,6 +38,9 @@ def build_sbom() -> dict[str, Any]:
                 "bom-ref": refs[name],
                 "name": name,
                 "version": package["version"],
+                # CycloneDX scope: only runtime dependencies ship with the application;
+                # development tooling and unreachable lock entries are excluded.
+                "scope": "required" if scope == "runtime" else "excluded",
                 "purl": refs[name],
                 "hashes": [{"alg": "SHA-256", "content": artifact["sha256"]}],
                 "externalReferences": [{"type": "distribution", "url": artifact["url"]}],
@@ -55,14 +58,24 @@ def build_sbom() -> dict[str, Any]:
         {"ref": refs[name], "dependsOn": [refs[child] for child in children]}
         for name, children in sorted(graph.items())
     )
-    digest = hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
+    # Deterministic, but distinct per application version as well as per lock.
+    identity = {"application": app, "evidence": evidence}
+    digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     return {
         "bomFormat": "CycloneDX",
         "specVersion": "1.5",
         "version": 1,
         "serialNumber": f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, digest)}",
         "metadata": {
-            "tools": [{"vendor": "Substation", "name": "sbom.py", "version": "2.0"}],
+            "tools": {
+                "components": [
+                    {
+                        "type": "application",
+                        "author": "Substation",
+                        "name": "scripts/security/sbom.py",
+                    }
+                ]
+            },
             "component": {
                 "type": "application",
                 "bom-ref": app,
@@ -73,7 +86,10 @@ def build_sbom() -> dict[str, Any]:
             "properties": [
                 {
                     "name": "substation:inventory-scope",
-                    "value": "Hash-locked inventory; complete runtime/dev graph for recorded marker environment",
+                    "value": (
+                        "Hash-locked inventory; complete runtime/dev graph for recorded "
+                        "marker environment"
+                    ),
                 },
                 {
                     "name": "substation:marker-environment",
@@ -99,7 +115,8 @@ def main() -> int:
         print(f"sbom: FAILED: {exc}", file=sys.stderr)
         return 1
     print(
-        f"sbom: wrote {args.out.name} ({len(sbom['components'])} components, {len(sbom['dependencies'])} dependency records)"
+        f"sbom: wrote {args.out.name} ({len(sbom['components'])} components, "
+        f"{len(sbom['dependencies'])} dependency records)"
     )
     return 0
 

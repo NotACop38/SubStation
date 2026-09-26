@@ -17,6 +17,7 @@ import sys
 import urllib.request
 import zipfile
 from pathlib import Path
+from typing import Any
 
 from packaging.markers import default_environment
 from packaging.tags import sys_tags
@@ -30,14 +31,15 @@ from scripts.security.lockfile import declarations_hash, dependency_graph
 def fetch(url: str) -> bytes:
     if not url.startswith(("https://pypi.org/", "https://files.pythonhosted.org/")):
         raise ValueError("expected official HTTPS PyPI artifact URL")
-    with urllib.request.urlopen(url, timeout=60) as response:  # nosec B310
-        data = response.read(128 * 1024 * 1024 + 1)
+    # The prefix check above limits this to official HTTPS PyPI hosts.
+    with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310  # nosec B310
+        data: bytes = response.read(128 * 1024 * 1024 + 1)
     if len(data) > 128 * 1024 * 1024:
         raise ValueError("artifact exceeds download cap")
     return data
 
 
-def package_evidence(pin: tuple[str, str]) -> tuple[str, dict, list[str]]:
+def package_evidence(pin: tuple[str, str]) -> tuple[str, dict[str, Any], list[str]]:
     name, version = pin
     release = json.loads(fetch(f"https://pypi.org/pypi/{name}/{version}/json"))
     artifacts = [item for item in release["urls"] if not item["yanked"]]
@@ -112,7 +114,7 @@ def main() -> int:
         )
     project_bytes = (ROOT / "pyproject.toml").read_bytes()
     project = tomllib.loads(project_bytes.decode())["project"]
-    environment = default_environment()
+    environment = {key: str(value) for key, value in default_environment().items()}
     dependency_graph(
         project["dependencies"] + project["optional-dependencies"]["dev"], packages, environment
     )

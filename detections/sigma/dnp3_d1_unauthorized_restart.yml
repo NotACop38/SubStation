@@ -1,13 +1,13 @@
 # =============================================================================
 # Substation detection D1 — Unauthorized DNP3 cold/warm restart
 # =============================================================================
-# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — PRD.md §6.5).
+# Engine: Sigma (Tier-1, evaluated over the .jsonl event log — docs/design.md §6.5).
 # Rationale, data source and the full false-positive profile live in
 # detections/docs/D1-unauthorized-restart.md (the Detection Contract doc, §6.6).
 #
 # Keys on the restart command + an allow-list of permitted control sources, NOT
 # "any restart": a sanctioned maintenance restart from the real master is benign,
-# so a write-only rule would be false positives (PRD.md §8). A COLD_RESTART or
+# so a write-only rule would be false positives (docs/design.md §8). A COLD_RESTART or
 # WARM_RESTART request from a source that is not the allow-listed master fires.
 # -----------------------------------------------------------------------------
 title: DNP3 Device Restart From Unauthorized Source
@@ -15,15 +15,15 @@ id: 6e2c1f8a-3b4d-4f1e-9a2c-1d7e5b0a9c34
 status: experimental
 description: |
   A DNP3 device-restart function (COLD_RESTART / WARM_RESTART) issued by a source
-  that is not the allow-listed master. Substation detection D1 (PRD.md §5.2):
+  that is not the allow-listed master. Substation detection D1 (docs/design.md §5.2):
   forcing an outstation to restart inhibits its response/reporting function. Keyed
   by restart command AND source allow-list, not "any restart", so a sanctioned
   maintenance restart from the real master stays quiet (the OT-realism guardrail,
-  PRD.md §8).
+  docs/design.md §8).
 references:
   - https://attack.mitre.org/techniques/T0816/
   - https://attack.mitre.org/techniques/T0814/
-  - PRD.md §5.2 (D1); detections/docs/D1-unauthorized-restart.md
+  - docs/design.md §5.2 (D1); detections/docs/D1-unauthorized-restart.md
 author: Substation
 date: 2026-06-04
 logsource:

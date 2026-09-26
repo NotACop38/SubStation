@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from substation.detect.sigma_eval import load_rule, matching_indices
 from substation.honeypot.modbus import (
     HoneypotConfig,
@@ -102,7 +103,7 @@ def test_reserved_function_code_yields_illegal_function() -> None:
     assert request["action_class"] == "other"
     assert request["func_name"] == "unknown-66"
     assert response["is_exception"] is True
-    assert response["func_name"] == "unknown-66_EXCEPTION"
+    assert response["func_name"] == "unknown-194"  # Zeek's build_func spelling
     assert response["error"] == "ILLEGAL_FUNCTION"
     _assert_schema_valid(events)
 
@@ -114,7 +115,7 @@ def test_defined_but_unimplemented_function_uses_zeek_name_not_abnormal_class() 
     assert reply is not None
     request, response = events
     assert request["func_name"] == "PROGRAM_484"
-    assert request["action_class"] == "diagnostic"
+    assert request["action_class"] == "write"  # programming changes controller logic
     assert response["func_name"] == "PROGRAM_484_EXCEPTION"
     assert response["error"] == "ILLEGAL_FUNCTION"
     _assert_schema_valid(events)
@@ -160,6 +161,15 @@ def test_defined_unsupported_honeypot_probe_only_fires_m2_exception_arm() -> Non
     # should fire M2; the request must not look like an abnormal undefined code.
     _, events = _run(_mbap_frame(0x09, b"\x00\x00"))
     assert matching_indices(rule, events) == [1]
+
+
+def test_unlisted_programming_probe_fires_m1() -> None:
+    # PROGRAM_* and FIRMWARE_REPLACEMENT are write-class: from a source outside the
+    # policy they are unauthorized writes, not silent diagnostics.
+    rule = load_rule(_M1_RULE)
+    for code in (0x09, 0x5A, 0x7D):
+        _, events = _run(_mbap_frame(code, b"\x00\x00"))
+        assert matching_indices(rule, events) == [0], hex(code)
 
 
 def test_honeypot_telemetry_fires_m1_for_unlisted_writer() -> None:
@@ -283,3 +293,93 @@ def test_config_rejects_negative_log_max_bytes(tmp_path: Path) -> None:
     config = HoneypotConfig(log_path=tmp_path / "p.jsonl", log_max_bytes=-1)
     with pytest.raises(HoneypotConfigError, match="log_max_bytes"):
         config.validate()
+
+
+def test_probe_log_streams_to_a_pipe_without_rotating(tmp_path: Path) -> None:
+    import json
+    import os
+
+    from substation.honeypot.modbus import _ProbeLog
+
+    _, events = _run(_mbap_frame(0x03, struct.pack(">HH", 0, 1)))
+    fifo = tmp_path / "probes.fifo"
+    os.mkfifo(fifo)
+    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        # A pipe cannot be measured or rotated; a tiny cap must not break logging.
+        log = _ProbeLog(fifo, max_bytes=10)
+        log.write(events[0])
+        log.write(events[0])
+        log.close()
+        lines = os.read(reader, 1 << 16).decode().splitlines()
+    finally:
+        os.close(reader)
+    assert [json.loads(line) for line in lines] == [events[0], events[0]]
+    assert not (tmp_path / "probes.fifo.1").exists()
+
+
+@pytest.mark.skipif(not Path("/dev/full").exists(), reason="needs /dev/full")
+def test_probe_log_failure_is_raised_not_swallowed() -> None:
+    from substation.honeypot.modbus import ProbeLogError, _ProbeLog
+
+    _, events = _run(_mbap_frame(0x03, struct.pack(">HH", 0, 1)))
+    log = _ProbeLog(Path("/dev/full"), max_bytes=0)
+    with pytest.raises(ProbeLogError, match="cannot write probe log"):
+        log.write(events[0])
+    # The failed write released the file, so the shutdown close cannot fail again.
+    log.close()
+    # serve_forever keeps serving after client OSErrors; a log failure must stop it.
+    assert not issubclass(ProbeLogError, OSError)
+
+
+def _loopback_pair() -> tuple[socket.socket, socket.socket]:
+    listener = socket.create_server(("127.0.0.1", 0))
+    with listener:
+        client = socket.create_connection(listener.getsockname())
+        server, _ = listener.accept()
+    return server, client
+
+
+def test_a_trickling_client_cannot_hold_the_listener(tmp_path: Path) -> None:
+    import threading
+    import time
+
+    from substation.honeypot.modbus import ModbusHoneypot
+
+    honeypot = ModbusHoneypot(
+        HoneypotConfig(log_path=tmp_path / "probes.jsonl", recv_timeout=5.0, connection_timeout=0.5)
+    )
+    server, client = _loopback_pair()
+    stop = threading.Event()
+
+    def trickle() -> None:
+        # One byte of a never-completed frame every 100 ms: each recv succeeds.
+        # Give up after 3 s so a regression fails the timing assertion, not the run.
+        give_up = time.monotonic() + 3.0
+        while not stop.is_set() and time.monotonic() < give_up:
+            try:
+                client.send(b"\x00")
+            except OSError:
+                return
+            time.sleep(0.1)
+        client.shutdown(socket.SHUT_WR)
+
+    thread = threading.Thread(target=trickle)
+    thread.start()
+    started = time.monotonic()
+    try:
+        honeypot._handle_connection(server, ("127.0.0.1", client.getsockname()[1]))
+        elapsed = time.monotonic() - started
+    finally:
+        stop.set()
+        thread.join()
+        server.close()
+        client.close()
+    assert 0.4 < elapsed < 2.0
+
+
+def test_config_rejects_non_positive_timeouts(tmp_path: Path) -> None:
+    for field in ("recv_timeout", "connection_timeout"):
+        config = HoneypotConfig(log_path=tmp_path / "p.jsonl", **{field: 0.0})  # type: ignore[arg-type]
+        with pytest.raises(HoneypotConfigError, match="must be > 0"):
+            config.validate()

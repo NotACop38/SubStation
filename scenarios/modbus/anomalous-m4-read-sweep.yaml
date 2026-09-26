@@ -1,0 +1,112 @@
+# =============================================================================
+# Anomalous (M4) — holding-register read sweep from a trusted HMI
+# =============================================================================
+# M4 (docs/design.md §5.1): ONE source reading an unusually large share of a
+# Modbus table on one PLC unit. The signal is address-space COVERAGE, not request
+# volume (docs/design.md §8). Here the operator HMI — a known talker, on a known
+# pair, using a known function — walks holding registers 0-1124 in maximum-size
+# 125-register reads: process-state collection and point mapping from a trusted
+# but possibly compromised host.
+#
+# Must fire M4 only:
+#   * M1 stays quiet — the sweep is read-only (no write functions).
+#   * M2 stays quiet — every function code is legal.
+#   * M3 stays quiet — one function code and one unit id; no code/unit diversity.
+#   * X1 stays quiet — hmi-1 -> plc-1 reading holding registers is part of the
+#     learned baseline. Novelty detection cannot see this; coverage can.
+# -----------------------------------------------------------------------------
+
+name: modbus-anomalous-m4-read-sweep
+description: >-
+  The operator HMI (10.0.0.10) walks holding registers 0-1124 on the PLC in
+  125-register reads, amid normal polling: about 70 distinct 16-register pages in
+  seconds. Fires M4 (read sweep); stays quiet on M1 (read-only), M2 (legal
+  codes), M3 (one code, one unit) and X1 (known talker, pair and function).
+
+protocol: modbus
+label: anomalous
+
+timing:
+  start: 0.0
+  default_interval: 0.25    # scripted collection: back-to-back reads.
+
+actors:
+  - id: hmi-1            # trusted operator HMI, the sweeping source.
+    role: hmi
+    host: 10.0.0.10
+  - id: ews-1            # engineering workstation: normal supervisory polling.
+    role: ews
+    host: 10.0.0.11
+  - id: plc-1
+    role: plc
+    host: 10.0.0.50
+    port: 502
+
+exchanges:
+  # --- normal background polling --------------------------------------------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 0.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+  - source: ews-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 1.0
+    params: { unit_id: 1, address: 40, quantity: 10 }
+
+  # --- the sweep: nine maximum-size reads over consecutive addresses (M4) ---
+  # Coverage crosses 64 pages on the ninth read (addresses 1000-1124).
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 2.0
+    params: { unit_id: 1, address: 0, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 125, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 250, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 375, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 500, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 625, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 750, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 875, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 1000, quantity: 125 }
+
+  # --- normal polling resumes ------------------------------------------------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 6.0
+    params: { unit_id: 1, address: 0, quantity: 10 }
+
+exercises:
+  fires:
+    - M4   # one source, ~70 distinct pages of one table in seconds.
+  quiet:
+    - M1   # read-only.
+    - M2   # every function code is legal.
+    - M3   # one function code, one unit id.
+    - X1   # known talker, pair and function: novelty detection stays quiet.

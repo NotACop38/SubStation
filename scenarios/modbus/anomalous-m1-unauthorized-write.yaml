@@ -1,10 +1,10 @@
 # =============================================================================
 # Anomalous (M1) — unauthorized register/coil write
 # =============================================================================
-# M1 (PRD.md §5.1): a Modbus WRITE function from a source that is NOT on the
+# M1 (docs/design.md §5.1): a Modbus WRITE function from a source that is NOT on the
 # allow-list of permitted writers (HMI/EWS), or to a unit/register outside
 # policy. This must fire M1 while staying quiet for M2 (no illegal codes) and
-# M3 (no code/unit sweep). Per PRD.md §8 the rule is allow-list-by-source, NOT
+# M3 (no code/unit sweep). Per docs/design.md §8 the rule is allow-list-by-source, NOT
 # "any write" — so the scenario keeps the legitimate HMI/EWS traffic alongside
 # the rogue writer to prove the detection discriminates.
 #
@@ -13,7 +13,7 @@
 # setpoint registers 40–49. rogue-1 (10.0.0.77) is NOT an allow-listed writer.
 # -----------------------------------------------------------------------------
 
-name: anomalous-m1-unauthorized-write
+name: modbus-anomalous-m1-unauthorized-write
 description: >-
   An unauthorized writer (10.0.0.77, not on the HMI/EWS allow-list) issues
   Modbus write functions to the PLC — a single-register setpoint write and a
@@ -79,3 +79,4 @@ exercises:
   quiet:
     - M2   # all function codes are legal Modbus writes.
     - M3   # two writes from one host is not a function-code/unit-id sweep.
+    - M4   # a few small reads; no address-space sweep.

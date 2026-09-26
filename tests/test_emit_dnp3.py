@@ -1,6 +1,6 @@
-"""Phase-3 DNP3 emission tests: one model -> matching PCAP + schema-valid JSON.
+"""DNP3 emission tests: one model -> matching PCAP + schema-valid JSON.
 
-These check the shared-model contract (PRD §6.1); native decoder tests provide
+These check the shared-model contract (docs/design.md §6.1); native decoder tests provide
 an independent check in test_dnp3_fidelity.py. We assert the JSON validates against
 the frozen schema, the hand-built
 DNP3 PCAP carries exactly one DNP3 link frame per JSON event with matching function
@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 from scapy.layers.inet import TCP
 from scapy.utils import rdpcap
+
 from substation.emit import write_artifacts
 from substation.protocols.dnp3 import Dnp3Error, dnp3_crc
 from substation.scenarios import load_scenario
@@ -366,3 +367,181 @@ exchanges:
   - {source: m, target: r, function: ColdRestart, offset: 6.0}
   - {source: m, target: r, function: DisableUnsolicited, offset: 2.0}
 """
+
+
+_BEHAVIOR = """
+name: dnp3-behavior
+protocol: dnp3
+label: benign
+timing: {{start: 1.0, default_interval: 1.0}}
+actors:
+  - {{id: master, role: master, host: 192.0.2.10}}
+  - {{id: rogue, role: master, host: 192.0.2.66}}
+  - {{id: rtu, role: outstation, host: 192.0.2.50, port: 20000}}
+exchanges:
+{exchanges}
+"""
+
+
+def _emit(tmp_path: Path, exchanges: str) -> tuple[list[dict[str, Any]], list[bytes]]:
+    path = _write_scenario(tmp_path, _BEHAVIOR.format(exchanges=exchanges))
+    result = write_artifacts(load_scenario(path), tmp_path / "out")
+    events = _json_events(result.jsonl)
+    assert list(iter_jsonl_errors(result.jsonl)) == []
+    return events, _dnp3_frames(result.pcap)
+
+
+def _app_control(frame: bytes) -> int:
+    return frame[10 + 1]  # after the link header: transport octet, then app control.
+
+
+def _link_addresses(frame: bytes) -> tuple[int, int]:
+    """(destination, source) from the link header."""
+    return int.from_bytes(frame[4:6], "little"), int.from_bytes(frame[6:8], "little")
+
+
+def test_class_objects_follow_the_function_rules(tmp_path: Path) -> None:
+    events, frames = _emit(
+        tmp_path,
+        """
+  - {source: master, target: rtu, function: DisableUnsolicited}
+  - source: master
+    target: rtu
+    function: Read
+    params: {object_type: Class 0 Data, response_object_type: 16-Bit Analog Input,
+             range_low: 0, range_high: 3}
+  - {source: master, target: rtu, function: Read, params: {object_type: Class 1 Data}}
+""",
+    )
+    disable, _, integrity, integrity_response, event_poll, event_response = events
+    assert disable["detail"]["objects"]["object_type"] == "Class 1 Data"
+    assert frames[0][10 + 3 : 10 + 6] == bytes([0x3C, 0x02, 0x06])  # g60v2, all objects
+    assert integrity["detail"]["objects"]["object_type"] == "Class 0 Data"
+    assert integrity_response["detail"]["objects"] == {
+        "function_code": "RESPONSE",
+        "object_type": "16-Bit Analog Input",
+        "object_count": 4,
+        "range_low": 0,
+        "range_high": 3,
+    }
+    assert event_poll["detail"]["objects"]["object_type"] == "Class 1 Data"
+    assert "objects" not in event_response["detail"]  # no events pending
+
+
+@pytest.mark.parametrize(
+    ("exchange", "message"),
+    [
+        (
+            "{source: master, target: rtu, function: EnableUnsolicited,"
+            " params: {object_type: Binary Input With Status}}",
+            "not valid here",
+        ),
+        (
+            "{source: master, target: rtu, function: Write, params: {object_type: Class 1 Data}}",
+            "not valid here",
+        ),
+        (
+            "{source: master, target: rtu, function: Read,"
+            " params: {object_type: Class 0 Data, range_low: 0, range_high: 3}}",
+            "response_object_type",
+        ),
+    ],
+)
+def test_invalid_object_use_is_rejected(tmp_path: Path, exchange: str, message: str) -> None:
+    with pytest.raises(Dnp3Error, match=message):
+        _emit(tmp_path, f"  - {exchange}")
+
+
+def test_application_sequences_and_unsolicited_confirmation(tmp_path: Path) -> None:
+    events, frames = _emit(
+        tmp_path,
+        """
+  - {source: master, target: rtu, function: Read}
+  - {source: master, target: rtu, function: Read}
+  - {source: rtu, target: master, function: UnsolicitedResponse}
+  - {source: rtu, target: master, function: UnsolicitedResponse}
+""",
+    )
+    names = [(e["func_name"], e["is_orig"]) for e in events]
+    assert names == [
+        ("READ", True),
+        ("RESPONSE", False),
+        ("READ", True),
+        ("RESPONSE", False),
+        ("UNSOLICITED_RESPONSE", False),
+        ("CONFIRM", True),
+        ("UNSOLICITED_RESPONSE", False),
+        ("CONFIRM", True),
+    ]
+    controls = [_app_control(frame) for frame in frames]
+    # Requests take sequences 0, 1 with FIR|FIN; responses echo them.
+    assert controls[:4] == [0xC0, 0xC0, 0xC1, 0xC1]
+    # Unsolicited: FIR|FIN|CON|UNS with its own sequence; the CONFIRM sets UNS.
+    assert controls[4:] == [0xF0, 0xD0, 0xF1, 0xD1]
+
+
+def test_link_addresses_belong_to_actors_not_connections(tmp_path: Path) -> None:
+    _, frames = _emit(
+        tmp_path,
+        """
+  - {source: master, target: rtu, function: Read}
+  - {source: rogue, target: rtu, function: ColdRestart}
+""",
+    )
+    master_request, _, rogue_request, rogue_response = frames
+    outstation = _link_addresses(master_request)[0]
+    assert _link_addresses(rogue_request)[0] == outstation  # same device address
+    assert _link_addresses(rogue_response)[1] == outstation
+    assert _link_addresses(rogue_request)[1] != _link_addresses(master_request)[1]
+
+
+def _statuses(events: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    return [
+        (e["detail"]["control"]["function_code"], e["detail"]["control"]["status_code"])
+        for e in events
+        if not e["is_orig"] and "control" in e["detail"]
+    ]
+
+
+def test_control_responses_echo_the_block_with_the_outstation_status(tmp_path: Path) -> None:
+    close = "{index_number: 2, operation_type: Pulse_On, trip_control_code: Close}"
+    events, frames = _emit(
+        tmp_path,
+        f"""
+  - {{source: master, target: rtu, function: Select, params: {close}}}
+  - {{source: master, target: rtu, function: Operate, params: {close}}}
+  - {{source: master, target: rtu, function: Operate, params: {close}}}
+  - source: master
+    target: rtu
+    function: DirectOperate
+    params: {{operation_type: Latch_On, trip_control_code: Trip}}
+""",
+    )
+    assert _statuses(events) == [
+        ("RESPONSE", "Success"),  # SELECT
+        ("RESPONSE", "Success"),  # OPERATE directly after its SELECT
+        ("RESPONSE", "No Select"),  # a second OPERATE has no select
+        ("RESPONSE", "Not Supported"),  # Trip + Latch On is not interoperable
+    ]
+    responses = [frame for frame, e in zip(frames, events, strict=True) if not e["is_orig"]]
+    # The CROB status octet is the last byte before the final block CRC.
+    assert [frame[-3] for frame in responses] == [0x00, 0x00, 0x02, 0x04]
+
+
+def test_undefined_codes_and_authentication_get_protocol_replies(tmp_path: Path) -> None:
+    events, _ = _emit(
+        tmp_path,
+        """
+  - {source: rogue, target: rtu, function: '0x22'}
+  - {source: master, target: rtu, function: AuthenticateReq}
+""",
+    )
+    probe, probe_reply, auth, auth_reply = events
+    assert (probe["func_code"], probe["func_name"], probe["action_class"]) == (
+        0x22,
+        "unknown-34",
+        "other",
+    )
+    assert probe_reply["detail"]["iin"] == 0x0001  # IIN2.0: function not supported
+    assert auth["func_name"] == "AUTHENTICATE_REQ"
+    assert (auth_reply["func_code"], auth_reply["func_name"]) == (0x83, "AUTHENTICATE_RESP")

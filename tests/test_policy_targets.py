@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+
 from substation.detect.registry import load_registry
 from substation.detect.sigma_eval import load_rule, matching_indices
 

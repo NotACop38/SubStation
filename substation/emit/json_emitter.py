@@ -1,7 +1,7 @@
 """JSON event-log emitter: envelope records -> schema-valid ``.jsonl``.
 
 Writes pre-built normalized-envelope records (one per protocol message) to
-newline-delimited JSON (PRD §6.3). The per-protocol mapping from a scenario event to
+newline-delimited JSON (docs/design.md §6.3). The per-protocol mapping from a scenario event to
 its envelope + ICSNPP-aligned ``detail`` lives in each protocol module
 (``modbus.event_to_dict`` / ``dnp3.event_to_dict``, ``docs/schema.md``); this writer
 is protocol-agnostic so every protocol shares one schema-validated write path.

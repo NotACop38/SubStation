@@ -5,9 +5,10 @@ Usage::
     python -m substation.schema [PATH ...]
 
 Each PATH may be a ``.jsonl`` file or a directory (searched recursively for
-``*.jsonl``). With no PATH, the committed golden events under
-``tests/data/events/`` are validated — this is what ``make ci`` runs so any
-emitted event that violates the schema fails the pipeline (`PRD.md` §6.3).
+``*.jsonl``; a directory without any is an error). With no PATH in a repository
+checkout, the committed golden events under ``tests/data/events/`` are validated —
+this is what ``make ci`` runs so any emitted event that violates the schema fails
+the pipeline (docs/design.md §6.3). Outside a checkout a PATH is required.
 
 Exit code is 0 when every event validates, 1 otherwise.
 """
@@ -24,23 +25,37 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _DEFAULT_TARGETS = (_REPO_ROOT / "tests" / "data" / "events",)
 
 
-def _gather(targets: Sequence[Path]) -> list[Path]:
+def _gather(targets: Sequence[Path]) -> tuple[list[Path], list[Path]]:
+    """Return (files to validate, named directories that hold no ``.jsonl`` files)."""
     files: list[Path] = []
+    empty: list[Path] = []
     for target in targets:
         if target.is_dir():
-            files.extend(sorted(target.rglob("*.jsonl")))
+            found = sorted(target.rglob("*.jsonl"))
+            files.extend(found)
+            if not found:
+                empty.append(target)
         else:
             files.append(target)
-    return files
+    return files, empty
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    targets = [Path(a) for a in args] if args else list(_DEFAULT_TARGETS)
+    if args:
+        targets = [Path(a) for a in args]
+    elif all(target.is_dir() for target in _DEFAULT_TARGETS):
+        targets = list(_DEFAULT_TARGETS)
+    else:
+        print("schema: pass .jsonl files or directories to validate", file=sys.stderr)
+        return 1
 
-    files = _gather(targets)
-    if not files:
-        print("schema: no .jsonl files to validate", file=sys.stderr)
+    files, empty = _gather(targets)
+    for directory in empty:
+        print(f"schema: no .jsonl files under {directory}", file=sys.stderr)
+    if empty or not files:
+        if not empty:
+            print("schema: no .jsonl files to validate", file=sys.stderr)
         return 1
 
     schema = load_event_schema()

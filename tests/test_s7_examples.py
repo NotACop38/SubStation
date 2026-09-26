@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+
 from scripts import s7_examples
 
 ROOT = Path(__file__).resolve().parents[1]

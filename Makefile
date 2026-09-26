@@ -1,17 +1,18 @@
 # Substation — pipeline single source of truth.
 #
-# CI/CD for this project is LOCAL and Codex-driven. There is NO cloud CI and
-# NO GitHub Actions. `make ci` is the gate; the git pre-push hook (see `make
-# hooks`) runs it before every push. Keep it that way.
+# CI/CD for this project is LOCAL. There is NO cloud CI and NO GitHub Actions.
+# `make ci` is the gate; the git pre-push hook (see `make hooks`) runs it before
+# every push. Keep it that way.
 
-PY ?= python3
+# The project virtualenv when present, else python3. Override with PY=...
+PY ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 PKG := substation
-SRC := substation tests
+SRC := substation tests scripts setup.py
 
 .DEFAULT_GOAL := help
 
 .PHONY: help check-python dev ci format format-check lint type test schema coverage-build \
-        coverage-check security demo demo-gif demo-cast verify verify-sigma release hooks clean corpus lock
+        coverage-check security demo verify verify-image verify-sigma release hooks clean corpus lock
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -88,14 +89,11 @@ corpus: check-python ## Check attributed corpus hashes and labeled detection met
 verify-sigma: check-python ## Compare authored/exported Sigma hits with the official SQLite backend
 	$(PY) scripts/verify/sigma_backend.py
 
-demo-gif: ## Render the embedded demo GIF headlessly (deterministic; no TTY needed)
-	$(PY) scripts/render-demo-gif.py
-
-demo-cast: ## Record `make demo` to an animated SVG/GIF (asciinema + agg; needs a TTY)
-	scripts/record-demo.sh
-
-verify: check-python ## Tier-2 validation: real Zeek/ICSNPP fidelity + Zeek/Suricata detections (Docker)
+verify: check-python ## Tier-2 validation: Zeek/ICSNPP field checks + Zeek rules (Docker; builds the S7 image once)
 	$(PY) scripts/verify/run.py $(VERIFY_ARGS)
+
+verify-image: check-python ## Build the Tier-2 Zeek image with the pinned, patched ICSNPP S7comm plugin
+	$(PY) scripts/verify/build_s7.py --docker
 
 release: check-python ## Cut a local release: gate -> bump + artifacts -> build -> commit + tag
 	$(PY) scripts/release/run.py $(RELEASE_ARGS)
@@ -103,7 +101,7 @@ release: check-python ## Cut a local release: gate -> bump + artifacts -> build 
 ## ---------------------------------------------------------------------------
 ## Local "continuous" gate
 ## ---------------------------------------------------------------------------
-hooks: check-python ## Install the git pre-push hook that runs `make ci`
+hooks: check-python ## Install the pre-push hook that runs `make ci` with this PY
 	$(PY) scripts/install_hooks.py
 
 clean: ## Remove caches and build artifacts

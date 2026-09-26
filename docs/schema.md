@@ -1,8 +1,8 @@
 # Event-log JSON schema
 
-**Status:** **FROZEN for Modbus** (Phase 1), **DNP3** (Phase 3) **and S7** (Phase 4).
+**Status:** **FROZEN** for Modbus, DNP3 and S7.
 This document is the binding contract every emitter, detection, and test binds to
-(`PRD.md` §6.3).
+(`docs/design.md` §6.3).
 
 The machine-readable contract is
 [`substation/schema/event-log.schema.json`](../substation/schema/event-log.schema.json)
@@ -30,7 +30,7 @@ Every event is a small **normalized envelope** (uniform across all three
 protocols, so cross-protocol logic like X1 and shared Sigma rules work uniformly)
 wrapping a per-protocol **`detail`** object whose field names mirror **Zeek +
 ICSNPP** so detections authored here transfer to production Zeek deployments with
-minimal change (`PRD.md` §6.3).
+minimal change (`docs/design.md` §6.3).
 
 > **VERIFY provenance.** The Modbus `detail` field names below are taken from the
 > ICSNPP Modbus parser, **not** memory — `cisagov/icsnpp-modbus`
@@ -49,12 +49,12 @@ minimal change (`PRD.md` §6.3).
 | `proto`        | enum                | yes | `modbus` \| `dnp3` \| `s7comm`. Selects the `detail` shape. |
 | `is_orig`      | boolean             | yes | ICSNPP `is_orig`: true when the event is from the connection originator (request side). |
 | `direction`    | enum                | yes | `request` \| `response`, derived from `is_orig` (true → request). The schema **enforces** this agreement — a line where `direction` and `is_orig` disagree fails the gate. |
-| `func_code`    | integer 0–255       | yes | Raw one-byte function/command code. Modbus exception responses carry `function_code \| 0x80`. |
-| `func_name`    | string (non-empty)  | yes | Decoded, normalized function name (Modbus: Zeek `Modbus::function_codes[func_code]`, `_EXCEPTION` suffix on exceptions). |
+| `func_code`    | integer 0–255       | yes | Raw one-byte function/command code. Modbus exception responses carry `function_code \| 0x80`; S7comm-plus events carry the opcode (`0x31` request, `0x32` response) and COTP events the PDU type (`0x0e` CR, `0x0d` CC). |
+| `func_name`    | string (non-empty)  | yes | Decoded, normalized function name. Modbus follows Zeek's `build_func`: `Modbus::function_codes[func_code]`, with `_EXCEPTION` appended on an exception to a defined function; an exception to an undefined code N is `unknown-(N+128)` (`unknown-194` answers `unknown-66`). S7comm-plus carries the function name (e.g. `Explore`). |
 | `action_class` | enum                | yes | Normalized verb: `read` \| `write` \| `control` \| `diagnostic` \| `scan_indicator` \| `other`. Drives X1 + shared logic. |
 | `is_exception` | boolean             | yes | True when this event is an error/exception response. |
 | `error`        | string \| null      | no  | Decoded exception/error name when `is_exception` (Modbus mirrors `detail.exception_code`, e.g. `ILLEGAL_DATA_ADDRESS`); null/absent otherwise. |
-| `observation`  | object              | no  | Imported Modbus transaction provenance: source, kind, physical line and timestamp semantics; see [import guide](independent-validation.md). |
+| `observation`  | object              | no  | Imported Modbus transaction provenance: source, kind, physical line, timestamp semantics and, when the sensor cut a value vector, `truncated_values`; see the [deployment guide](deployment.md). |
 | `detail`       | object              | yes | Per-protocol detail (constrained per `proto`). |
 
 The envelope rejects unknown top-level properties (`additionalProperties: false`)
@@ -153,11 +153,11 @@ the parent `detail`):
 | `func_name`      | ICSNPP `func` (Zeek `Modbus::function_codes`). |
 | `is_exception`   | true when `func_name` ends in `_EXCEPTION` / `detail.exception_code` present. |
 | `error`          | decoded `detail.exception_code`. |
+| `conn`           | ICSNPP `id`. |
 
 When `is_exception` is true on a Modbus event the schema **requires** a non-null
 `error` **and** `detail.exception_code` (M2 keys on the decoded name, so neither
 may be absent on an exception event).
-| `conn`           | ICSNPP `id`. |
 
 ### `action_class` mapping (Modbus)
 
@@ -167,10 +167,10 @@ to special-case every code:
 | `action_class`   | Modbus functions |
 | ---------------- | ---------------- |
 | `read`           | READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS, READ_FILE_RECORD, READ_FIFO_QUEUE |
-| `write`          | WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, MASK_WRITE_REGISTER, READ_WRITE_MULTIPLE_REGISTERS, WRITE_FILE_RECORD |
-| `diagnostic`     | DIAGNOSTICS (`0x08`), READ_EXCEPTION_STATUS, GET_COMM_EVENT_COUNTER, GET_COMM_EVENT_LOG, REPORT_SLAVE_ID, ENCAP_INTERFACE_TRANSPORT / read-device-identification, plus legacy program/poll/report function codes Zeek defines but the simulator does not encode |
-| `control`        | (none for Modbus; used by DNP3/S7 run-state controls.) |
-| `scan_indicator` | not intrinsic to a single code — set by the scenario/emitter to mark sweep/enumeration telemetry for M3. |
+| `write`          | WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, MASK_WRITE_REGISTER, READ_WRITE_MULTIPLE_REGISTERS, WRITE_FILE_RECORD; the programming functions (PROGRAM_484, PROGRAM_584_984, PROGRAM_884_U84, PROGRAM_CONCEPT, PROGRAM_UNITY, PROGRAM_584_984_2) and FIRMWARE_REPLACEMENT, which change controller logic |
+| `diagnostic`     | DIAGNOSTICS (`0x08`), READ_EXCEPTION_STATUS, GET_COMM_EVENT_COUNTER, GET_COMM_EVENT_LOG, REPORT_SLAVE_ID, ENCAP_INTERFACE_TRANSPORT / read-device-identification, POLL_484, POLL_584_984, MULTIPLE_FUNCTION_CODES, OBJECT_MESSAGING, REPORT_LOCAL_ADDRESS |
+| `control`        | RESET_COMM_LINK_884_U84 (a device-state change, like a restart) |
+| `scan_indicator` | reserved: accepted by the schema, never emitted. Sweeps are recognized by the stateful rules (M3, M4, D4, S3), not labeled per event. |
 | `other`          | codes absent from Zeek's Modbus function table (`unknown-N`), including reserved/undefined codes surfaced for M2. |
 
 > Sub-VERIFY at extension time: confirm exact `Modbus::function_codes` spellings
@@ -194,7 +194,7 @@ record fields); unknown fields are rejected.
 | `fc_request` | string          | `dnp3.log` `fc_request` — request function name (`DNP3::function_codes[fc]`); mirrors envelope `func_name` on requests. |
 | `fc_reply`   | string          | `dnp3.log` `fc_reply` — reply function name; mirrors envelope `func_name` on responses (`RESPONSE`/`UNSOLICITED_RESPONSE`). |
 | `iin`        | integer 0–65535 | `dnp3.log` `iin` — response internal-indication bits (2-byte field). |
-| `control`    | object          | `dnp3_control.log` CROB/PCB sub-shape (SELECT/OPERATE) — see below. |
+| `control`    | object          | `dnp3_control.log` CROB/PCB sub-shape on SELECT, OPERATE and DIRECT_OPERATE requests and on the responses that echo them — see below. |
 | `objects`    | object          | `dnp3_objects.log` object-header sub-shape (READ/RESPONSE) — see below. |
 
 The IIN integer preserves Zeek's logged representation: the first wire octet is
@@ -228,14 +228,15 @@ unsolicited responses and request functions filtered out of the native log:
 | `range_low`     | integer 0–65535 |
 | `range_high`    | integer 0–65535 |
 
-> **Single-source / no-drift (PR #9 review).** `object_type` must be one of the
-> verified ICSNPP `dnp3_objects` device-type names the simulator supports
+> **Single source, no drift.** `object_type` must be one of the verified ICSNPP
+> `dnp3_objects` device-type names the simulator supports
 > (`substation.protocols.dnp3.OBJECT_TYPES`: `Binary Input With Status`,
 > `Binary Output`, `16-Bit Binary Counter`, `32-Bit Analog Input`,
-> `16-Bit Analog Input`, `16-Bit Analog Output Block`, `32-Bit Analog Output Block`).
+> `16-Bit Analog Input`, `16-Bit Analog Output Block`, `32-Bit Analog Output Block`,
+> and the class objects `Class 0 Data` through `Class 3 Data`).
 > The simulator derives the DNP3 object **group/variation**
 > for the PCAP from that same string, so a Zeek decode of the PCAP resolves the
-> identical `object_type` — both outputs use this mapping, with independent parity checks required (PRD §6.1). On a response
+> identical `object_type` — both outputs use this mapping, with independent parity checks required (docs/design.md §6.1). On a response
 > `object_count` **must equal** the range span (`range_high − range_low + 1`); an
 > inconsistent count is rejected at build time rather than emitted. Ranges and
 > control `index_number` are carried on the wire as 2-byte fields, so values up to
@@ -285,7 +286,7 @@ Modeled on ICSNPP-S7comm's **`s7comm.log`** (the `S7COMM` record) plus four
 sub-objects for the COTP and the per-function extended logs: **`cotp.log`**
 (`detail.cotp`), **`s7comm_read_szl.log`** (`detail.read_szl`),
 **`s7comm_upload_download.log`** (`detail.upload_download`) and **`s7comm_plus.log`**
-(`detail.plus`). S7comm/-plus have **no open specification** (`PRD.md` §9), so the
+(`detail.plus`). S7comm/-plus have **no open specification** (`docs/design.md` §9), so the
 field names come from the ICSNPP parser and the Wireshark dissector. All fields are
 **optional** (mirroring the parser's optional record fields); unknown fields are
 rejected.
@@ -341,7 +342,7 @@ rejected.
 | `function_name`          | string          |
 | `function_status`        | string (hex)    |
 | `session_id`             | integer 0–2³²−1 |
-| `blocklength`            | integer 0–65535 |
+| `blocklength`            | integer 0–2³¹−1 (the patched parser's range) |
 | `filename`               | string          |
 | `block_type`             | string (`s7comm_block_types`, e.g. `Data Block`) |
 | `block_number`           | string          |
@@ -398,11 +399,11 @@ each in the `.jsonl`):
 More live, validated examples:
 [`tests/data/events/modbus/valid.jsonl`](../tests/data/events/modbus/valid.jsonl).
 
-A DNP3 operate command and an unauthorized cold-restart (one line each):
+A DNP3 operate command from the baseline and an unauthorized cold restart from the D1 scenario (one line each):
 
 ```json
-{"ts": 1717372802.0, "uid": "COt4RSFMt8R6TYXLdv", "conn": {"orig_h": "10.0.1.10", "orig_p": 49152, "resp_h": "10.0.1.50", "resp_p": 20000}, "proto": "dnp3", "is_orig": true, "direction": "request", "func_code": 4, "func_name": "OPERATE", "action_class": "control", "is_exception": false, "error": null, "detail": {"fc_request": "OPERATE", "control": {"block_type": "Control Relay Output Block", "function_code": "OPERATE", "index_number": 2, "trip_control_code": "Close", "operation_type": "Latch On", "clear_bit": false, "execute_count": 1, "on_time": 0, "off_time": 0}}}
-{"ts": 1717372806.0, "uid": "COt4RSFMt8R6TYXLdv", "conn": {"orig_h": "10.0.1.77", "orig_p": 49153, "resp_h": "10.0.1.50", "resp_p": 20000}, "proto": "dnp3", "is_orig": true, "direction": "request", "func_code": 13, "func_name": "COLD_RESTART", "action_class": "control", "is_exception": false, "error": null, "detail": {"fc_request": "COLD_RESTART"}}
+{"ts": 8.0, "uid": "COt4RSFMt8R6TYXLdv", "conn": {"orig_h": "10.0.1.10", "orig_p": 49152, "resp_h": "10.0.1.50", "resp_p": 20000}, "proto": "dnp3", "is_orig": true, "direction": "request", "func_code": 4, "func_name": "OPERATE", "action_class": "control", "is_exception": false, "error": null, "detail": {"fc_request": "OPERATE", "control": {"block_type": "Control Relay Output Block", "function_code": "OPERATE", "index_number": 2, "trip_control_code": "Close", "operation_type": "Pulse On", "clear_bit": false, "execute_count": 1, "on_time": 1000, "off_time": 0}}}
+{"ts": 4.0, "uid": "CxAf1I66JHrrJOU0uq", "conn": {"orig_h": "10.0.1.77", "orig_p": 49153, "resp_h": "10.0.1.50", "resp_p": 20000}, "proto": "dnp3", "is_orig": true, "direction": "request", "func_code": 13, "func_name": "COLD_RESTART", "action_class": "control", "is_exception": false, "error": null, "detail": {"fc_request": "COLD_RESTART"}}
 ```
 
 More live, validated DNP3 examples:
@@ -443,17 +444,16 @@ python -m substation.schema path/to/run.jsonl # validate one file
 ```
 
 Any event that violates the schema makes the step — and therefore `make ci` —
-fail (`PRD.md` §6.3). Validation is **dependency-free**: `substation.schema` ships
+fail (`docs/design.md` §6.3). Validation is **dependency-free**: `substation.schema` ships
 a small validator for the JSON-Schema subset this contract uses, without adding a JSON Schema library. Other Tier-1 components still require
 scapy, pySigma and PyYAML. The schema file is standard
 draft-2020-12 and also works with any external validator (e.g. `jsonschema`).
 
 ## Protocol coverage
 
-All three v1 protocols are now frozen: Modbus (Phase 1), DNP3 (Phase 3) and S7
-(Phase 4) `detail` shapes are constrained per `proto` above and verified against the
-current ICSNPP parser fields (spikes 01, 04, 06). The envelope is uniform across all
-three.
+All three protocols are frozen: the Modbus, DNP3 and S7 `detail` shapes are
+constrained per `proto` above and verified against the pinned ICSNPP parser fields
+(spikes 01, 04, 06). The envelope is uniform across all three.
 
 ## Sigma offline evaluation (recorded)
 
@@ -462,7 +462,7 @@ walking the pySigma-parsed condition AST in pytest — no SIEM required
 ([`spikes/03-sigma-offline-evaluation.md`](spikes/03-sigma-offline-evaluation.md)).
 Rules target the Substation contract. Native Zeek logs must be normalized and
 joined where necessary before evaluating these rules. The bounded Modbus importer
-is described in the [validation guide](independent-validation.md). DNP3/S7 sensor
+is described in the [deployment guide](deployment.md). DNP3/S7 sensor
 adapters remain unqualified. The [SQLite fixture comparison](spikes/10-sigma-backend-qualification.md)
 records tested hit equivalence and known NULL/expression-depth failures; it is
 not a SIEM deployment qualification.

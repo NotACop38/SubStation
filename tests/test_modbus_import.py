@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from substation.cli import main
 from substation.schema import SchemaValidationError, validate_event
 
@@ -184,3 +185,102 @@ def test_unknown_functions_without_direction_are_rejected(tmp_path: Path) -> Non
     source.write_text("\n".join(map(json.dumps, [request, response])))
     with pytest.raises(SchemaValidationError, match="unsupported function"):
         load_modbus_log(source)
+
+
+def test_sensor_truncated_vectors_keep_the_transaction(tmp_path: Path) -> None:
+    from substation.ingest.modbus import load_modbus_log
+
+    # Zeek logs at most 100 elements per vector by default; a legal 125-register
+    # read then logs quantity 125 with only 100 response values.
+    read = sensor_record(quantity=125, response_values=list(range(100)))
+    write = sensor_record(
+        func="WRITE_MULTIPLE_REGISTERS",
+        quantity=110,
+        request_values=[7] * 100,
+        response_values=[],
+        tid=18,
+    )
+    source = tmp_path / "sensor.log"
+    source.write_text("\n".join(map(json.dumps, [read, write])) + "\n")
+    events = load_modbus_log(source)
+    for event in events:
+        validate_event(event)
+        assert event["detail"]["quantity"] in {125, 110}
+    read_response, write_request = events[1], events[2]
+    assert "response_values" not in read_response["detail"]
+    assert read_response["observation"]["truncated_values"] == ["response_values"]
+    assert "request_values" not in write_request["detail"]
+    assert write_request["observation"]["truncated_values"] == ["request_values"]
+    assert "truncated_values" not in events[0]["observation"]
+
+
+def test_truncation_is_recognized_only_at_the_sensor_limit(tmp_path: Path) -> None:
+    from substation.ingest.modbus import load_modbus_log
+
+    source = tmp_path / "sensor.log"
+    source.write_text(json.dumps(sensor_record(quantity=60, response_values=[0] * 50)) + "\n")
+    with pytest.raises(SchemaValidationError, match="length differs"):
+        load_modbus_log(source)
+    events = load_modbus_log(source, container_limit=50)
+    assert events[1]["observation"]["truncated_values"] == ["response_values"]
+
+
+def test_unprojectable_rows_are_skipped_so_they_cannot_hide_a_write(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    unauthorized = sensor_record(
+        func="WRITE_SINGLE_REGISTER",
+        address=5,
+        quantity=1,
+        request_values=[1],
+        response_values=[1],
+        **{"id.orig_h": "192.0.2.77", "id.resp_h": "10.0.0.50"},
+    )
+    unanswered = sensor_record(tid=19, matched=False)
+    vendor = sensor_record(tid=20, func="ENCAP_INTERFACE_TRANSPORT")
+    source = tmp_path / "sensor.log"
+    source.write_text("\n".join(map(json.dumps, [unauthorized, unanswered, vendor])) + "\n")
+    events = tmp_path / "events.jsonl"
+
+    assert main(["import-modbus", str(source), "--strict", "--out", str(events)]) == 1
+    assert not events.exists()
+
+    assert main(["import-modbus", str(source), "--out", str(events)]) == 0
+    err = capsys.readouterr().err
+    assert "skipped 2 unprojectable row(s)" in err
+    assert "1 unmatched transaction" in err
+    assert len(events.read_text().splitlines()) == 2
+    assert main(["detect", str(events), "--detection", "M1"]) == 0
+    hits = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [hit["event_index"] for hit in hits] == [0]
+
+
+def test_a_log_of_only_unprojectable_rows_imports_as_empty(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "sensor.log"
+    source.write_text(json.dumps(sensor_record(matched=False)) + "\n")
+    assert main(["import-modbus", str(source)]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "skipped 1 unprojectable row(s)" in captured.err
+
+
+def test_import_output_keeps_ordinary_or_existing_permissions(tmp_path: Path) -> None:
+    import os
+    import stat
+
+    source = tmp_path / "sensor.log"
+    source.write_text(json.dumps(sensor_record()) + "\n")
+    fresh, existing = tmp_path / "fresh.jsonl", tmp_path / "existing.jsonl"
+    existing.write_text("old\n")
+    existing.chmod(0o640)
+    previous = os.umask(0o022)
+    try:
+        assert main(["import-modbus", str(source), "--out", str(fresh)]) == 0
+        assert main(["import-modbus", str(source), "--out", str(existing)]) == 0
+    finally:
+        os.umask(previous)
+    assert stat.S_IMODE(fresh.stat().st_mode) == 0o644
+    assert stat.S_IMODE(existing.stat().st_mode) == 0o640
+    assert existing.read_text() == fresh.read_text()

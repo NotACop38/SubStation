@@ -1,25 +1,31 @@
 """Tier-1 Sigma offline evaluator: run a Sigma rule directly over event dicts.
 
-This is the mechanism the Phase-0 spike confirmed
-(`docs/spikes/03-sigma-offline-evaluation.md`): pySigma already parses a rule's
-YAML into a typed boolean condition tree (``ConditionAND``/``OR``/``NOT`` with
+This is the mechanism the Sigma evaluation spike confirmed
+(`docs/spikes/03-sigma-offline-evaluation.md`): pySigma parses a rule's YAML into
+a typed boolean condition tree (``ConditionAND``/``OR``/``NOT`` with
 ``ConditionFieldEqualsValueExpression`` leaves); a small recursive evaluator walks
-that tree over each JSON event. Zero SIEM, in-process, pure-Python — exactly the
-Tier-1 headline path (PRD.md §6.2). Rules use portable Sigma constructs. A SIEM
-deployment still needs a tested backend, field normalization and site policy;
-this evaluator is a limited subset.
+that tree over each JSON event. Zero SIEM, in-process, pure Python — the Tier-1
+path (docs/design.md §6.2). A SIEM deployment still needs a tested backend, field
+normalization and site policy; this evaluator is a deliberate subset.
 
-Scope: plain field equality and numeric compare modifiers (``|gt`` / ``|gte`` /
-``|lt`` / ``|lte`` / ``|neq``) with dotted-path lookup into the normalized
-envelope (``conn.orig_h``, ``detail.unit``, …). Multi-value fields expand by
-pySigma into an OR of leaves. This covers the Modbus/DNP3/S7 Sigma slice.
-Anything the walk does not understand — value wildcards, keyword-only searches,
-correlation rules — raises :class:`SigmaEvalError` rather than silently
-mis-evaluating (spike 03 "Scope / follow-ups").
+Supported: field equality and the numeric comparison modifiers ``|gt``, ``|gte``,
+``|lt`` and ``|lte``, with dotted-path lookup into the envelope (``conn.orig_h``,
+``detail.unit``, ...), boolean logic, and ``1 of``/``all of`` selections (pySigma
+expands those). Equality is typed, as in the SQLite backend the project compares
+against: a quoted rule value matches only string fields (case-insensitively unless
+``|cased``), an unquoted number only numeric fields, a boolean only booleans. A
+missing field never matches, so ``not`` of a missing field is true.
+
+Everything else — value wildcards, ``|expand`` placeholders, timestamp-part
+modifiers, regular expressions, CIDR, field references, null, keyword searches
+and correlation rules — is rejected with :class:`SigmaEvalError` when the rule is
+parsed, before any event is evaluated.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -33,40 +39,60 @@ from sigma.conditions import (
     ConditionOR,
 )
 from sigma.exceptions import SigmaError
+from sigma.rule import SigmaRule
 from sigma.types import (
     SigmaBool,
     SigmaCasedString,
     SigmaCompareExpression,
     SigmaNumber,
     SigmaString,
+    SigmaTimestampPart,
 )
 
 from substation._yaml import safe_load_strict
 
-__all__ = ["SigmaEvalError", "load_rule", "parse_rule", "matching_indices"]
+__all__ = ["ParsedRule", "SigmaEvalError", "load_rule", "parse_rule", "matching_indices"]
 
 _COMPARE_OPS = SigmaCompareExpression.CompareOperators
 
 
 class SigmaEvalError(ValueError):
-    """Raised when a rule uses a construct the Tier-1 evaluator does not support."""
+    """Raised when a rule is invalid or uses a construct the evaluator does not support."""
 
 
-def parse_rule(rule_yaml: str) -> Any:
-    """Parse Sigma YAML text into a single pySigma ``SigmaRule``."""
+@dataclass(frozen=True, slots=True, eq=False)
+class ParsedRule:
+    """A parsed Sigma rule and its validated condition trees."""
+
+    sigma: SigmaRule
+    conditions: tuple[Any, ...]
+
+
+def parse_rule(rule_yaml: str) -> ParsedRule:
+    """Parse Sigma YAML text holding exactly one detection rule.
+
+    Conditions are parsed and every leaf is checked here, so an unsupported or
+    malformed rule fails before it is applied to any event.
+    """
     try:
         # pySigma's default YAML loader silently accepts duplicate selections.
         safe_load_strict(rule_yaml)
         rules = SigmaCollection.from_yaml(rule_yaml).rules
-    except (yaml.YAMLError, SigmaError) as exc:
+        if len(rules) != 1:
+            raise SigmaEvalError(f"expected exactly one rule, found {len(rules)}")
+        [rule] = rules
+        if not isinstance(rule, SigmaRule):
+            raise SigmaEvalError("correlation rules are not supported by the Tier-1 evaluator")
+        conditions = tuple(parsed.parse() for parsed in rule.detection.parsed_condition)
+    except (yaml.YAMLError, SigmaError, RecursionError) as exc:
         raise SigmaEvalError(f"invalid Sigma rule: {exc}") from exc
-    if len(rules) != 1:
-        raise SigmaEvalError(f"expected exactly one rule, found {len(rules)}")
-    return rules[0]
+    for node in conditions:
+        _validate_node(node)
+    return ParsedRule(sigma=rule, conditions=conditions)
 
 
-def load_rule(path: str | Path) -> Any:
-    """Load and parse a Sigma rule file into a single pySigma ``SigmaRule``.
+def load_rule(path: str | Path) -> ParsedRule:
+    """Load and parse a Sigma rule file.
 
     Cache by file content so edits in a long-lived process take effect, even
     when the path, size or filesystem timestamp is unchanged.
@@ -75,7 +101,7 @@ def load_rule(path: str | Path) -> Any:
 
 
 @lru_cache(maxsize=128)
-def _parse_rule_cached(rule_yaml: str) -> Any:
+def _parse_rule_cached(rule_yaml: str) -> ParsedRule:
     return parse_rule(rule_yaml)
 
 
@@ -91,111 +117,89 @@ def _validate_node(node: Any) -> None:
     if isinstance(value, SigmaString):
         if value.contains_special():
             raise SigmaEvalError(f"field {node.field!r}: value wildcards are not supported")
-    elif not isinstance(value, (SigmaBool, SigmaNumber, SigmaCompareExpression)):
+        if value.contains_placeholder():
+            raise SigmaEvalError(f"field {node.field!r}: |expand placeholders are not supported")
+    elif isinstance(value, SigmaTimestampPart):
+        raise SigmaEvalError(f"field {node.field!r}: timestamp-part modifiers are not supported")
+    elif isinstance(value, SigmaCompareExpression):
+        if value.op not in (_COMPARE_OPS.GT, _COMPARE_OPS.GTE, _COMPARE_OPS.LT, _COMPARE_OPS.LTE):
+            raise SigmaEvalError(f"field {node.field!r}: unsupported comparison {value.op!r}")
+    elif not isinstance(value, (SigmaBool, SigmaNumber)):
         raise SigmaEvalError(
             f"field {node.field!r}: unsupported leaf value type {type(value).__name__}"
         )
 
 
-def _lookup(event: dict[str, Any], dotted: str) -> Any:
-    """Resolve a dotted field path against the event dict; ``None`` if absent."""
+def _lookup(event: Mapping[str, Any], dotted: str) -> Any:
+    """Resolve a dotted field path against the event; ``None`` if absent."""
     cur: Any = event
     for part in dotted.split("."):
-        if not isinstance(cur, dict) or part not in cur:
+        if not isinstance(cur, Mapping) or part not in cur:
             return None
         cur = cur[part]
     return cur
 
 
-def _numeric_actual(actual: Any) -> int | float | None:
-    """Return a non-bool number from ``actual``, else ``None``."""
-    if isinstance(actual, bool) or not isinstance(actual, (int, float)):
-        return None
-    return int(actual) if isinstance(actual, int) else float(actual)
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _compare_matches(actual: Any, expr: SigmaCompareExpression) -> bool:
-    """Evaluate a Sigma numeric compare modifier (``|gte``, ``|lte``, …)."""
-    number = _numeric_actual(actual)
-    if number is None:
+    """Evaluate a numeric comparison modifier (``|gte``, ``|lte``, ...)."""
+    if not _is_number(actual):
         return False
-    bound_raw = expr.number.to_plain()
-    if isinstance(bound_raw, bool) or not isinstance(bound_raw, (int, float)):
-        raise SigmaEvalError(f"compare modifier bound is not numeric: {bound_raw!r}")
-    bound: int | float = bound_raw
+    bound = expr.number.to_plain()
+    if not _is_number(bound):
+        raise SigmaEvalError(f"comparison bound is not numeric: {bound!r}")
     op = expr.op
     if op is _COMPARE_OPS.GTE:
-        return bool(number >= bound)
+        return bool(actual >= bound)
     if op is _COMPARE_OPS.LTE:
-        return bool(number <= bound)
+        return bool(actual <= bound)
     if op is _COMPARE_OPS.GT:
-        return bool(number > bound)
-    if op is _COMPARE_OPS.LT:
-        return bool(number < bound)
-    if op is _COMPARE_OPS.NEQ:
-        return bool(number != bound)
-    raise SigmaEvalError(f"unsupported compare operator {op!r}")
+        return bool(actual > bound)
+    return bool(actual < bound)  # LT; others are rejected by _validate_node.
 
 
-def _leaf_matches(node: Any, event: dict[str, Any]) -> bool:
-    """Evaluate a single ``field == value`` (or compare-modifier) leaf."""
+def _leaf_matches(node: Any, event: Mapping[str, Any]) -> bool:
+    """Evaluate one ``field == value`` (or comparison) leaf with typed equality."""
     actual = _lookup(event, node.field)
-    if actual is None:
-        return False
     value = node.value
     if isinstance(value, SigmaCompareExpression):
         return _compare_matches(actual, value)
     if isinstance(value, SigmaBool):
-        # bool is an int subclass; require an actual boolean on both sides so a
-        # 0/1 integer field never matches a true/false rule value by coincidence.
-        return isinstance(actual, bool) and actual == value.to_plain()
+        return isinstance(actual, bool) and actual is value.to_plain()
     if isinstance(value, SigmaNumber):
-        return (
-            isinstance(actual, (int, float))
-            and not isinstance(actual, bool)
-            and actual == value.to_plain()
-        )
-    if isinstance(value, SigmaString):
-        if value.contains_special():
-            raise SigmaEvalError(
-                f"field {node.field!r}: value wildcards/modifiers are not supported by the "
-                "Tier-1 evaluator (spike 03 follow-up)"
-            )
-        # A boolean field never equals a string token; compare other scalars as text.
-        if isinstance(actual, bool) or not isinstance(actual, (str, int, float)):
-            return False
-        expected = str(value.to_plain())
-        if isinstance(value, SigmaCasedString):
-            return str(actual) == expected
-        return str(actual).casefold() == expected.casefold()
-    raise SigmaEvalError(
-        f"field {node.field!r}: unsupported leaf value type {type(value).__name__}"
-    )
+        return _is_number(actual) and bool(actual == value.to_plain())
+    if not isinstance(actual, str):
+        return False
+    # Validated plain strings hold only literal parts; joining them keeps escaped
+    # wildcard characters literal (to_plain() would re-add the backslash).
+    expected = "".join(part for part in value.s if isinstance(part, str))
+    if isinstance(value, SigmaCasedString):
+        return actual == expected
+    return actual.casefold() == expected.casefold()
 
 
-def _node_matches(node: Any, event: dict[str, Any]) -> bool:
-    """Recursively evaluate a parsed Sigma condition node against one event."""
+def _node_matches(node: Any, event: Mapping[str, Any]) -> bool:
+    """Recursively evaluate a validated condition node against one event."""
     if isinstance(node, ConditionAND):
         return all(_node_matches(arg, event) for arg in node.args)
     if isinstance(node, ConditionOR):
         return any(_node_matches(arg, event) for arg in node.args)
     if isinstance(node, ConditionNOT):
         return not _node_matches(node.args[0], event)
-    if isinstance(node, ConditionFieldEqualsValueExpression):
-        return _leaf_matches(node, event)
-    raise SigmaEvalError(
-        f"unsupported condition node {type(node).__name__} "
-        "(Tier-1 evaluator handles AND/OR/NOT + field-equals leaves only)"
-    )
+    return _leaf_matches(node, event)
 
 
-def matching_indices(rule: Any, events: list[dict[str, Any]]) -> list[int]:
+def matching_indices(rule: ParsedRule, events: Sequence[Mapping[str, Any]]) -> list[int]:
     """Return the indices of ``events`` the rule fires on.
 
-    A rule with multiple parsed conditions fires when *any* of them match (the
-    Sigma default for a multi-condition list).
+    A rule with multiple conditions fires when *any* of them matches (the Sigma
+    default for a condition list).
     """
-    asts = [parsed.parse() for parsed in rule.detection.parsed_condition]
-    for ast in asts:
-        _validate_node(ast)
-    return [i for i, event in enumerate(events) if any(_node_matches(ast, event) for ast in asts)]
+    return [
+        i
+        for i, event in enumerate(events)
+        if any(_node_matches(node, event) for node in rule.conditions)
+    ]

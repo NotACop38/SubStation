@@ -3,7 +3,7 @@
 These tests are the gate's proof: the committed golden events validate, and
 representative malformed events are rejected. ``make ci`` additionally runs
 ``python -m substation.schema`` over ``tests/data/events`` so any emitted event
-that violates the schema fails the pipeline (`PRD.md` §6.3).
+that violates the schema fails the pipeline (`docs/design.md` §6.3).
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from substation.schema import (
     EVENT_SCHEMA_PATH,
     SchemaValidationError,
@@ -262,7 +263,7 @@ def _a_valid_s7_request() -> dict[str, Any]:
 
 
 def test_s7_detail_frozen_accepts_valid() -> None:
-    # S7 detail is FROZEN (Phase 4): a valid envelope + S7 detail passes.
+    # S7 detail is FROZEN: a valid envelope + S7 detail passes.
     schema = load_event_schema()
     assert list(iter_event_errors(_a_valid_s7_request(), schema)) == []
 
@@ -297,7 +298,7 @@ def _a_valid_dnp3_request() -> dict[str, Any]:
 
 
 def test_dnp3_detail_frozen_accepts_valid() -> None:
-    # DNP3 detail is FROZEN (Phase 3): a valid envelope + DNP3 detail passes.
+    # DNP3 detail is FROZEN: a valid envelope + DNP3 detail passes.
     schema = load_event_schema()
     assert list(iter_event_errors(_a_valid_dnp3_request(), schema)) == []
 
@@ -315,3 +316,22 @@ def test_dnp3_detail_rejects_out_of_range_iin() -> None:
     event = _a_valid_dnp3_request()
     event["detail"]["iin"] = 70000  # > 16-bit
     assert list(iter_event_errors(event, schema)) != []
+
+
+def test_an_empty_named_directory_fails_even_beside_valid_files(tmp_path: Path) -> None:
+    from substation.schema.__main__ import main as schema_main
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    good = _REPO_ROOT / "tests" / "data" / "events" / "modbus" / "valid.jsonl"
+    assert schema_main([str(good)]) == 0
+    assert schema_main([str(empty), str(good)]) == 1
+
+
+def test_validate_requires_paths_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from substation.schema import __main__ as schema_cli
+
+    monkeypatch.setattr(schema_cli, "_DEFAULT_TARGETS", (tmp_path / "absent",))
+    assert schema_cli.main([]) == 1

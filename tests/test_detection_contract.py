@@ -1,6 +1,6 @@
 """The Detection Contract harness (Tier 1: Sigma over ``.jsonl``).
 
-This is the data-driven harness PRD.md §6.6 / the Engineering Checklist's
+This is the data-driven harness docs/design.md §6.6 / the Engineering Checklist's
 "Detection Definition of Done" call for. It is **fully metadata-driven**: it reads
 the detection registry (``detections/registry.yaml``) and every scenario under
 ``scenarios/``, then for each detection asserts — from that detection's own
@@ -10,7 +10,7 @@ scenarios) makes the fire/quiet cases appear here automatically; the one piece
 of test code a new *validated Tier-1* fire scenario must add is its exact-hit
 entry in ``_EXPECTED_FIRE_HITS`` below (the over-match regression net).
 
-Tier scoping (PRD.md §6.2): Tier-1 Sigma detections are evaluated directly over
+Tier scoping (docs/design.md §6.2): Tier-1 Sigma detections are evaluated directly over
 the generated JSON event log here. Tier-2 detections (Zeek/Suricata) execute in
 the Tier-2 runner over PCAP, so their fire/quiet cases are *skipped* here with a
 reason — but their contract linkage (a rule, ≥1 fire and ≥1 quiet scenario) is
@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import NoReturn
 
 import pytest
+
 from substation.detect import run_detections
 from substation.detect.registry import Detection, load_registry
 from substation.detect.sigma_eval import load_rule
@@ -118,7 +119,7 @@ def test_sigma_rule_consistent_with_registry(det: Detection) -> None:
     Guards against drift between the verified registry metadata (which the
     coverage map is generated from) and the authored rule's own tags.
     """
-    rule = load_rule(det.rule_path)
+    rule = load_rule(det.rule_path).sigma
     assert rule.logsource.service == det.protocol, (
         f"{det.id}: rule logsource.service {rule.logsource.service!r} != "
         f"registry protocol {det.protocol!r}"
@@ -162,16 +163,16 @@ def test_quiet_on_benign(det: Detection, scenario: Scenario, tmp_path: Path) -> 
 
 _EXPECTED_FIRE_HITS: dict[tuple[str, str], tuple[int, ...]] = {
     # M1: the two out-of-policy write requests.
-    ("M1", "anomalous-m1-unauthorized-write"): (6, 8),
-    ("M1", "anomalous-m1-out-of-policy-write"): (4, 6),
-    ("M1", "anomalous-m1-span-beyond-policy"): (0,),
+    ("M1", "modbus-anomalous-m1-unauthorized-write"): (6, 8),
+    ("M1", "modbus-anomalous-m1-out-of-policy-write"): (4, 6),
+    ("M1", "modbus-anomalous-m1-span-beyond-policy"): (0,),
     # M2: the undefined-function request and the ILLEGAL_FUNCTION exception reply.
-    ("M2", "anomalous-m2-illegal-function"): (2, 3),
+    ("M2", "modbus-anomalous-m2-illegal-function"): (2, 3),
     # D1/D2/D3: the restart / disable-unsolicited / (direct-)operate requests.
-    ("D1", "dnp3-anomalous-d1-restart"): (5,),
-    ("D2", "dnp3-anomalous-d2-disable-unsolicited"): (3,),
-    ("D3", "dnp3-anomalous-d3-unauthorized-operate"): (4, 6),
-    # S1: the PLC Stop request. S2: the download-sequence + Create Object requests.
+    ("D1", "dnp3-anomalous-d1-restart"): (6,),
+    ("D2", "dnp3-anomalous-d2-disable-unsolicited"): (4,),
+    ("D3", "dnp3-anomalous-d3-unauthorized-operate"): (5, 8, 10),
+    # S1: the PLC Stop request. S2: the download-sequence requests + the PI _INSE.
     ("S1", "s7-anomalous-s1-cpu-stop"): (12,),
     ("S2", "s7-anomalous-s2-program-download"): (10, 12, 14, 16),
 }

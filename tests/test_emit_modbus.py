@@ -1,6 +1,6 @@
-"""Phase-1 Modbus emission tests: one model -> matching PCAP + schema-valid JSON.
+"""Modbus emission tests: one model -> matching PCAP + schema-valid JSON.
 
-The PCAP and JSON are built from the same shared event list (PRD §6.1);
+The PCAP and JSON are built from the same shared event list (docs/design.md §6.1);
 independent parsing checks agreement. We assert the JSON validates
 against the frozen schema, the PCAP carries exactly one Modbus segment per JSON
 event with matching transaction/unit/function, and the whole thing is byte-stable.
@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 from scapy.layers.inet import TCP
 from scapy.utils import rdpcap
+
 from substation.emit import write_artifacts
 from substation.protocols.modbus import ModbusError
 from substation.scenarios import load_scenario
@@ -267,7 +268,7 @@ def test_missing_required_param_raises(tmp_path: Path) -> None:
 
 
 def test_all_v1_protocols_are_wired(tmp_path: Path) -> None:
-    # Every v1 protocol now has an emitter (Modbus/DNP3 Phase 1/3, S7 Phase 4); a
+    # Every v1 protocol has an emitter (Modbus, DNP3, S7); a
     # valid (empty) S7 scenario emits cleanly rather than hitting the EmitError guard.
     scenario = load_scenario(_write_scenario(tmp_path, _S7_SCENARIO))
     result = write_artifacts(scenario, tmp_path)
@@ -308,6 +309,6 @@ def test_abnormal_exception_response_uses_exception_convention(tmp_path: Path) -
     resp = next(e for e in events if e["is_exception"])
     assert req["func_code"] == 0x42 and not req["is_exception"]
     assert resp["func_code"] == 0x42 | 0x80
-    assert resp["func_name"] == "unknown-66_EXCEPTION"
+    assert resp["func_name"] == "unknown-194"  # Zeek's build_func spelling
     assert resp["error"] == "ILLEGAL_FUNCTION"
     assert resp["detail"]["exception_code"] == "ILLEGAL_FUNCTION"

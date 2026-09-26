@@ -1,24 +1,24 @@
 # =============================================================================
 # Anomalous (X1) — cross-protocol baseline deviation: NEW FUNCTION FOR A PAIR
 # =============================================================================
-# X1 (PRD.md §5.4): a source/destination/function combination not in the learned
-# baseline, across any supported protocol. This scenario exercises the third
-# deviation class — a NEW FUNCTION FOR A KNOWN PAIR. The (master-1 10.0.1.10 ->
-# rtu-1 10.0.1.50) pair IS baselined, but in the learned baseline that pair only
-# ever issues ENABLE_UNSOLICITED, READ and OPERATE (see dnp3/benign-baseline.yaml).
-# Here the same allow-listed master issues a WRITE — a function never seen for
-# that pair — which is capability creep on an existing, legitimate channel.
+# X1 (docs/design.md §5.4): a source/destination/function combination not in the
+# learned baseline, across any supported protocol. This scenario exercises the
+# third deviation class — a NEW FUNCTION FOR A KNOWN PAIR. The (master-1 10.0.1.10
+# -> rtu-1 10.0.1.50) pair IS baselined, but in the learned baseline that pair
+# only ever issues ENABLE_UNSOLICITED, READ, SELECT, OPERATE and CONFIRM (see
+# dnp3/benign-baseline.yaml). Here the same allow-listed master issues
+# RECORD_CURRENT_TIME — a function never seen for that pair — which is capability
+# creep on an existing, legitimate channel.
 #
-# The WRITE comes from the allow-listed master and is neither a restart nor a
+# The request comes from the allow-listed master and is neither a restart nor a
 # disable-unsolicited nor an operate, so it stays quiet on D1 (restart), D2
 # (disable-unsolicited) and D3 (unauthorized operate). The ONLY thing anomalous
 # is that this verb is new for this pair — precisely the learned-state signal X1
 # adds on top of the per-command allow-list detections.
 #
 # Learned baseline (derived from dnp3/benign-baseline.yaml and injected into the
-# X1 Zeek script by the Tier-2 runner):
-#   * Known pair master-1 -> rtu-1 functions: ENABLE_UNSOLICITED, READ, OPERATE
-# WRITE for that pair is NOT in known_funcs -> X1 fires (new function for a pair).
+# X1 Zeek script by the Tier-2 runner): RECORD_CURRENT_TIME for that pair is NOT
+# in known_funcs -> X1 fires (new function for a pair).
 # -----------------------------------------------------------------------------
 
 # The dnp3- prefix matches the rest of this tree: scenario names become
@@ -27,11 +27,11 @@
 name: dnp3-anomalous-x1-new-function
 description: >-
   The baselined, allow-listed master (10.0.1.10 -> rtu-1 10.0.1.50), which in the
-  learned baseline only enables-unsolicited / reads / operates, issues a WRITE — a
-  function never seen for that pair — amid normal polling. Fires X1 (cross-protocol
-  baseline deviation — new function for a known pair); stays quiet on D1 (no
-  restart), D2 (no disable-unsolicited) and D3 (a WRITE is not an operate, and the
-  source is allow-listed anyway).
+  learned baseline only enables unsolicited reporting, reads and operates, issues
+  RECORD_CURRENT_TIME — a function never seen for that pair — amid normal polling.
+  Fires X1 (cross-protocol baseline deviation — new function for a known pair);
+  stays quiet on D1 (no restart), D2 (no disable-unsolicited) and D3 (not a
+  control, and the source is allow-listed anyway).
 
 protocol: dnp3
 label: anomalous
@@ -68,19 +68,17 @@ exchanges:
     params: { object_type: 16-Bit Analog Input, range_low: 0, range_high: 7, object_count: 8 }
 
   # --- the new function (X1): a verb never seen for this known pair ----------
-  # WRITE from the allow-listed master: in-policy for D1/D2/D3, but this pair has
-  # only ever read/operated in the baseline, so the verb itself is the deviation.
-  # This models the function/object header only, without a data-write payload.
+  # A time-sync request from the allow-listed master: in-policy for D1/D2/D3,
+  # but this pair has never used it in the baseline, so the verb is the deviation.
   - source: master-1
     target: rtu-1
-    function: Write
+    function: RecordCurrentTime
     offset: 4.0
-    params: { object_type: 16-Bit Analog Output Block }
 
 exercises:
   fires:
-    - X1   # WRITE is a function never baselined for the master-1 -> rtu-1 pair.
+    - X1   # RECORD_CURRENT_TIME was never baselined for the master-1 -> rtu-1 pair.
   quiet:
     - D1   # no device restart is issued.
     - D2   # unsolicited reporting is never disabled.
-    - D3   # a WRITE is not an operate/direct-operate, and the master is allow-listed.
+    - D3   # not an operate/direct-operate, and the master is allow-listed.

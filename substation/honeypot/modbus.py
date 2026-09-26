@@ -1,4 +1,4 @@
-"""Passive, isolated Modbus/TCP honeypot that logs inbound probes (PRD §6.10).
+"""Passive, isolated Modbus/TCP honeypot that logs inbound probes (docs/design.md §6.10).
 
 A minimal Modbus responder for **research**: it binds a listening socket, answers
 inbound requests with **banner/coil/register stubs only**, and records every probe
@@ -27,9 +27,11 @@ logs cannot drift from the contract the detections bind to (``docs/schema.md``).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import socket
+import stat
 import struct
 import time
 from collections.abc import Iterator
@@ -51,6 +53,7 @@ from substation.protocols.modbus import (
     ModbusEvent,
     event_to_dict,
     function_action_class,
+    zeek_exception_name,
     zeek_function_name,
 )
 from substation.schema import load_event_schema, validate_event
@@ -59,6 +62,7 @@ __all__ = [
     "HoneypotConfig",
     "HoneypotConfigError",
     "ModbusHoneypot",
+    "ProbeLogError",
     "StubDevice",
     "process_frame",
 ]
@@ -107,7 +111,7 @@ class HoneypotConfigError(ValueError):
 
 @dataclass(slots=True)
 class StubDevice:
-    """In-memory coil/register stubs (PRD §6.10: "coil/register stubs" only).
+    """In-memory coil/register stubs (docs/design.md §6.10: "coil/register stubs" only).
 
     Not a process model: reads return a deterministic default unless a prior write
     set the address, and the address space is bounded so a recon sweep of a large
@@ -247,7 +251,7 @@ def _response_event(
             resp_p=conn.resp_p,
             is_orig=False,
             func_code=parsed.func_code | _EXCEPTION_FLAG,
-            func_name=f"{_func_name(parsed.func_code)}_EXCEPTION",
+            func_name=zeek_exception_name(parsed.func_code),
             action_class=action_class,
             unit=parsed.unit,
             tid=parsed.tid,
@@ -539,7 +543,11 @@ class HoneypotConfig:
     ``log_max_bytes`` bounds the probe log: when a write would push the log past
     it, the log rotates to ``<log_path>.1`` (one generation, replacing any
     previous rotation) so a noisy scanner cannot grow it unboundedly. ``0``
-    disables rotation.
+    disables rotation, as does a log that is not a regular file (a pipe).
+
+    Connections are served one at a time, so each is bounded twice: a
+    ``recv_timeout`` for a silent client and a ``connection_timeout`` wall-clock
+    limit for one that trickles bytes to hold the listener.
     """
 
     log_path: Path
@@ -547,12 +555,15 @@ class HoneypotConfig:
     port: int = DEFAULT_MODBUS_PORT
     allow_external: bool = False
     recv_timeout: float = 10.0
+    connection_timeout: float = 60.0
     backlog: int = 8
     log_max_bytes: int = 50 * 1024 * 1024  # 50 MiB per generation
 
     def validate(self) -> None:
         if not 1 <= self.port <= 65535:
             raise HoneypotConfigError(f"port {self.port} out of range (1-65535)")
+        if not self.recv_timeout > 0 or not self.connection_timeout > 0:
+            raise HoneypotConfigError("recv_timeout and connection_timeout must be > 0 seconds")
         if self.log_max_bytes < 0:
             raise HoneypotConfigError("log_max_bytes must be >= 0 (0 disables rotation)")
         if self.bind_host not in _LOOPBACK_HOSTS and not self.allow_external:
@@ -570,21 +581,28 @@ class HoneypotConfig:
             )
 
 
+class ProbeLogError(RuntimeError):
+    """The probe log cannot be written; the honeypot stops rather than drop probes."""
+
+
 class _ProbeLog:
     """Append-only, size-bounded writer for schema-validated honeypot events.
 
     When a write would push the log past ``max_bytes``, the current file rotates
     to ``<path>.1`` (replacing any previous rotation) and a fresh log starts, so
     a noisy scanner caps disk use at ~2x ``max_bytes`` instead of growing the
-    log without bound. ``max_bytes=0`` disables rotation.
+    log without bound. ``max_bytes=0`` disables rotation; so does a log that is
+    not a regular file (a pipe or ``/dev/stdout``), which cannot be rotated.
     """
 
     def __init__(self, path: Path, max_bytes: int = 0) -> None:
         self._schema = load_event_schema()
         self._path = path
-        self._max_bytes = max_bytes
         path.parent.mkdir(parents=True, exist_ok=True)
         self._fh = self._open()
+        info = os.fstat(self._fh.fileno())
+        self._max_bytes = max_bytes if stat.S_ISREG(info.st_mode) else 0
+        self._size = info.st_size if self._max_bytes else 0
 
     def _open(self) -> Any:
         # newline="\n" disables platform newline translation so the byte
@@ -595,21 +613,33 @@ class _ProbeLog:
         # Validate against the frozen contract before writing so the honeypot can
         # never emit telemetry the detections cannot consume (docs/schema.md).
         validate_event(event, self._schema)
+        # json.dumps defaults to ensure_ascii, so one character is one byte.
         line = json.dumps(event, allow_nan=False) + "\n"
-        # json.dumps default ensure_ascii means one char == one byte here, so
-        # tell() + len(line) is the post-write byte size.
-        if self._max_bytes and self._fh.tell() + len(line) > self._max_bytes:
-            self._rotate()
-        self._fh.write(line)
-        self._fh.flush()
+        try:
+            if self._max_bytes and self._size and self._size + len(line) > self._max_bytes:
+                self._rotate()
+            self._fh.write(line)
+            self._fh.flush()
+        except OSError as exc:
+            # The honeypot stops on this error. Release the file now, dropping the
+            # line that could not be written, so the shutdown close cannot fail on
+            # it again and replace this error.
+            with contextlib.suppress(OSError):
+                self._fh.close()
+            raise ProbeLogError(f"cannot write probe log {self._path}: {exc}") from exc
+        self._size += len(line)
 
     def _rotate(self) -> None:
         self._fh.close()
         self._path.replace(self._path.with_name(self._path.name + ".1"))
         self._fh = self._open()
+        self._size = 0
 
     def close(self) -> None:
-        self._fh.close()
+        try:
+            self._fh.close()
+        except OSError as exc:
+            raise ProbeLogError(f"cannot close probe log {self._path}: {exc}") from exc
 
 
 class ModbusHoneypot:
@@ -617,8 +647,10 @@ class ModbusHoneypot:
 
     It binds, listens and accepts; for each inbound frame it logs the probe and
     replies with stub data. It **never** initiates an outbound connection. Single
-    connection at a time (minimal by design); a per-connection recv timeout keeps a
-    silent client from blocking the listener indefinitely.
+    connection at a time (minimal by design); a recv timeout and a per-connection
+    wall-clock limit keep a silent or trickling client from holding the listener.
+    A probe-log failure stops the honeypot (:class:`ProbeLogError`) instead of
+    silently dropping telemetry.
     """
 
     def __init__(self, config: HoneypotConfig) -> None:
@@ -635,7 +667,7 @@ class ModbusHoneypot:
 
     def _handle_connection(self, sock: socket.socket, peer: tuple[str, int]) -> None:
         uid = self._next_uid(peer)
-        sock.settimeout(self.config.recv_timeout)
+        deadline = time.monotonic() + self.config.connection_timeout
         # The actual interface that accepted this probe — not the configured bind
         # string — so a wildcard bind (e.g. 0.0.0.0) records the true destination in
         # conn.resp_h instead of collapsing every local address into the wildcard.
@@ -643,9 +675,13 @@ class ModbusHoneypot:
         local_host, local_port = str(sockname[0]), int(sockname[1])
         buffer = bytearray()
         while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return  # wall-clock limit: a trickling client cannot hold the listener
+            sock.settimeout(min(self.config.recv_timeout, remaining))
             try:
                 chunk = sock.recv(4096)
-            except (TimeoutError, OSError):
+            except OSError:  # includes the recv timeout
                 return
             if not chunk:
                 return  # peer closed
@@ -692,15 +728,14 @@ class ModbusHoneypot:
             while True:
                 try:
                     conn, peer = listener.accept()
-                except KeyboardInterrupt:
-                    raise
                 except OSError:
                     continue
                 with conn:
                     try:
                         self._handle_connection(conn, peer)
                     except OSError:
-                        # A misbehaving client must never crash the listener.
+                        # A misbehaving client must never crash the listener. Probe-log
+                        # failures are ProbeLogError, not OSError, and stop it.
                         continue
         except KeyboardInterrupt:
             print("\n[honeypot] stopped.")

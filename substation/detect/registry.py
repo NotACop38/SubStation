@@ -1,8 +1,8 @@
 """Detection registry: the typed view of ``detections/registry.yaml``.
 
 The registry is the authoritative, machine-readable metadata index for every
-shipped detection (PRD.md §6.6 "coverage-map entry"). Both the Tier-1 pytest
-harness and the coverage generator (PRD.md §6.7) load it through here, so the
+shipped detection (docs/design.md §6.6 "coverage-map entry"). Both the Tier-1 pytest
+harness and the coverage generator (docs/design.md §6.7) load it through here, so the
 coverage map and Navigator layer are generated from one source and cannot drift
 from the detections.
 
@@ -31,12 +31,13 @@ __all__ = [
     "REGISTRY_PATH",
     "REPO_ROOT",
     "CONTENT_ROOT",
+    "ICS_TACTICS",
     "load_registry",
 ]
 
-# Repo root (checkout) — used for docs/coverage defaults and similar checkout-
-# relative paths. Detection/scenario *content* resolves via CONTENT_ROOT so a
-# wheel install (packaged under substation.content) works without a checkout.
+# Repository root for a checkout (and editable install). Detection and scenario
+# *content* resolves via CONTENT_ROOT so a wheel install (packaged under
+# substation.content) works without a checkout.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -53,8 +54,8 @@ REGISTRY_PATH = CONTENT_ROOT / "detections" / "registry.yaml"
 _ENGINES = {"sigma", "zeek", "suricata"}
 _TIERS = {1, 2}
 _STATUSES = {"validated", "partial", "tier2", "experimental"}
-# The closed v1 protocol set (PRD.md §5), plus "cross" for the flagship
-# cross-protocol detection (X1) whose baseline spans every protocol (PRD.md §5.4).
+# The closed v1 protocol set (docs/design.md §5), plus "cross" for the flagship
+# cross-protocol detection (X1) whose baseline spans every protocol (docs/design.md §5.4).
 # "cross" is a registry/coverage-map label only — scenarios remain single-protocol.
 _PROTOCOLS = {"modbus", "dnp3", "s7comm", "cross"}
 
@@ -63,20 +64,27 @@ _ATTACK_KEYS = {"tactic", "tactic_id", "techniques"}
 _TECHNIQUE_KEYS = {"id", "name"}
 _TACTIC_ID_RE = re.compile(r"^TA\d{4}$")
 _TECHNIQUE_ID_RE = re.compile(r"^T\d{4}(?:\.\d{3})?$")
-_TACTIC_IDS = {
-    "TA0100",
-    "TA0101",
-    "TA0102",
-    "TA0103",
-    "TA0104",
-    "TA0105",
-    "TA0106",
-    "TA0107",
-    "TA0108",
-    "TA0109",
-    "TA0110",
-    "TA0111",
-}
+# Every ATT&CK-for-ICS tactic in matrix (left-to-right) order: (id, name). Tactics
+# are stable, unlike technique IDs, which are VERIFY-gated per detection. The
+# coverage artifacts render gaps from this table, and entries must name their
+# tactic exactly as it appears here.
+ICS_TACTICS: tuple[tuple[str, str], ...] = (
+    ("TA0108", "Initial Access"),
+    ("TA0104", "Execution"),
+    ("TA0110", "Persistence"),
+    ("TA0111", "Privilege Escalation"),
+    ("TA0103", "Evasion"),
+    ("TA0102", "Discovery"),
+    ("TA0109", "Lateral Movement"),
+    ("TA0100", "Collection"),
+    ("TA0101", "Command and Control"),
+    ("TA0107", "Inhibit Response Function"),
+    ("TA0106", "Impair Process Control"),
+    ("TA0105", "Impact"),
+)
+_TACTIC_NAMES = dict(ICS_TACTICS)
+# Tier 1 evaluates Sigma in-process; Zeek and Suricata rules need their engine.
+_ENGINE_TIER = {"sigma": 1, "zeek": 2, "suricata": 2}
 
 
 class RegistryError(ValueError):
@@ -162,7 +170,7 @@ def _require_str(mapping: dict[str, object], key: str, where: str) -> str:
 
 def _require_tactic_id(mapping: dict[str, object], key: str, where: str) -> str:
     value = _require_str(mapping, key, where)
-    if not _TACTIC_ID_RE.fullmatch(value) or value not in _TACTIC_IDS:
+    if not _TACTIC_ID_RE.fullmatch(value) or value not in _TACTIC_NAMES:
         raise RegistryError(f"{where}.{key}: expected a current ATT&CK-for-ICS tactic ID (TAxxxx)")
     return value
 
@@ -192,11 +200,13 @@ def _parse_attack(raw: object, where: str) -> AttackMapping:
     techniques = tuple(
         _parse_technique(t, f"{where}.techniques[{i}]") for i, t in enumerate(techniques_raw)
     )
-    return AttackMapping(
-        tactic=_require_str(data, "tactic", where),
-        tactic_id=_require_tactic_id(data, "tactic_id", where),
-        techniques=techniques,
-    )
+    tactic_id = _require_tactic_id(data, "tactic_id", where)
+    tactic = _require_str(data, "tactic", where)
+    if tactic != _TACTIC_NAMES[tactic_id]:
+        raise RegistryError(
+            f"{where}.tactic: {tactic!r} does not match {tactic_id} ({_TACTIC_NAMES[tactic_id]!r})"
+        )
+    return AttackMapping(tactic=tactic, tactic_id=tactic_id, techniques=techniques)
 
 
 def _parse_detection(raw: object, where: str) -> Detection:
@@ -213,6 +223,10 @@ def _parse_detection(raw: object, where: str) -> Detection:
     tier = data.get("tier")
     if isinstance(tier, bool) or not isinstance(tier, int) or tier not in _TIERS:
         raise RegistryError(f"{where}.tier: expected one of {sorted(_TIERS)}")
+    if tier != _ENGINE_TIER[engine]:
+        raise RegistryError(
+            f"{where}.tier: {engine} rules run in tier {_ENGINE_TIER[engine]}, not tier {tier}"
+        )
     status = _require_str(data, "status", where)
     if status not in _STATUSES:
         raise RegistryError(f"{where}.status: unknown status {status!r}; valid {_STATUSES}")

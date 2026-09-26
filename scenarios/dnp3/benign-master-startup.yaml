@@ -1,0 +1,93 @@
+# =============================================================================
+# Benign DNP3 boundary — a complete master startup, then operator controls
+# =============================================================================
+# The D4 diversity boundary (docs/design.md §8). When a master (re)connects it
+# walks a standard startup: disable unsolicited reporting, integrity poll, time
+# synchronization, delay measurement, class assignment, re-enable unsolicited
+# reporting, confirm the first unsolicited response. An operator then closes a
+# breaker with select-before-operate and pulses a second output directly.
+#
+# That is nine distinct request function codes (CONFIRM excluded) within a
+# minute, all legitimate, from the allow-listed master. D4 must stay quiet, so
+# its threshold sits above this working set.
+# -----------------------------------------------------------------------------
+
+name: dnp3-benign-master-startup
+description: >-
+  The allow-listed master (10.0.1.10) runs a full DNP3 startup sequence against
+  the outstation, confirms an unsolicited event, then issues a select-before-
+  operate breaker close and a direct operate: nine distinct request function
+  codes in a minute. D1, D2, D3 and D4 all stay quiet.
+
+protocol: dnp3
+label: benign
+
+timing:
+  start: 0.0
+  default_interval: 1.0
+
+actors:
+  - id: master-1        # allow-listed SCADA master.
+    role: master
+    host: 10.0.1.10
+  - id: rtu-1           # the outstation/RTU.
+    role: outstation
+    host: 10.0.1.50
+    port: 20000
+
+exchanges:
+  # --- startup ---------------------------------------------------------------
+  - source: master-1
+    target: rtu-1
+    function: DisableUnsolicited
+    params: { object_type: Class 1 Data }
+  - source: master-1        # integrity poll: all static data.
+    target: rtu-1
+    function: Read
+    params:
+      object_type: Class 0 Data
+      response_object_type: Binary Input With Status
+      range_low: 0
+      range_high: 9
+  - source: master-1
+    target: rtu-1
+    function: DelayMeasure
+  - source: master-1
+    target: rtu-1
+    function: RecordCurrentTime
+  - source: master-1
+    target: rtu-1
+    function: AssignClass
+    params: { object_type: Class 1 Data }
+  - source: master-1
+    target: rtu-1
+    function: EnableUnsolicited
+    params: { object_type: Class 1 Data }
+
+  # --- the outstation reports an event; the master confirms it -------------
+  - source: rtu-1
+    target: master-1
+    function: UnsolicitedResponse
+    params: { object_type: Binary Input With Status, range_low: 3, range_high: 3 }
+
+  # --- operator controls -----------------------------------------------------
+  - source: master-1        # select-before-operate: close breaker 2.
+    target: rtu-1
+    function: Select
+    offset: 20.0
+    params: { index_number: 2, operation_type: Pulse_On, trip_control_code: Close, on_time: 1000 }
+  - source: master-1
+    target: rtu-1
+    function: Operate
+    params: { index_number: 2, operation_type: Pulse_On, trip_control_code: Close, on_time: 1000 }
+  - source: master-1        # direct operate: pulse output 5.
+    target: rtu-1
+    function: DirectOperate
+    params: { index_number: 5, operation_type: Pulse_On, on_time: 500 }
+
+exercises:
+  quiet:
+    - D1   # no restart.
+    - D2   # unsolicited reporting is disabled and re-enabled by the allow-listed master.
+    - D3   # every control comes from the allow-listed master.
+    - D4   # nine distinct codes: a legitimate working set, below the threshold.

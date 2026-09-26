@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+
 from substation.detect import run_detections
 from substation.detect.registry import load_registry
 from substation.detect.sigma_eval import load_rule, matching_indices

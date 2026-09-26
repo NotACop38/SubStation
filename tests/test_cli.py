@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 import substation
 from substation import cli
 
@@ -50,7 +51,7 @@ def test_list_shows_detections_and_scenarios(capsys) -> None:  # type: ignore[no
     # Every registered detection and every bundled scenario tree is listed.
     for det_id in ("M1", "M2", "M3", "D1", "D4", "S1", "S3", "X1"):
         assert f"  {det_id} " in out
-    assert "benign-baseline" in out
+    assert "modbus-benign-baseline" in out
     assert "dnp3-benign-baseline" in out
     assert "s7-benign-baseline" in out
 
@@ -61,11 +62,11 @@ def test_demo_accepts_multiple_scenarios(tmp_path: Path, capsys) -> None:  # typ
     )
     assert rc == 0
     out = capsys.readouterr().out
-    assert "benign-baseline" in out
-    assert "anomalous-m1-unauthorized-write" in out
+    assert "modbus-benign-baseline" in out
+    assert "modbus-anomalous-m1-unauthorized-write" in out
     assert "FIRED" in out  # the anomaly fires
-    assert (tmp_path / "benign-baseline.jsonl").exists()
-    assert (tmp_path / "anomalous-m1-unauthorized-write.jsonl").exists()
+    assert (tmp_path / "modbus-benign-baseline.jsonl").exists()
+    assert (tmp_path / "modbus-anomalous-m1-unauthorized-write.jsonl").exists()
 
 
 def test_demo_strict_passes_on_bundled_set(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]

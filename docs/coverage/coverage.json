@@ -3,9 +3,9 @@
   "generated_by": "python -m substation.coverage",
   "domain": "ics-attack",
   "interpretation": "Content mappings only; no production effectiveness claim.",
-  "detection_count": 11,
+  "detection_count": 12,
   "tactics_total": 12,
-  "tactics_covered": 5,
+  "tactics_covered": 6,
   "detections": [
     {
       "id": "M1",
@@ -66,6 +66,28 @@
         {
           "id": "T0888",
           "name": "Remote System Information Discovery"
+        }
+      ]
+    },
+    {
+      "id": "M4",
+      "title": "Bulk read / address-space sweep",
+      "protocol": "modbus",
+      "engine": "zeek",
+      "tier": 2,
+      "status": "tier2",
+      "rule": "detections/zeek/modbus_m4_read_sweep.zeek",
+      "doc": "detections/docs/M4-read-sweep.md",
+      "tactic": "Collection",
+      "tactic_id": "TA0100",
+      "techniques": [
+        {
+          "id": "T0801",
+          "name": "Monitor Process State"
+        },
+        {
+          "id": "T0861",
+          "name": "Point & Tag Identification"
         }
       ]
     },
@@ -173,7 +195,7 @@
     },
     {
       "id": "S2",
-      "title": "Program / data-block write or download",
+      "title": "Program / data-block download",
       "protocol": "s7comm",
       "engine": "sigma",
       "tier": 1,
@@ -286,8 +308,10 @@
     {
       "tactic": "Collection",
       "tactic_id": "TA0100",
-      "covered": false,
-      "detections": []
+      "covered": true,
+      "detections": [
+        "M4"
+      ]
     },
     {
       "tactic": "Command and Control",

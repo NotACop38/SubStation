@@ -5,7 +5,7 @@ well-formed TCP stream: a SYN handshake just before the first message, one
 PSH/ACK segment per event (acks piggyback on data), and a graceful FIN
 teardown after the last. Sequence/acknowledgement numbers advance as real TCP
 does (SYN/FIN consume one number; data consumes its length), so the capture
-reassembles cleanly in Zeek/Wireshark for the Tier-2 fidelity check (PRD §6.4).
+reassembles cleanly in Zeek/Wireshark for the Tier-2 fidelity check (docs/design.md §6.4).
 
 :func:`write_pcap` is parameterized by ``payload_for`` — the only thing that
 differs per protocol — so each protocol module keeps just its PDU builders. A
@@ -94,7 +94,8 @@ class _TcpFlow:
                     dport=self.resp_p,
                     flags=flags,
                     seq=self.client_seq,
-                    ack=self.server_seq,
+                    # A segment without the ACK flag carries no acknowledgement.
+                    ack=self.server_seq if "A" in flags else 0,
                 )
             )
         else:
@@ -106,7 +107,7 @@ class _TcpFlow:
                     dport=self.orig_p,
                     flags=flags,
                     seq=self.server_seq,
-                    ack=self.client_seq,
+                    ack=self.client_seq if "A" in flags else 0,
                 )
             )
         consumed = 1 if ("S" in flags or "F" in flags) else 0

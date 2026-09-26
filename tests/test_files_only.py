@@ -1,17 +1,25 @@
-"""Files-only invariant tests (PRD §6.4, CLAUDE.md safety invariant).
+"""Files-only invariant tests (docs/design.md §6.4, AGENTS.md safety invariant).
 
 The simulator must only ever write files — it must never open a sending socket or
 transmit on an interface. These tests prove two things together: (1) generation
 opens **no socket at all**, so no send path is reachable from it; and (2) the
-guard that emission runs under actively rejects any connect/transmit attempt.
+guard that emission runs under actively rejects socket creation, connect/transmit
+on existing sockets, and process creation.
 """
 
 from __future__ import annotations
 
+import _posixsubprocess
+import multiprocessing
+import os
 import socket
+import subprocess
+from collections.abc import Callable
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 
 import pytest
+
 from substation.emit import write_artifacts
 from substation.emit.guard import FilesOnlyViolation, files_only_guard
 from substation.scenarios import load_scenario
@@ -43,18 +51,38 @@ def test_generation_opens_no_socket(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert list(iter_jsonl_errors(result.jsonl)) == []
 
 
-def test_guard_blocks_connect_and_transmit() -> None:
+def test_guard_blocks_socket_creation() -> None:
     with files_only_guard():
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
+        with pytest.raises(FilesOnlyViolation):
+            socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        with pytest.raises(FilesOnlyViolation):
+            socket.socketpair()
+        with pytest.raises(FilesOnlyViolation):
+            socket.create_connection(("127.0.0.1", 9), timeout=0.1)
+
+
+def test_guard_blocks_scapy_transmit() -> None:
+    from scapy.layers.l2 import Ether
+    from scapy.sendrecv import sendp
+
+    # scapy's layer-2 socket is built on socket.socket, so creation is refused
+    # before anything reaches an interface.
+    with files_only_guard(), pytest.raises(FilesOnlyViolation):
+        sendp(Ether(), iface="lo", verbose=False)
+
+
+def test_guard_blocks_connect_and_transmit_on_existing_sockets() -> None:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        with files_only_guard():
             with pytest.raises(FilesOnlyViolation):
                 sock.connect(("127.0.0.1", 9))
             with pytest.raises(FilesOnlyViolation):
                 sock.sendto(b"x", ("127.0.0.1", 9))
             with pytest.raises(FilesOnlyViolation):
                 sock.sendall(b"x")
-        finally:
-            sock.close()
+    finally:
+        sock.close()
 
 
 def test_guard_blocks_sendfile(tmp_path: Path) -> None:
@@ -62,22 +90,82 @@ def test_guard_blocks_sendfile(tmp_path: Path) -> None:
     # the guard must block it too or it is a hole in the files-only invariant.
     payload = tmp_path / "f.bin"
     payload.write_bytes(b"data")
-    with files_only_guard():
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            with payload.open("rb") as handle, pytest.raises(FilesOnlyViolation):
-                sock.sendfile(handle)
-        finally:
-            sock.close()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        with (
+            files_only_guard(),
+            payload.open("rb") as handle,
+            pytest.raises(FilesOnlyViolation),
+        ):
+            sock.sendfile(handle)
+    finally:
+        sock.close()
 
 
-def test_guard_restores_socket_methods_on_exit() -> None:
-    original_send = socket.socket.send
-    original_connect = socket.socket.connect
+def _assert_fork_refused(fork: Callable[[], object]) -> None:
+    """Assert the guard refuses ``fork``; if it does not, the child exits at once."""
+    try:
+        result = fork()
+    except FilesOnlyViolation:
+        return
+    pid = result[0] if isinstance(result, tuple) else result
+    if pid == 0:  # a regression forked the test run: the child must not continue it
+        os._exit(1)
+    pytest.fail(f"{fork.__name__}() was not refused")
+
+
+def test_guard_blocks_process_creation() -> None:
+    # A child process (tcpreplay, nc, ...) could transmit on the emitter's behalf.
     with files_only_guard():
-        assert socket.socket.send is not original_send  # patched inside
-    assert socket.socket.send is original_send  # restored after
-    assert socket.socket.connect is original_connect
+        with pytest.raises(FilesOnlyViolation):
+            subprocess.run(["true"], check=False)  # noqa: S607
+        with pytest.raises(FilesOnlyViolation):
+            os.system("true")  # noqa: S605,S607
+        with pytest.raises(FilesOnlyViolation):
+            os.popen("true")  # noqa: S605,S607
+        with pytest.raises(FilesOnlyViolation):
+            _posixsubprocess.fork_exec()  # type: ignore[call-arg]
+        _assert_fork_refused(os.fork)
+        _assert_fork_refused(os.forkpty)
+
+
+@pytest.mark.parametrize(
+    "process_class",
+    [
+        multiprocessing.get_context("spawn").Process,
+        multiprocessing.get_context("forkserver").Process,
+    ],
+    ids=["spawn", "forkserver"],
+)
+def test_guard_blocks_multiprocessing(process_class: type[BaseProcess]) -> None:
+    # These start methods launch the interpreter through _posixsubprocess.fork_exec,
+    # bypassing subprocess.Popen and os.fork; forkserver also needs a Unix socket.
+    process = process_class(target=int)
+    with files_only_guard(), pytest.raises(FilesOnlyViolation):
+        process.start()
+
+
+def test_guard_restores_everything_on_exit() -> None:
+    originals = {
+        "send": socket.socket.send,
+        "connect": socket.socket.connect,
+        "init": socket.socket.__init__,
+        "popen": subprocess.Popen.__init__,
+        "fork_exec": _posixsubprocess.fork_exec,
+        "system": os.system,
+        "forkpty": os.forkpty,
+    }
+    with files_only_guard():
+        assert socket.socket.send is not originals["send"]  # patched inside
+        assert _posixsubprocess.fork_exec is not originals["fork_exec"]
+    assert socket.socket.send is originals["send"]  # restored after
+    assert socket.socket.connect is originals["connect"]
+    assert socket.socket.__init__ is originals["init"]
+    assert subprocess.Popen.__init__ is originals["popen"]
+    assert _posixsubprocess.fork_exec is originals["fork_exec"]
+    assert os.system is originals["system"]
+    assert os.forkpty is originals["forkpty"]
+    socket.socket(socket.AF_INET, socket.SOCK_DGRAM).close()
 
 
 def test_guard_restores_even_on_error() -> None:

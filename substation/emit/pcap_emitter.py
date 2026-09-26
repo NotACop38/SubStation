@@ -1,11 +1,11 @@
 """PCAP emitter: shared Modbus events -> Modbus/TCP ``.pcap`` via scapy.
 
 Consumes the **same** :class:`~substation.protocols.modbus.ModbusEvent` list as
-the JSON emitter (PRD §6.1: one model, dual emit, no drift). Each event becomes a
+the JSON emitter (docs/design.md §6.1: one model, dual emit, no drift). Each event becomes a
 Modbus/TCP segment on a synthetic but well-formed TCP stream — SYN handshake,
 PSH/ACK request and response carrying the Modbus ADU, then a FIN teardown — with
 sequence/acknowledgement numbers tracked per connection so the capture parses
-cleanly in Zeek/Wireshark for the Tier-2 fidelity check (PRD §6.4).
+cleanly in Zeek/Wireshark for the Tier-2 fidelity check (docs/design.md §6.4).
 
 scapy assembles the Modbus PDUs (spike 02 verdict: ``scapy.contrib.modbus`` covers
 every Modbus PDU we need; the exact class/field names were verified there and in
@@ -69,7 +69,7 @@ def _abnormal_request_pdu(event: ModbusEvent) -> Any:
     span; scapy decodes it as a User-Defined Function Code Request and the MBAP
     length is computed automatically. The shared model keeps address+quantity as a
     pair (see ``modbus._abnormal_payload``), so the PCAP body matches the JSON
-    exactly — no silent quantity default here (PRD §6.1).
+    exactly — no silent quantity default here (docs/design.md §6.1).
     """
     body = bytes([event.func_code])
     if event.address is not None:

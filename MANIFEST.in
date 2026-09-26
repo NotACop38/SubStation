@@ -1,12 +1,10 @@
-include Makefile requirements.lock PRD.md ENGINEERING_CHECKLIST.md AGENTS.md CLAUDE.md CONTRIBUTING.md CHANGELOG.md
-include requirements.metadata.json
-recursive-include detections *.yaml *.yml *.md *.zeek *.rules *.suricata
+# The source distribution carries everything a source build needs to run the
+# gates (`make ci`, `make verify`); tests/test_packaging.py checks it against git.
+include Makefile requirements.lock requirements.metadata.json
+include AGENTS.md CLAUDE.md CONTRIBUTING.md CHANGELOG.md SECURITY.md
+recursive-include substation *.md *.json py.typed
+recursive-include detections *.yaml *.yml *.md *.zeek .gitkeep
 recursive-include scenarios *.yaml
-recursive-include scripts *.py
-recursive-include scripts/verify *.zeek
-recursive-include scripts/verify/patches *.patch
-recursive-include scripts/security *.json
-recursive-include tests/data *.jsonl
-recursive-include tests/data/fidelity *.yaml
-recursive-include tests/data/corpus *.pcap *.json *.yaml *.txt *.md
-recursive-include docs *.md *.json *.svg *.gif *.txt
+recursive-include scripts *.py *.zeek *.patch *.json *.Dockerfile pre-push
+recursive-include tests *.py *.jsonl *.yaml *.pcap *.json *.txt *.md
+recursive-include docs *.md *.json *.svg *.txt

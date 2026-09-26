@@ -1,13 +1,13 @@
 # =============================================================================
 # Anomalous (D2) — disable unsolicited responses (alarm/telemetry blinding)
 # =============================================================================
-# D2 (PRD.md §5.2): a DNP3 DISABLE_UNSOLICITED command suppresses the outstation's
+# D2 (docs/design.md §5.2): a DNP3 DISABLE_UNSOLICITED command suppresses the outstation's
 # spontaneous event reporting — blinding the master to alarms/telemetry (Inhibit
 # Response Function). Keyed by allow-list source: a sanctioned maintenance disable
 # from the real master stays quiet, but a disable from any other source is the
 # blinding signal. The scenario keeps the legitimate master polling + unsolicited
 # reporting alongside the rogue disable to prove the detection discriminates
-# (PRD.md §8).
+# (docs/design.md §8).
 #
 # Allow-list recap (dnp3-benign-baseline.yaml): permitted master master-1
 # 10.0.1.10; outstation rtu-1 10.0.1.50:20000. rogue-1 (10.0.1.77) is NOT the

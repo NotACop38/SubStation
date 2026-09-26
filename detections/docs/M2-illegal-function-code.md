@@ -1,8 +1,8 @@
 # M2 — Illegal / abnormal Modbus function code
 
-A Modbus request carrying a reserved/undefined function code, or an exception
+A Modbus request carrying an undefined function code, or an exception
 response indicating illegal-function / illegal-address probing — the
-function-code-probing detection for the Modbus slice (`PRD.md` §5.1).
+function-code-probing detection for the Modbus slice (`docs/design.md` §5.1).
 
 | | |
 |---|---|
@@ -13,33 +13,40 @@ function-code-probing detection for the Modbus slice (`PRD.md` §5.1).
 
 ## Behavior
 
-A source probes a device with reserved/undefined Modbus function codes, or
+A source probes a device with undefined Modbus function codes, or
 provokes the exception responses (`ILLEGAL_FUNCTION`, `ILLEGAL_DATA_ADDRESS`)
 that such probing draws from a compliant outstation. This is reconnaissance:
 enumerating which functions and addresses a device supports. The detection keys
 on **the code / exception itself**, not on the source or the request rate.
 
+"Undefined" means absent from Zeek's Modbus function table, which Zeek logs as
+`unknown-N`: unassigned public codes and the user-defined ranges 65–72 and
+100–110. The scenario's `0x42` (66) is a user-defined code, which a vendor may
+use legitimately (see the false-positive profile). Codes the specification
+reserves for legacy products (for example `0x09` `PROGRAM_484`) are defined in
+Zeek's table and do not trip this arm.
+
 ## Engine choice + rationale
 
 **Sigma.** The signal is visible in a **single event** — a request whose
-function code is reserved/undefined (normalized to `action_class: other`), or an
+function code is undefined (normalized to `action_class: other`), or an
 exception event whose `error` names an illegal-function/address response. No
 state or correlation is required, so Sigma is the simplest correct engine
-(Sigma-first, `PRD.md` §6.5). Sensor logs need normalization, including ICSNPP transaction exceptions and
+(Sigma-first, `docs/design.md` §6.5). Sensor logs need normalization, including ICSNPP transaction exceptions and
 Zeek function names; the selected SIEM backend needs independent validation.
 
 **Why code/exception, not volume.** A single malformed or unsupported request is
 enough to be interesting; the abnormality is the *code*, not how often it
 appears. Volume-based scanning is M3's concern (and is deliberately
-diversity-keyed, not rate-keyed — `PRD.md` §8).
+diversity-keyed, not rate-keyed — `docs/design.md` §8).
 
 ## Data source
 
 Tier-1 `.jsonl` event log (`docs/schema.md`):
 
-- `action_class` = `other` on a request — the schema maps reserved/undefined
-  codes here (every supported standard code maps to `read`/`write`/`diagnostic`,
-  so `other` is the abnormal-code marker).
+- `action_class` = `other` on a request — the schema maps undefined
+  codes here (every function Zeek names maps to `read`, `write`, `diagnostic` or
+  `control`, so `other` is the abnormal-code marker).
 - `is_exception` = `true` with `error` ∈ {`ILLEGAL_FUNCTION`,
   `ILLEGAL_DATA_ADDRESS`}. On a Modbus exception the schema **requires** a
   non-null `error` mirroring `detail.exception_code`, so the field is always
@@ -79,12 +86,12 @@ fire when:                   abnormal_function_code OR illegal_function_exceptio
 |---|---|---|---|
 | **Primary** | Remote System Information Discovery | **T0888** | Discovery (TA0102) |
 
-Probing reserved/undefined function codes (and reading the exception responses)
+Probing undefined function codes (and reading the exception responses)
 maps onto T0888: the live page describes adversaries discovering *"what logical
 nodes the device supports"* and searching for specific control functions —
 i.e. enumerating a device's supported functions/capabilities.
 
-> **VERIFY (`CLAUDE.md` gate).** Verified against the **live** ATT&CK-for-ICS
+> **VERIFY (`AGENTS.md` gate).** Verified against the **live** ATT&CK-for-ICS
 > matrix on 2026-06-04. Sources: <https://attack.mitre.org/techniques/T0888/>,
 > tactic <https://attack.mitre.org/tactics/TA0102/>.
 
@@ -96,10 +103,10 @@ i.e. enumerating a device's supported functions/capabilities.
   environments with chatty off-by-one clients, drop the `ILLEGAL_DATA_ADDRESS`
   value from the rule; the `ILLEGAL_FUNCTION` and abnormal-code arms still fire.
   (Confidence rises when an illegal-address exception co-occurs with an M3 sweep.)
-- **Vendor function extensions.** A master speaking a vendor-specific function
-  code the field-map does not classify can surface as `action_class: other`.
+- **Vendor function extensions.** A master using a user-defined function code
+  (65–72, 100–110) for a vendor extension surfaces as `action_class: other`.
   Confirm the code's meaning before treating it as recon, and classify known
-  vendor codes in the schema so they stop reading as `other`.
+  vendor codes so they stop reading as `other`.
 - **Why benign polling stays quiet.** Standard read/write polling uses only
   classified codes and draws no exceptions, so neither arm engages — the benign
   baseline produces zero M2 signal.

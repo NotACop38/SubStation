@@ -1,37 +1,27 @@
 #!/usr/bin/env python3
-"""Cut a Substation release — LOCAL and Claude-driven (CLAUDE.md: no cloud CI).
+"""Cut a Substation release locally. There is no cloud CI; this script is the pipeline.
 
-Releases here are produced entirely on the developer's machine. There is no
-GitHub Actions / cloud release pipeline (CLAUDE.md), so this script *is* the
-release pipeline. It is **idempotent and repeatable**: re-running it for a
-version that is already released re-syncs the generated artifacts (which are
-deterministic) and exits 0 without creating a duplicate commit, changelog entry,
-or tag.
+1. **Preflight.** The working tree is clean, the target version is not older
+   than the current one, its tag does not exist, and ``CHANGELOG.md`` holds
+   notes under ``## [Unreleased]``.
+2. **Gate.** ``make ci`` (Tier 1) and, unless ``--no-verify``, ``make verify
+   VERIFY_ARGS=--require-complete`` (Tier 2), both with this interpreter.
+3. **Prepare.** Set the version, promote the changelog notes, regenerate the
+   committed coverage artifacts and demo transcript, stage exactly those paths
+   and secret-scan the staged tree.
+4. **Build.** Export the staged tree (``git checkout-index``) and build the
+   sdist and wheel from that export into ``dist/``, so nothing untracked,
+   ignored or left over in ``build/`` can enter a distribution.
+5. **Record.** Commit the staged tree and create an annotated ``v<version>``
+   tag. Nothing is pushed.
 
-Pipeline (PRD §6.9 / ENGINEERING_CHECKLIST "definition of launch-ready"):
-
-  1. **Gate.** Re-run ``make ci`` (Tier 1) and ``make verify`` (Tier 2) — a
-     release only happens over a green gate. ``--no-verify`` drops Tier 2 for
-     environments without Docker; ``--skip-gate`` skips both only when the local
-     gate just ran.
-  2. **Bump + changelog.** Set the target version and promote the unreleased notes.
-  3. **Regenerate committed artifacts.** Rebuild the ATT&CK-for-ICS coverage map
-     + Navigator layer snapshot (``docs/coverage/``) and the demo transcript
-     (``docs/demo-output.txt``) from the live registry / simulator, and stage
-     them. (The raw PCAP/JSON the simulator emits stay git-ignored per repo
-     policy — only the published snapshots are committed.)
-  4. **Build.** Produce the sdist + wheel into ``dist/`` (``python -m build``,
-     no build isolation so it uses the pinned, already-installed backend).
-  5. **Commit + tag locally.** One release commit, then an annotated
-     ``v<version>`` tag. The tag is **local** — this script never pushes.
+Any failure before the commit restores and unstages every path the release
+touched, so the same command can be re-run once the cause is fixed.
 
 Usage::
 
-    python scripts/release/run.py [--version X.Y.Z | --bump {major,minor,patch}]
-                                  [--no-verify] [--skip-gate] [--allow-dirty]
-                                  [--dry-run]
-
-Exit code 0 on success (including an idempotent no-op re-run), 1 on any failure.
+    python scripts/release/run.py (--version X.Y.Z | --bump {major,minor,patch})
+                                  [--no-verify] [--skip-gate] [--dry-run]
 """
 
 from __future__ import annotations
@@ -39,312 +29,228 @@ from __future__ import annotations
 import argparse
 import datetime
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_PYPROJECT = _REPO_ROOT / "pyproject.toml"
-_CHANGELOG = _REPO_ROOT / "CHANGELOG.md"
-_DIST = _REPO_ROOT / "dist"
-_DOCS_COVERAGE = _REPO_ROOT / "docs" / "coverage"
-_DEMO_TRANSCRIPT = _REPO_ROOT / "docs" / "demo-output.txt"
+_DIST = "dist"
+_PYPROJECT = "pyproject.toml"
+_CHANGELOG = "CHANGELOG.md"
+_DEMO_TRANSCRIPT = "docs/demo-output.txt"
+_COVERAGE_DIR = "docs/coverage"
+# Every path the release writes; the rollback restores exactly these.
+_RELEASE_PATHS = (_PYPROJECT, _CHANGELOG, _COVERAGE_DIR, _DEMO_TRANSCRIPT)
 
-_VERSION_RE = re.compile(r"^\s*\d+\.\d+\.\d+\s*$")
-# The line in pyproject's [project] table; matched anchored to start of line.
+_VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 _PYPROJECT_VERSION_RE = re.compile(r'^version\s*=\s*"(?P<v>[^"]+)"\s*$', re.MULTILINE)
+_UNRELEASED_RE = re.compile(
+    r"^## \[Unreleased\][^\n]*\n(?P<body>.*?)(?=^## \[|^\[[^\]]+\]:|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
 
 
 class ReleaseError(RuntimeError):
-    """A release step failed in a way that should abort the release."""
+    """A release step failed; the release is aborted."""
 
 
-# --- small process / git helpers ---------------------------------------------
+# --- process / git helpers ---------------------------------------------------
 
 
-def _run(cmd: list[str], *, dry_run: bool = False) -> None:
-    """Run a command, streaming output; raise ReleaseError on non-zero exit."""
+def _run(cmd: list[str], *, cwd: Path | None = None) -> None:
+    """Run a command, streaming its output; raise ReleaseError on failure."""
     print(f"release: $ {' '.join(cmd)}")
-    if dry_run:
-        return
-    result = subprocess.run(cmd, cwd=_REPO_ROOT)
+    result = subprocess.run(cmd, cwd=cwd or _REPO_ROOT)  # noqa: S603
     if result.returncode != 0:
         raise ReleaseError(f"command failed ({result.returncode}): {' '.join(cmd)}")
 
 
-def _git(*args: str, check: bool = True) -> str:
-    """Run a git command and return its stripped stdout."""
-    result = subprocess.run(["git", *args], cwd=_REPO_ROOT, capture_output=True, text=True)
-    if check and result.returncode != 0:
+def _git(*args: str) -> str:
+    """Run a git command in the repository and return its stripped stdout."""
+    result = subprocess.run(
+        ["git", *args],  # noqa: S607
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
         raise ReleaseError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout.strip()
 
 
-def _tag_exists(tag: str) -> bool:
-    return bool(_git("tag", "--list", tag))
+def _path(relative: str) -> Path:
+    return _REPO_ROOT / relative
 
 
-# --- version handling --------------------------------------------------------
+# --- versions and changelog --------------------------------------------------
+
+
+def _parse_version(version: str, what: str) -> tuple[int, int, int]:
+    match = _VERSION_RE.match(version)
+    if match is None:
+        raise ReleaseError(f"{what} {version!r} is not a SemVer X.Y.Z version")
+    major, minor, patch = (int(part) for part in match.groups())
+    return major, minor, patch
 
 
 def _read_version() -> str:
-    with _PYPROJECT.open("rb") as fh:
-        data = tomllib.load(fh)
-    version = data["project"]["version"]
-    if not isinstance(version, str):  # pragma: no cover - defensive
+    with _path(_PYPROJECT).open("rb") as fh:
+        version = tomllib.load(fh)["project"]["version"]
+    if not isinstance(version, str):
         raise ReleaseError("pyproject [project].version is not a string")
     return version
 
 
-def _bump(version: str, level: str) -> str:
-    if not _VERSION_RE.match(version):
-        raise ReleaseError(f"current version {version!r} is not X.Y.Z; use --version")
-    major, minor, patch = (int(p) for p in version.split("."))
-    if level == "major":
+def _target_version(args: argparse.Namespace, current: str) -> str:
+    major, minor, patch = _parse_version(current, "current version")
+    if args.version is not None:
+        target = str(args.version)
+        if _parse_version(target, "--version") < (major, minor, patch):
+            raise ReleaseError(f"--version {target} is older than the current version {current}")
+        return target
+    if args.bump == "major":
         return f"{major + 1}.0.0"
-    if level == "minor":
+    if args.bump == "minor":
         return f"{major}.{minor + 1}.0"
     return f"{major}.{minor}.{patch + 1}"
 
 
-def _write_version(new_version: str) -> bool:
-    """Set pyproject's version. Return True if it changed."""
-    text = _PYPROJECT.read_text(encoding="utf-8")
-    match = _PYPROJECT_VERSION_RE.search(text)
+def _unreleased_section(text: str) -> re.Match[str]:
+    """Locate the ``[Unreleased]`` section; refuse a release without notes."""
+    match = _UNRELEASED_RE.search(text)
     if match is None:
-        raise ReleaseError("could not find a version line in pyproject.toml")
-    if match.group("v") == new_version:
-        return False
-    new_text = _PYPROJECT_VERSION_RE.sub(f'version = "{new_version}"', text, count=1)
-    _PYPROJECT.write_text(new_text, encoding="utf-8")
-    return True
+        raise ReleaseError(f"{_CHANGELOG} has no '## [Unreleased]' section")
+    if not match.group("body").strip():
+        raise ReleaseError(f"{_CHANGELOG} [Unreleased] is empty; record the release notes first")
+    return match
 
 
-def _target_version(args: argparse.Namespace, current: str) -> str:
-    if args.version is not None:
-        target = str(args.version)
-        if not _VERSION_RE.match(target):
-            raise ReleaseError(f"--version {target!r} is not a SemVer X.Y.Z string")
-        return target
-    return _bump(current, args.bump)
-
-
-# --- changelog ---------------------------------------------------------------
-
-
-def _update_changelog(version: str, date: str) -> bool:
-    """Promote the [Unreleased] section to [version]. Return True if it changed.
-
-    Idempotent: if a ``## [version]`` section already exists, do nothing.
-    """
-    if not _CHANGELOG.exists():
-        raise ReleaseError(f"{_CHANGELOG.name} is missing; cannot record the release")
-    text = _CHANGELOG.read_text(encoding="utf-8")
-
-    if re.search(rf"^## \[{re.escape(version)}\]", text, re.MULTILINE):
-        return False  # already recorded — idempotent re-run
-
-    unreleased = re.search(
-        r"^## \[Unreleased\]\s*\n(?P<body>.*?)(?=^## \[|\Z)",
-        text,
-        re.MULTILINE | re.DOTALL,
+def _set_version(version: str) -> None:
+    path = _path(_PYPROJECT)
+    text = path.read_text(encoding="utf-8")
+    if _PYPROJECT_VERSION_RE.search(text) is None:
+        raise ReleaseError(f"could not find the version line in {_PYPROJECT}")
+    path.write_text(
+        _PYPROJECT_VERSION_RE.sub(f'version = "{version}"', text, count=1), encoding="utf-8"
     )
-    if unreleased is None:
-        raise ReleaseError("CHANGELOG.md has no '## [Unreleased]' section to promote")
 
-    body = unreleased.group("body").strip("\n")
-    if not body.strip():
-        body = "- No user-facing changes recorded for this release."
 
-    replacement = f"## [Unreleased]\n\n## [{version}] - {date}\n\n{body}\n"
-    new_text = text[: unreleased.start()] + replacement + text[unreleased.end() :]
-    # Collapse any run of >2 blank lines the splice may introduce.
-    new_text = re.sub(r"\n{3,}", "\n\n", new_text)
-    _CHANGELOG.write_text(new_text, encoding="utf-8")
-    return True
+def _promote_changelog(version: str, date: str) -> None:
+    """Move the ``[Unreleased]`` notes under a new ``[version] - date`` heading."""
+    path = _path(_CHANGELOG)
+    text = path.read_text(encoding="utf-8")
+    match = _unreleased_section(text)
+    notes = match.group("body").strip("\n")
+    rest = text[match.end() :]
+    section = f"## [Unreleased]\n\n## [{version}] - {date}\n\n{notes}\n" + ("\n" if rest else "")
+    path.write_text(text[: match.start()] + section + rest, encoding="utf-8")
 
 
 # --- pipeline steps ----------------------------------------------------------
 
 
+def _preflight(target: str) -> None:
+    if _git("status", "--porcelain"):
+        raise ReleaseError("the working tree is not clean; commit or stash changes first")
+    if _git("tag", "--list", f"v{target}"):
+        raise ReleaseError(f"tag v{target} already exists; choose a new version")
+    _unreleased_section(_path(_CHANGELOG).read_text(encoding="utf-8"))
+
+
 def _gate(args: argparse.Namespace) -> None:
     if args.skip_gate:
-        print("release: --skip-gate set; NOT re-running make ci / make verify")
+        print("release: --skip-gate set; NOT running make ci / make verify")
         return
-    print("release: gate — re-running make ci (Tier 1)")
-    _run(["make", "ci", f"PY={sys.executable}"], dry_run=args.dry_run)
+    _run(["make", "ci", f"PY={sys.executable}"])
     if args.no_verify:
-        print("release: --no-verify set; skipping Tier-2 'make verify' gate")
+        print("release: --no-verify set; the Tier-2 gate did NOT run")
         return
-    print("release: gate — re-running make verify (Tier 2)")
-    _run(
-        ["make", "verify", f"PY={sys.executable}", "VERIFY_ARGS=--require-complete"],
-        dry_run=args.dry_run,
+    _run(["make", "verify", f"PY={sys.executable}", "VERIFY_ARGS=--require-complete"])
+
+
+def _regenerate() -> None:
+    """Rebuild the committed coverage artifacts and the demo transcript."""
+    _run([sys.executable, "-m", "substation.coverage", "--out", str(_path(_COVERAGE_DIR))])
+    demo = subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "substation.cli", "demo"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
     )
-
-
-def _build_distributions(args: argparse.Namespace) -> None:
-    print("release: building sdist + wheel into dist/")
-    # setup.py bundles detections and scenarios so the installed CLI works
-    # outside a checkout. Use the selected interpreter and its build backend.
-    _run(
-        [
-            sys.executable,
-            "-m",
-            "build",
-            "--sdist",
-            "--wheel",
-            "--no-isolation",
-            "--outdir",
-            str(_DIST),
-        ],
-        dry_run=args.dry_run,
+    if demo.returncode != 0:
+        raise ReleaseError(f"demo failed:\n{demo.stdout}\n{demo.stderr}")
+    header = (
+        "# Substation demo · `make demo` output\n"
+        "#\n"
+        "# Generated by `make release` (scripts/release/run.py); do not edit by hand.\n"
+        "# Tier-1 loop: generate -> detect -> report, pure Python.\n\n"
     )
+    _path(_DEMO_TRANSCRIPT).write_text(header + demo.stdout, encoding="utf-8")
 
 
-def _regenerate_artifacts(args: argparse.Namespace) -> None:
-    print("release: regenerating committed coverage snapshot + Navigator layer")
-    _run(
-        [sys.executable, "-m", "substation.coverage", "--out", str(_DOCS_COVERAGE)],
-        dry_run=args.dry_run,
-    )
-    print("release: regenerating demo transcript (docs/demo-output.txt)")
-    if not args.dry_run:
-        result = subprocess.run(
-            [sys.executable, "-m", "substation.cli", "demo"],
+def _scan_staged() -> None:
+    """Secret-scan the exact tree that will be committed."""
+    _run([sys.executable, "scripts/security/secret_scan.py", "--staged"])
+
+
+def _prepare(target: str) -> None:
+    """Bump, promote the changelog, regenerate artifacts and stage the release paths."""
+    _set_version(target)
+    _promote_changelog(target, datetime.date.today().isoformat())
+    _regenerate()
+    _git("add", "--", *_RELEASE_PATHS)
+    _scan_staged()
+
+
+def _build(version: str) -> list[Path]:
+    """Build the sdist and wheel from an export of the staged tree (the index)."""
+    with tempfile.TemporaryDirectory(prefix="substation-release-") as scratch:
+        root = Path(scratch)
+        source = root / "source"
+        _git("checkout-index", "--all", f"--prefix={source}/")
+        out = root / "dist"
+        _run(
+            [
+                sys.executable,
+                "-m",
+                "build",
+                "--sdist",
+                "--wheel",
+                "--no-isolation",
+                "--outdir",
+                str(out),
+                str(source),
+            ],
+            cwd=source,
+        )
+        built = sorted(out.iterdir())
+        names = [path.name for path in built]
+        if len(built) != 2 or not all(f"-{version}" in name for name in names):
+            raise ReleaseError(f"expected one sdist and one wheel for {version}, built {names}")
+        dist = _path(_DIST)
+        dist.mkdir(exist_ok=True)
+        published = []
+        for path in built:
+            shutil.copy2(path, dist / path.name)
+            published.append(dist / path.name)
+        return published
+
+
+def _rollback() -> None:
+    """Restore and unstage every release path (the tree was clean at preflight)."""
+    print("release: rolling back the version, changelog and regenerated artifacts")
+    subprocess.run(["git", "reset", "-q", "--", *_RELEASE_PATHS], cwd=_REPO_ROOT)  # noqa: S607
+    for path in _RELEASE_PATHS:  # one at a time: a path missing from HEAD must not block others
+        subprocess.run(  # noqa: S603
+            ["git", "checkout", "-q", "HEAD", "--", path],  # noqa: S607
             cwd=_REPO_ROOT,
             capture_output=True,
-            text=True,
         )
-        if result.returncode != 0:
-            raise ReleaseError(f"demo failed:\n{result.stdout}\n{result.stderr}")
-        header = (
-            "# Substation demo · `make demo` output\n"
-            "#\n"
-            "# Generated by `make release` (scripts/release/run.py); do not edit by hand.\n"
-            "# Tier-1 loop: generate -> detect -> report, pure Python.\n\n"
-        )
-        _DEMO_TRANSCRIPT.write_text(header + result.stdout, encoding="utf-8")
-    # NB: staging happens in _commit_and_tag so a real release captures the *full*
-    # intended tree (incl. any --allow-dirty source changes) and an idempotent
-    # re-run over an existing tag never commits on top of it.
-
-
-def _working_tree_dirty() -> bool:
-    return bool(_git("status", "--porcelain"))
-
-
-def _check_release_tree(
-    target: str, current: str, already_released: bool, allow_dirty: bool
-) -> None:
-    """A built artifact must describe the same source tree as its release tag."""
-    if already_released:
-        tagged = _git("rev-parse", f"v{target}^{{commit}}")
-        if tagged != _git("rev-parse", "HEAD") or target != current or _working_tree_dirty():
-            raise ReleaseError(
-                f"v{target} already exists; retry only from its clean tagged checkout "
-                "with matching project version. Refusing to rebuild a different tree under that tag."
-            )
-        return
-    if not allow_dirty:
-        if _working_tree_dirty():
-            raise ReleaseError("working tree is not clean; commit changes before releasing")
-        return
-    # Untracked sources can enter the wheel but would be omitted by git add -u.
-    # Require them to be deliberately committed before this convenience mode.
-    if _git("ls-files", "--others", "--exclude-standard"):
-        raise ReleaseError("--allow-dirty supports tracked edits only; commit new files first")
-    changed = set(_git("diff", "--name-only", "-z").split("\0"))
-    changed.update(_git("diff", "--cached", "--name-only", "-z").split("\0"))
-    allowed = {*_RELEASE_ARTIFACT_PATHS, *_RELEASE_SOURCE_TREES}
-    unexpected = [
-        p
-        for p in changed
-        if p and not any(p == root or p.startswith(root + "/") for root in allowed)
-    ]
-    if unexpected:
-        raise ReleaseError(f"changes outside release paths must be committed first: {unexpected}")
-
-
-# Paths the release pipeline itself regenerates / bumps. Always stage these.
-_RELEASE_ARTIFACT_PATHS = (
-    "docs/coverage/coverage.md",
-    "docs/coverage/coverage.json",
-    "docs/coverage/navigator-layer.json",
-    "docs/demo-output.txt",
-    "CHANGELOG.md",
-    "pyproject.toml",
-)
-# Tracked trees that may be included when cutting a release with --allow-dirty.
-_RELEASE_SOURCE_TREES = (
-    "substation",
-    "detections",
-    "scenarios",
-    "tests",
-    "scripts",
-    "docs",
-    "Makefile",
-    "README.md",
-    "PRD.md",
-    "ENGINEERING_CHECKLIST.md",
-    "AGENTS.md",
-    "CLAUDE.md",
-    "CONTRIBUTING.md",
-    "setup.py",
-    "MANIFEST.in",
-    "requirements.lock",
-    "requirements.metadata.json",
-)
-
-
-def _stage_release_paths(*, allow_dirty: bool, dry_run: bool) -> None:
-    """Stage only the release allowlist (plus optional tracked product trees)."""
-    for path in _RELEASE_ARTIFACT_PATHS:
-        _run(["git", "add", "--", path], dry_run=dry_run)
-    if allow_dirty:
-        for path in _RELEASE_SOURCE_TREES:
-            _run(["git", "add", "-u", "--", path], dry_run=dry_run)
-
-
-def _scan_staged_tree(*, dry_run: bool) -> None:
-    """Re-run the secret scanner after staging the exact tree to be committed."""
-    _run([sys.executable, "scripts/security/secret_scan.py", "--staged"], dry_run=dry_run)
-
-
-def _require_unchanged_retry(version: str, *, dry_run: bool) -> None:
-    if not dry_run and _working_tree_dirty():
-        raise ReleaseError(
-            f"regenerated artifacts differ from v{version}; refusing to rebuild under "
-            "the existing tag. Review the changes and use a new version."
-        )
-
-
-def _commit_and_tag(version: str, args: argparse.Namespace, already_released: bool) -> None:
-    tag = f"v{version}"
-
-    if already_released:
-        _require_unchanged_retry(version, dry_run=args.dry_run)
-        print(f"release: {tag} already released; artifacts unchanged — nothing to do.")
-        print(f"release: tag {tag} left in place (idempotent; NOT pushed).")
-        return
-
-    # Stage an explicit allowlist (release artifacts + version/changelog) so a
-    # dirty worktree cannot accidentally commit secrets or unrelated junk.
-    # With --allow-dirty, also stage tracked updates under the product trees.
-    _stage_release_paths(
-        allow_dirty=bool(getattr(args, "allow_dirty", False)), dry_run=args.dry_run
-    )
-    _scan_staged_tree(dry_run=args.dry_run)
-    staged = _git("diff", "--cached", "--name-only")
-    if not staged and not args.dry_run:
-        print("release: nothing staged — working tree already at this release")
-    else:
-        _run(["git", "commit", "-m", f"Release {tag}"], dry_run=args.dry_run)
-
-    _run(["git", "tag", "-a", tag, "-m", f"Substation {tag}"], dry_run=args.dry_run)
-    print(f"release: tagged {tag} locally (NOT pushed — push the tag manually if desired)")
+    subprocess.run(["git", "clean", "-fdq", "--", *_RELEASE_PATHS], cwd=_REPO_ROOT)  # noqa: S607
 
 
 # --- main --------------------------------------------------------------------
@@ -353,35 +259,27 @@ def _commit_and_tag(version: str, args: argparse.Namespace, already_released: bo
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="release",
-        description="Cut a local Substation release (gate -> build -> artifacts -> bump -> tag).",
+        description="Cut a local Substation release (preflight -> gate -> build -> tag).",
     )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("--version", help="Explicit target version (SemVer X.Y.Z).")
-    group.add_argument(
-        "--bump",
-        choices=["major", "minor", "patch"],
-        default="minor",
-        help="Bump level when --version is not given (default: minor).",
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--version", help="Explicit target version (SemVer X.Y.Z).")
+    target.add_argument(
+        "--bump", choices=["major", "minor", "patch"], help="Bump the current version."
     )
     parser.add_argument(
         "--no-verify",
         action="store_true",
-        help="Skip the Tier-2 'make verify' gate (e.g. no Docker available).",
+        help="Skip the Tier-2 'make verify' gate (no Docker); the release is Tier-2 unverified.",
     )
     parser.add_argument(
         "--skip-gate",
         action="store_true",
-        help="Skip both gates (make ci / make verify). Use only when CI just ran.",
-    )
-    parser.add_argument(
-        "--allow-dirty",
-        action="store_true",
-        help="Include tracked product edits; commit new files and unrelated changes first.",
+        help="Skip both gates. Use only when they just passed on this exact commit.",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print the steps without changing files, committing, or tagging.",
+        help="Run the preflight and print the plan without changing anything.",
     )
     return parser
 
@@ -392,35 +290,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         current = _read_version()
         target = _target_version(args, current)
         tag = f"v{target}"
-        already_released = _tag_exists(tag)
-
-        print(f"release: current version {current} -> target {target} (tag {tag})")
-        if already_released:
-            print(
-                f"release: {tag} already exists — idempotent re-run "
-                "(re-sync artifacts; no new commit/tag/changelog entry)"
-            )
-
-        _check_release_tree(target, current, already_released, args.allow_dirty)
-
+        print(f"release: {current} -> {target} (tag {tag})")
+        _preflight(target)
+        if args.dry_run:
+            print("release: preflight passed; would gate, prepare, build, commit and tag")
+            return 0
         _gate(args)
-
-        # Bump the version BEFORE building so the sdist + wheel carry the release
-        # version (idempotent re-runs already have pyproject at the target).
-        date = datetime.date.today().isoformat()
-        if not already_released and not args.dry_run:
-            _write_version(target)
-            _update_changelog(target, date)
-        elif args.dry_run:
-            print(f"release: would set version {target} and promote CHANGELOG ({date})")
-
-        _regenerate_artifacts(args)
-        if already_released:
-            _require_unchanged_retry(target, dry_run=args.dry_run)
-        _build_distributions(args)
-        _commit_and_tag(target, args, already_released)
-
-        print(f"release: done — {tag} is built, recorded, and tagged locally.")
+        try:
+            _prepare(target)
+            tree = _git("write-tree")
+            published = _build(target)
+            _run(["git", "commit", "-q", "-m", f"Release {tag}"])
+        except BaseException:
+            _rollback()
+            raise
+        if _git("rev-parse", "HEAD^{tree}") != tree:
+            raise ReleaseError("the release commit does not match the built tree; not tagging")
+        _run(["git", "tag", "-a", tag, "-m", f"Substation {tag}"])
+        for path in published:
+            print(f"release: built {path.relative_to(_REPO_ROOT)}")
+        print(f"release: done — {tag} committed and tagged locally (NOT pushed)")
         return 0
     except ReleaseError as exc:
         print(f"release: ERROR — {exc}", file=sys.stderr)

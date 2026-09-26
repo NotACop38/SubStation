@@ -1,1 +1,1 @@
-"""Substation test harness (pytest). Enforces the Detection Contract from Phase 1 on."""
+"""Substation test harness (pytest), including the Detection Contract."""

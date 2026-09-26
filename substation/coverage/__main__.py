@@ -5,13 +5,14 @@ Usage::
     python -m substation.coverage [--check] [--out DIR]
 
 Default: render every coverage artifact from ``detections/registry.yaml`` into
-the committed snapshot directory ``docs/coverage/`` (``coverage.md``,
-``coverage.json``, ``navigator-layer.json``). These are GENERATED — never
-hand-edit them.
+the committed snapshot directory ``docs/coverage/`` of a repository checkout
+(``coverage.md``, ``coverage.json``, ``navigator-layer.json``,
+``coverage-matrix.svg``); outside a checkout, ``--out`` is required. These are
+GENERATED — never hand-edit them.
 
 ``--check``: render in memory and compare against the committed files; exit 1 if
 any is missing or stale (drift). This is what ``make ci`` runs so the committed
-coverage map can never fall out of sync with the registry (PRD.md §6.7).
+coverage map can never fall out of sync with the registry (docs/design.md §6.7).
 
 Exit code is 0 on success, 1 on drift / write failure.
 """
@@ -24,11 +25,11 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from substation.coverage.builder import render_all
-from substation.detect.registry import RegistryError
+from substation.detect.registry import REPO_ROOT, RegistryError
 
-# The single committed snapshot (drift-checked by `make ci`); there is no
-# separate scratch output directory.
-_DEFAULT_OUT = Path("docs") / "coverage"
+# The single committed snapshot (drift-checked by `make ci`). It only exists in a
+# repository checkout; elsewhere --out is required.
+_CHECKOUT_OUT = REPO_ROOT / "docs" / "coverage"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -44,11 +45,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=_DEFAULT_OUT,
-        help="Output directory (default: docs/coverage, the committed snapshot).",
+        default=None,
+        help="Output directory (default in a checkout: docs/coverage, the committed snapshot).",
     )
     args = parser.parse_args(argv)
-    out_dir: Path = args.out
+    if args.out is not None:
+        out_dir: Path = args.out
+    elif _CHECKOUT_OUT.is_dir():
+        out_dir = _CHECKOUT_OUT
+    else:
+        print("coverage: --out is required outside a repository checkout", file=sys.stderr)
+        return 1
 
     try:
         artifacts = render_all()

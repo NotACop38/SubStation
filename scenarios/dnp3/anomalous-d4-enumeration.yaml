@@ -1,11 +1,11 @@
 # =============================================================================
 # Anomalous (D4) — function-code enumeration / scanning (diversity, NOT volume)
 # =============================================================================
-# D4 (PRD.md §5.2, §8): ONE source exercising an anomalously DIVERSE set of DNP3
+# D4 (docs/design.md §5.2, §8): ONE source exercising an anomalously DIVERSE set of DNP3
 # function codes against an outstation in a short window — mapping which functions
 # the device supports (Discovery). The signal is DIVERSITY, deliberately NOT raw
 # request rate: SCADA masters poll constantly, so a volume threshold would fire on
-# normal operation (PRD.md §8). This scenario therefore uses only a handful of
+# normal operation (docs/design.md §8). This scenario therefore uses only a handful of
 # requests, each a DIFFERENT function code, in a tight window: low volume, high
 # diversity.
 #
@@ -19,9 +19,9 @@
 
 name: dnp3-anomalous-d4-enumeration
 description: >-
-  A single scanning host (10.0.1.66) walks nine distinct DNP3 function codes
-  against the outstation in a short window — high function-code diversity at low
-  request volume — to map supported functions. Fires D4 (function-code
+  A single scanning host (10.0.1.66) walks eleven distinct DNP3 function codes,
+  two of them undefined, against the outstation in a short window — high
+  function-code diversity at low request volume — to map supported functions. Fires D4 (function-code
   enumeration); stays quiet on D1/D2/D3 (it touches none of the restart,
   disable-unsolicited, or operate commands those key on).
 
@@ -52,7 +52,7 @@ exchanges:
     offset: 0.0
     params: { object_type: Binary Input With Status, range_low: 0, range_high: 9, object_count: 10 }
 
-  # --- the sweep: 9 distinct function codes from one source, short window ----
+  # --- the sweep: 11 distinct function codes from one source, short window ---
   # One request each — diversity is the signal, not volume. None of these are the
   # restart / disable-unsolicited / operate commands D1–D3 key on.
   - source: scanner-1
@@ -92,10 +92,18 @@ exchanges:
     target: rtu-1
     function: GetFileInfo
     offset: 5.0
+  - source: scanner-1        # undefined codes: Zeek logs them as unknown-34/35,
+    target: rtu-1            # and the outstation answers with IIN2.0.
+    function: '0x22'
+    offset: 5.5
+  - source: scanner-1
+    target: rtu-1
+    function: '0x23'
+    offset: 6.0
 
 exercises:
   fires:
-    - D4   # one source, nine distinct function codes, short window.
+    - D4   # one source, eleven distinct function codes, short window.
   quiet:
     - D1   # the sweep issues no device restart.
     - D2   # the sweep issues no disable-unsolicited.

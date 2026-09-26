@@ -1,7 +1,7 @@
 # =============================================================================
 # Anomalous (X1) — cross-protocol baseline deviation: NEW TALKER
 # =============================================================================
-# X1 (PRD.md §5.4): a source/destination/function combination not in the learned
+# X1 (docs/design.md §5.4): a source/destination/function combination not in the learned
 # baseline, across any supported protocol. This scenario exercises the strongest
 # deviation class — a NEW TALKER: a host (10.0.0.123) that is NOT in the learned
 # baseline (the benign baselines establish only hmi-1 10.0.0.10 and ews-1
@@ -20,7 +20,7 @@
 # 10.0.0.123 is in NEITHER known_talkers NOR known_pairs -> X1 fires (new talker).
 # -----------------------------------------------------------------------------
 
-name: anomalous-x1-new-talker
+name: modbus-anomalous-x1-new-talker
 description: >-
   An unbaselined host (10.0.0.123, never seen in the learned baseline) originates
   Modbus reads to the PLC amid normal HMI/EWS polling. Fires X1 (cross-protocol
@@ -87,3 +87,4 @@ exercises:
   quiet:
     - M1   # the new talker only reads — no write functions at all.
     - M2   # every function code is legal/standard Modbus.
+    - M4   # small reads; no address-space sweep.
