@@ -4,126 +4,117 @@ All notable changes to **Substation** are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-Releases are cut **locally** with `make release` (CLAUDE.md: no cloud CI/CD); the
-`## [Unreleased]` section is promoted to the new version at release time.
+Releases are cut **locally** with `make release` (there is no cloud CI/CD); the
+`## [Unreleased]` notes are promoted to the new version at release time.
 
 ## [Unreleased]
 
-### S7 and Sigma validation closeout
-
-- Compare COTP frames and S7 request/response details against the pinned independent parser, retaining its explicit PDU-reference compatibility transform.
-- Correct S7 success, SZL and transfer fields; require the supported fixed-width block filename and remove an unused encoder argument.
-- Add all-operation and identifier boundary checks plus observation-mutation regressions.
-- Regenerate S7 golden/documentation records from the independently checked operation fixture; fail local CI on stale examples without rewriting them.
-- Execute authored and site-exported rules with the official SQLite backend in local CI; document reproduced NULL and expression-depth limits.
-- Keep the backend development-only with verified artifact hashes; reconcile current qualification guidance.
-
-### DNP3 field fidelity
-
-- Replaced request-count checks with independent per-message header and object/control comparisons, including responses, ports, direction and connection order.
-- Added boundary fixtures and checks for lost/duplicated/reordered observations and decoder diagnostics.
-- Corrected ICSNPP operation labels, Zeek IIN representation, packed binary output sizes and analog-output status octets.
-- Removed fabricated CONFIRM responses and rejected unused response parameters on no-response and request-only operations.
-- Kept input operation aliases compatible; new JSON emits spaced ICSNPP labels. Timing, unmodeled payload semantics and general sensor import remain unqualified.
-
-### Independent validation and site policies
-
-- Added strict ICSNPP Modbus JSON/TSV import with transaction provenance and supported-field comparisons against real Zeek.
-- Added versioned site permissions, portable Sigma export, and `detect --policy` using the same compiler.
-- Added attributed, sanitized external Modbus captures and per-event confusion metrics, with explicit counterfactual-policy labels.
-- Added artifact-hashed dependency installation, verified wheel metadata, and offline transitive CycloneDX dependency graphs.
-- Bound reviewed secret-scanner digest exceptions to exact source lines and paths.
-
-### September 2026 project review
-
-- Corrected M1 full-span and target policy, DNP3/S7 target scoping, and S1 PLC Control service discrimination.
-- Kept X1 trust fixed after training, with bounded suppression and recurring alerts.
-- Repaired S7 download, User-Data and S7-plus wire encoding; added real-parser request-count comparisons and complete native Tier-2 validation.
-- Added validated JSONL `detect`; reject ambiguous JSON/rules, unsupported Sigma expressions and unused scenario parameters.
-- Unified bounded UTF-8 input handling for detection and schema validation; reject special files without blocking and enforce caps even when input grows.
-- Fixed source archives and rebuilt wheels, pinned missing build tools, and hardened release source/tag and staged secret checks.
-- Made CI coverage checks read-only and dependency installation consume the checked lock.
-- Installed the local push gate using Git's active hook path, including linked worktrees, while preserving unrelated existing hooks.
-- Reframed the project as an experimental offline toolkit; regenerated demo media from real CLI output and documented qualification limits.
-
 ### Added
 
-- **Packaged content** — `detections/` and `scenarios/` ship in the wheel under
-  `substation.content` (setuptools `build_py` hook); CLI/registry resolve via
-  `importlib.resources`-compatible paths with checkout fallback.
-- **Sigma range modifiers** — Tier-1 evaluator supports `|gte` / `|lte` / `|gt` /
-  `|lt` / `|neq`; M1 setpoint band uses ranges instead of an enumerated list.
-- **X1 baseline token parity** — `_x1_baseline_redef` includes the S7 benign
-  baseline and emits Zeek-matching `rosctr`/`szl`/`s7comm-plus` tokens
-  (`substation/detect/x1_tokens.py` + unit tests).
-- **Dependency lockfile** — committed `requirements.lock`; `make security`
-  prefers it for the scoped audit when present.
-- **Honeypot external-bind confirmation** — `--allow-external` also requires
-  `SUBSTATION_HONEYPOT_I_UNDERSTAND=1`.
-- **Local DoS caps** — JSONL load line/byte caps; scenario exchange-count cap.
-- **S7 Tier-2 enablement docs** — `docs/verify-s7.md` + optional
-  `SUBSTATION_ZEEK_S7_IMAGE`.
-- **CLI front door** — `substation --version`; `substation list` (registered
-  detections + bundled scenarios); `substation validate` and `substation
-  coverage` as first-class spellings of the `python -m` entrypoints;
-  `demo --scenario` accepts multiple files; and `demo --strict` exits non-zero
-  unless every scenario's `exercises` contract holds (a one-command smoke test
-  for scenario edits).
-- **Exact-hit Detection Contract net** — every validated Tier-1 fire case now
-  pins the exact event indices its rule must hit
-  (`tests/test_detection_contract.py::_EXPECTED_FIRE_HITS`), so a rule that
-  over-matches but still passes fire/quiet is caught. Plus: Sigma rule `id:`
-  UUIDs must be unique, and scenario names must be globally unique across
-  protocol trees (they are artifact basenames).
-- **Honeypot probe-log rotation** — the probe log rotates to `<log>.1` at
-  `log_max_bytes` (default 50 MiB, `--log-max-bytes`, 0 disables), so a noisy
-  scanner can no longer grow it unboundedly.
+- **M4, Modbus bulk read / address-space sweep** (Zeek; Collection: T0801, T0861):
+  counts distinct address pages one source reads from one table, with a
+  read-sweep scenario and a bulk-poll boundary scenario.
+- **Complete Tier 2 in Docker.** `make verify` builds a local Zeek image with the
+  pinned ICSNPP S7comm plugin and a reviewed bounds patch (`make verify-image`),
+  so S3, X1's S7 path and every S7 comparison run without extra setup
+  ([`docs/tier2.md`](docs/tier2.md)).
+- **Field-level comparisons with real parsers:** Modbus transactions, DNP3
+  per-message headers, objects and controls, and S7 COTP, headers and modeled
+  fields; any `weird.log` diagnostic fails.
+- **Sensor import:** `substation import-modbus` projects ICSNPP
+  `modbus_detailed` logs (Zeek JSON or TSV) into the event schema, skipping and
+  counting unprojectable rows (`--strict` fails instead) and marking value
+  vectors the sensor truncated.
+- **Site policies:** `substation policy compile` and `detect --policy` compile a
+  versioned site profile into the seven Tier-1 Sigma rules; `make verify-sigma`
+  compares their hits with the official SQLite backend.
+- **External evidence:** an attributed Modbus corpus with per-event labels and
+  metrics (`make corpus`, `substation evaluate-corpus`).
+- **DNP3 modeling:** class objects (Class 0–3 Data), `ASSIGN_CLASS`,
+  `AUTHENTICATE_REQ`, undefined codes answered with IIN2.0, application-control
+  sequence, confirm and unsolicited bits, automatic confirmation of unsolicited
+  responses, select-before-operate status, and a master-startup boundary
+  scenario for D4.
+- **CLI:** `--version`, `list`, `detect`, `validate`, `coverage`, multiple
+  `demo --scenario` files and `demo --strict`; a status legend on the coverage
+  map; honeypot `--connection-timeout`.
+- **Packaging:** detections and scenarios ship in the wheel; Python 3.12 and 3.13
+  are supported; the package ships `py.typed`.
+- **Supply chain:** hash-locked dependencies with verified wheel metadata and an
+  offline CycloneDX SBOM.
+- **Coverage:** a generated ATT&CK matrix SVG alongside the table, JSON and
+  Navigator layer.
+- **Docs:** [`docs/design.md`](docs/design.md), [`docs/validation.md`](docs/validation.md),
+  [`docs/deployment.md`](docs/deployment.md), [`docs/tier2.md`](docs/tier2.md)
+  and [`SECURITY.md`](SECURITY.md).
 
 ### Changed
 
-- Demo default set includes a DNP3 anomaly (≥2 protocols); coverage map marks
-  Tier-2 detections as `◇ not-run` when not evaluated (never misleading `quiet`).
-- `make security` also bandit-scans `scripts/` (B603/B607 skipped for fixed
-  subprocess argv lists).
-- Release staging uses an explicit path allowlist (optional `--allow-dirty`
-  product trees).
-- Constitution docs (PRD / AGENTS / CLAUDE / checklist / CONTRIBUTING) synced to
-  local-CI reality; orphan root `coverage/` artifacts removed.
-- Sigma rule `status:` is `experimental`; synthetic Tier-1 validation is not production qualification.
-- Pillow pinned in the `dev` extra for `make demo-gif`.
-- Tier-1 `detect` package docstring clarifies Zeek/Suricata run out-of-package.
-- `make ci` invokes every tool as `$(PY) -m <tool>` so the gate always checks
-  the interpreter the package is installed in (bare tool names could resolve
-  to shims bound to a different Python and fail or vacuously pass);
-  `make test` gained the same Python-version guard as the other stages;
-  `types-PyYAML` is pinned in the dev extra so the strict YAML loaders
-  type-check for real.
-- Internal dedup, behavior-identical (artifacts verified byte-identical):
-  one shared synthetic-TCP PCAP scaffold (`substation/emit/_tcp.py`), shared
-  protocol helpers (`substation/protocols/_common.py`), one strict YAML loader
-  (`substation/_yaml.py`).
-- Sigma rules are parsed once per process and the demo loads the registry
-  once per run instead of per scenario.
-- `make coverage-build` writes a single output — the committed
-  `docs/coverage/` snapshot — instead of also writing a scratch `coverage/`
-  directory nothing consumed.
-- The DNP3 X1 scenario is renamed `dnp3-anomalous-x1-new-function`, matching
-  its tree's naming convention (file name unchanged).
+- **S2** no longer matches S7comm-plus Create Object, Set Variable and Delete
+  Object, which open, use and close every S7-1200/1500 HMI session; it matches
+  the block download sequence and the `_INSE` block activation.
+- **D4** ignores `CONFIRM` and fires at ten distinct function codes; a standard
+  master startup uses nine.
+- **Sigma evaluation** is strict and typed: unsupported constructs are rejected
+  when the rule is parsed, a quoted value matches only strings and an unquoted
+  number only numbers.
+- **Modbus naming and classes follow Zeek:** the exception to an undefined code is
+  `unknown-194`, not `unknown-66_EXCEPTION`; programming and firmware functions
+  are `write`, and the comm-link reset is `control`.
+- **Scenario names** all carry their protocol prefix (`modbus-benign-poll`), which
+  renames the Modbus artifacts.
+- **Event logs** are time-ordered with microsecond timestamps, and each PCAP/JSON
+  pair is published atomically.
+- **`make release`** requires `--version` or `--bump`, builds from the staged
+  tree, and rolls back every file it touched on failure.
+- **The pre-push hook** runs `make ci` with the interpreter `make hooks`
+  recorded, and refuses pushes whose commit is not checked out cleanly; the
+  Makefile uses `.venv` when present.
+- **The dependency audit** reads the hash-locked `requirements.lock` with
+  `--strict`.
+- `AGENTS.md` is the single agent constitution; `CLAUDE.md` imports it.
+
+### Removed
+
+- The `substation verify` subcommand, which only printed instructions; run
+  `make verify`.
+- `make release --allow-dirty`.
+- The recorded demo GIF and cast and their tooling.
+- `PRD.md`, `ENGINEERING_CHECKLIST.md` and the historical reviews, plans and
+  launch report; `docs/design.md` and `docs/validation.md` replace them.
 
 ### Fixed
 
-- DNP3 WRITE (and other object-carrying non-READ verbs) no longer silently drop
-  object params; `16-Bit Analog Output Block` verified from ICSNPP and used by
-  the X1 DNP3 scenario; unknown params rejected.
-- Verify fails clearly when every check is skipped; empty-request fidelity is an
-  explicit skip; S7 availability requires a loadable plugin, not a name-only hit.
-- README Safety: do not replay PCAPs against live OT.
-- M1 quantity/span gap now rejected by the rule, with an anomaly scenario and independent interval-policy regression.
-- `scripts/render-demo-gif.py` probes per-platform font paths instead of
-  hardcoding the Debian DejaVu location, and fails with an actionable hint.
-- The scenario loader rejects a non-string `description` instead of silently
-  stringifying it; piping CLI output into `head` exits quietly instead of
-  dumping a traceback.
+- **S7 wire encoding:** Request Download carries its length field, downloads use
+  session 0, `_INSE`/`_DELE` name the scenario's block, the function status and
+  acknowledgements sit where PLCs put them, and the S7comm-plus trailer is
+  correct.
+- **DNP3 fidelity:** operation labels, IIN representation, per-actor link
+  addresses, echoed control blocks and no fabricated responses.
+- **Modbus import:** one unmatched or unsupported row no longer aborts an import,
+  and value vectors Zeek cut at 100 elements are kept, marked, instead of
+  rejected; Tier 2 raises Zeek's logging limits.
+- **M1** enforces the complete write span, not just its start address.
+- SYN segments no longer carry an acknowledgement number; out-of-range
+  timestamps fail before any file is written.
+- Deeply nested or unhashable YAML, Unicode whitespace in JSONL, IPv4-mapped IPv6
+  policy addresses and commands run outside a checkout fail with clear errors
+  instead of tracebacks or surprises.
+- The corpus derivation requires the reviewed parser revision.
+
+### Security
+
+- The files-only guard refuses socket and process creation during emission; the
+  static scan resolves aliases and `getattr`, and forbids raw sockets, scapy
+  socket factories and process spawning.
+- The secret scanner ignores inline allow comments and refuses in-tree gitleaks
+  configuration; every reviewed exception must match a current line.
+- Tier 2 refuses cached parser checkouts whose edits are hidden from
+  `git status` (assume-unchanged, skip-worktree, fsmonitor, ignored files).
+- The honeypot stops when its log cannot be written and closes connections at a
+  wall-clock limit.
+- SBOM serial numbers are distinct per release; components carry the standard
+  CycloneDX `scope`.
 
 ## [0.1.0] - 2026-06-04
 
