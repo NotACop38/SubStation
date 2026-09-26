@@ -1,30 +1,32 @@
-"""Assert Substation never imports diskcache (justifies the pip-audit ignore).
+"""Assert the Tier-1 path never imports diskcache (justifies the pip-audit ignore).
 
 diskcache is a transitive pySigma dependency with an unfixed pickle advisory
-(see scripts/security/audit_deps.py ``_IGNORED``). Our Tier-1 path only parses
-Sigma rules and walks the AST — it must not touch diskcache.
+(see scripts/security/audit_deps.py ``_IGNORED``). Substation's runtime path only
+parses Sigma rules and walks the AST, so it must not touch diskcache.
+
+The check runs a complete demo in a fresh interpreter: other tests in this
+process (for example pySigma's rule validators) may legitimately import it.
 """
 
 from __future__ import annotations
 
+import subprocess
 import sys
+import textwrap
+from pathlib import Path
 
-from substation.detect import sigma_eval
-from substation.detect.sigma_eval import matching_indices, parse_rule
 
-
-def test_sigma_eval_does_not_import_diskcache() -> None:
-    # Importing/using the evaluator must not pull diskcache into sys.modules.
-    rule = parse_rule(
+def test_demo_and_detect_path_does_not_import_diskcache(tmp_path: Path) -> None:
+    code = textwrap.dedent(
+        f"""
+        import contextlib, io, sys
+        from substation import cli
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert cli.main(["demo", "--artifacts", {str(tmp_path)!r}]) == 0
+        print("diskcache" in sys.modules)
         """
-title: t
-id: 00000000-0000-0000-0000-000000000099
-logsource: {product: ot}
-detection:
-  sel: {action_class: write}
-  condition: sel
-"""
     )
-    assert matching_indices(rule, [{"action_class": "write"}]) == [0]
-    assert "diskcache" not in sys.modules
-    assert sigma_eval.__name__ == "substation.detect.sigma_eval"
+    result = subprocess.run(  # noqa: S603 - fixed interpreter and inline code
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip().splitlines()[-1] == "False"
