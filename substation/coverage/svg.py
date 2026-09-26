@@ -11,7 +11,7 @@ iteration follows the registry and tactic order.
 
 from __future__ import annotations
 
-from xml.sax.saxutils import escape
+from html import escape  # quote=True by default, so attribute values are safe too
 
 from substation.detect.registry import Detection
 

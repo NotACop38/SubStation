@@ -15,7 +15,8 @@ of reaching the network raise :class:`FilesOnlyViolation`:
 
 Emission runs inside the guard, so an accidental network path fails loudly instead
 of putting packets on the wire. Writing PCAP/JSON uses ordinary file I/O
-(``open``), which the guard leaves untouched.
+(``open``), which the guard leaves untouched. ``subprocess`` is imported only so
+the guard can disable it (hence the bandit B404 suppression).
 
 The guard patches process-wide attributes and is therefore not thread-safe; the
 emitters are single-threaded by design, and the complementary static AST scan
@@ -27,7 +28,7 @@ from __future__ import annotations
 
 import os
 import socket
-import subprocess
+import subprocess  # nosec B404
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
