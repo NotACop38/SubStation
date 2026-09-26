@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
 from substation.emit import write_artifacts
 from substation.emit.guard import FilesOnlyViolation, files_only_guard
 from substation.scenarios import load_scenario

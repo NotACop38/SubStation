@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from substation import cli
 from substation.coverage import render_coverage_map
 from substation.detect import Hit, run_detections

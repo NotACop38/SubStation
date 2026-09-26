@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from substation.cli import main
 from substation.schema import SchemaValidationError, validate_event
 

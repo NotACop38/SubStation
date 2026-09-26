@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from substation.detect.sigma_eval import SigmaEvalError, load_rule, matching_indices, parse_rule
 
 _ALLOWLIST_RULE = """

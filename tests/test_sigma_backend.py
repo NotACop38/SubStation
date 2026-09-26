@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from scripts.verify.sigma_backend import main, sqlite_hits
 from substation.detect.registry import load_registry
 from substation.detect.sigma_eval import matching_indices, parse_rule

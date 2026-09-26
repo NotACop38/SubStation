@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+
 from substation.schema import SchemaValidationError
 
 ROOT = Path(__file__).resolve().parents[1] / "tests/data/corpus/modbus"

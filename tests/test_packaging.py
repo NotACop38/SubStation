@@ -40,12 +40,16 @@ def test_sdist_rebuilds_wheel_with_detection_content(tmp_path: Path) -> None:
     source = next(unpack.iterdir())
     # Every tracked file a source build needs is in the archive: MANIFEST.in
     # omissions otherwise surface only when someone builds from the sdist.
-    tracked = subprocess.run(
-        ["git", "ls-files", "-z"],  # noqa: S607
-        cwd=_REPO,
-        capture_output=True,
-        check=True,
-    ).stdout.decode().split("\0")
+    tracked = (
+        subprocess.run(
+            ["git", "ls-files", "-z"],  # noqa: S607
+            cwd=_REPO,
+            capture_output=True,
+            check=True,
+        )
+        .stdout.decode()
+        .split("\0")
+    )
     repository_only = (".agents/", ".claude/", ".github/", ".gitignore")
     missing = [
         path

@@ -44,12 +44,11 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts.verify.checkout import checkout_problem  # noqa: E402
 from substation.detect.registry import Detection, load_registry  # noqa: E402
 from substation.detect.x1_tokens import x1_norm_func  # noqa: E402
 from substation.emit import write_artifacts  # noqa: E402
 from substation.scenarios import Scenario, load_scenario  # noqa: E402
-
-from scripts.verify.checkout import checkout_problem  # noqa: E402
 
 # --- configuration -----------------------------------------------------------
 

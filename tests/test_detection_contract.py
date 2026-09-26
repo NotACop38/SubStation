@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import NoReturn
 
 import pytest
+
 from substation.detect import run_detections
 from substation.detect.registry import Detection, load_registry
 from substation.detect.sigma_eval import load_rule

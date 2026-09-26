@@ -16,6 +16,7 @@ from sigma.collection import SigmaCollection
 from sigma.rule import SigmaRule
 from sigma.validation import SigmaValidator
 from sigma.validators.core import validators as core_validators
+
 from substation.detect.registry import load_registry
 from substation.policy import compile_policy, load_policy
 

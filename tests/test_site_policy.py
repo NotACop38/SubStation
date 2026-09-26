@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 import yaml
+
 from substation.detect.sigma_eval import matching_indices, parse_rule
 from substation.schema import SchemaValidationError
 

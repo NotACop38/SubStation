@@ -75,7 +75,7 @@ include = ["substation*"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-src = ["substation", "tests", "scripts"]
+src = ["."]  # the repository root, so substation/, scripts/ and tests/ are first-party
 
 [tool.ruff.lint]
 # Format + lint are both driven by ruff (see Makefile).

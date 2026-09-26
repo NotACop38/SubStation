@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from substation.detect.sigma_eval import load_rule, matching_indices
 from substation.honeypot.modbus import (
     HoneypotConfig,

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from substation.schema import (
     EVENT_SCHEMA_PATH,
     SchemaValidationError,

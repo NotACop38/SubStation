@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 from scapy.layers.inet import TCP
 from scapy.utils import rdpcap
+
 from substation.emit import write_artifacts
 from substation.protocols.s7comm import S7Error
 from substation.scenarios import load_scenario

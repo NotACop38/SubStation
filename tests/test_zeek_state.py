@@ -7,6 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+
 from scripts.verify import run as verify
 from substation.emit import write_artifacts
 from substation.scenarios import load_scenario

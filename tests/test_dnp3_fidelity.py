@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from scripts.verify import run as verify
 from scripts.verify.dnp3 import compare_dnp3_events
 from substation.emit import write_artifacts

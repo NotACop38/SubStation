@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from scripts.verify import run as verify
 from scripts.verify.s7 import LOGS, compare_s7_events
 from substation.emit import s7comm_pcap, write_artifacts

@@ -8,6 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+
 from substation.coverage import __main__ as coverage_main
 from substation.coverage import svg
 from substation.coverage.builder import (
