@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -28,7 +29,26 @@ SOURCE_SHA256 = "a84656f9af62b2c948200ec288d51b81f03037c277a31a40efee0cfb244f1e3
 SOURCE_REVISION = "27f22b41fd9839c0bad1b98df9c6289e578fd02a"  # pragma: allowlist secret
 
 
+def verify_source(source: Path) -> None:
+    """Require a clean upstream checkout at the reviewed parser revision."""
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-c", "core.fsmonitor=false", "-C", str(source), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        ).stdout.strip()
+
+    if git("rev-parse", "HEAD") != SOURCE_REVISION:
+        raise ValueError(f"upstream checkout is not at the reviewed revision {SOURCE_REVISION}")
+    if git("status", "--porcelain", "--untracked-files=no"):
+        raise ValueError("upstream checkout has local changes; use a clean checkout")
+
+
 def derive(source: Path, destination: Path) -> None:
+    verify_source(source)
     trace = source / "testing/traces/modbus_example.pcap"
     if hashlib.sha256(trace.read_bytes()).hexdigest() != SOURCE_SHA256:
         raise ValueError("upstream capture hash differs from reviewed source")
