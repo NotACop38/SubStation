@@ -94,7 +94,8 @@ class _TcpFlow:
                     dport=self.resp_p,
                     flags=flags,
                     seq=self.client_seq,
-                    ack=self.server_seq,
+                    # A segment without the ACK flag carries no acknowledgement.
+                    ack=self.server_seq if "A" in flags else 0,
                 )
             )
         else:
@@ -106,7 +107,7 @@ class _TcpFlow:
                     dport=self.orig_p,
                     flags=flags,
                     seq=self.server_seq,
-                    ack=self.client_seq,
+                    ack=self.client_seq if "A" in flags else 0,
                 )
             )
         consumed = 1 if ("S" in flags or "F" in flags) else 0

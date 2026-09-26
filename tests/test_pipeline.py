@@ -130,3 +130,91 @@ exchanges:
     assert "single-frame DNP3 PCAP limit" in captured.err
     assert not (artifacts / "dnp3-oversized.jsonl").exists()
     assert not (artifacts / "dnp3-oversized.pcap").exists()
+
+
+_TWO_CLIENTS = """
+name: two-clients
+protocol: modbus
+label: benign
+actors:
+  - {id: hmi, role: hmi, host: 10.0.0.10}
+  - {id: ews, role: ews, host: 10.0.0.11}
+  - {id: plc, role: plc, host: 10.0.0.50, port: 502}
+exchanges:
+  - source: hmi
+    target: plc
+    function: ReadHoldingRegisters
+    offset: 0.0
+    params: {address: 0, quantity: 1}
+  - source: hmi
+    target: plc
+    function: ReadHoldingRegisters
+    offset: 0.01
+    params: {address: 0, quantity: 1}
+  - source: ews
+    target: plc
+    function: ReadHoldingRegisters
+    offset: 0.02
+    params: {address: 0, quantity: 1}
+"""
+
+
+def _scenario(tmp_path: Path, text: str) -> Path:
+    path = tmp_path / "scenario.yaml"
+    path.write_text(text)
+    return path
+
+
+def test_json_log_is_in_time_order_across_connections(tmp_path: Path) -> None:
+    import json
+
+    # The HMI's second request waits for its first response (per-connection
+    # serialization), so exchange order is not time order.
+    result = write_artifacts(load_scenario(_scenario(tmp_path, _TWO_CLIENTS)), tmp_path / "out")
+    stamps = [json.loads(line)["ts"] for line in result.jsonl.read_text().splitlines()]
+    assert stamps == sorted(stamps)
+    assert len(stamps) == 6
+
+
+def test_out_of_range_timestamps_fail_before_writing(tmp_path: Path) -> None:
+    from substation.emit import EmitError
+
+    late = _TWO_CLIENTS.replace("name: two-clients", "name: late\ntiming: {start: 5000000000.0}")
+    out = tmp_path / "out"
+    with pytest.raises(EmitError, match="timestamps must be within"):
+        write_artifacts(load_scenario(_scenario(tmp_path, late)), out)
+    assert not out.exists() or not any(out.iterdir())
+
+
+def test_a_failed_pcap_write_leaves_the_previous_pair_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import substation.emit as emit
+
+    scenario = load_scenario(_scenario(tmp_path, _TWO_CLIENTS))
+    first = write_artifacts(scenario, tmp_path / "out")
+    before = (first.jsonl.read_bytes(), first.pcap.read_bytes())
+
+    def broken_pcap(events: object, path: Path) -> int:
+        raise OSError("disk full")
+
+    build, render, _ = emit._EMITTERS[scenario.protocol]
+    monkeypatch.setitem(emit._EMITTERS, scenario.protocol, (build, render, broken_pcap))
+    with pytest.raises(OSError, match="disk full"):
+        write_artifacts(scenario, tmp_path / "out")
+    assert (first.jsonl.read_bytes(), first.pcap.read_bytes()) == before
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == [
+        "two-clients.jsonl",
+        "two-clients.pcap",
+    ]
+
+
+def test_syn_segments_carry_no_acknowledgement_number(tmp_path: Path) -> None:
+    from scapy.layers.inet import TCP
+    from scapy.utils import rdpcap
+
+    result = write_artifacts(load_scenario(_scenario(tmp_path, _TWO_CLIENTS)), tmp_path / "out")
+    for packet in rdpcap(str(result.pcap)):
+        tcp = packet[TCP]
+        if "A" not in tcp.flags:
+            assert tcp.ack == 0, tcp.flags
