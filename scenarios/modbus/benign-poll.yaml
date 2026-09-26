@@ -19,7 +19,7 @@
 
 # Human-readable, filesystem-safe name. Used to name the artifacts this scenario
 # produces (e.g. artifacts/<name>.pcap and artifacts/<name>.jsonl).
-name: benign-poll
+name: modbus-benign-poll
 
 # Free-form prose describing what the scenario models and why it exists.
 description: >-

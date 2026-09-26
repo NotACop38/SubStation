@@ -65,22 +65,25 @@ def render_coverage_map(
             run = "● FIRED"
         elif det.id not in tier1_ids:
             # Not evaluated in this Tier-1 process (Zeek/Suricata / tier 2).
-            run = "◇ not-run" if det.id in exercised else " ·"
+            run = "◇ not-run" if det.id in exercised else "·"
         elif det.id in exercised:
             run = "○ quiet"
         else:
-            run = " ·"
+            run = "·"
         tech = det.attack.primary.id
         rows.append(f"  {det.id:<4} {tech:<11} {det.attack.tactic:<26} {run}")
 
     header = f"  {'ID':<4} {'Technique':<11} {'Tactic':<26} This run"
-    # 60 is the established rendered width (the committed demo transcript/GIF);
+    legend = "  ● FIRED  ○ quiet  ◇ not-run (Tier 2 only)  · not exercised"
+    # 60 is the established rendered width (the committed demo transcript);
     # widen only if a future tactic/technique name outgrows it.
-    width = max(60, len(header), *(len(row) for row in rows)) if rows else 60
+    width = max(60, len(header), len(legend), *(len(row) for row in rows))
     lines = ["ATT&CK-for-ICS coverage map", "=" * width]
     lines.append(header)
     lines.append("  " + "-" * (width - 2))
     lines.extend(rows)
+    lines.append("  " + "-" * (width - 2))
+    lines.append(legend)
     lines.append("=" * width)
     lines.append(
         f"{len(registry)} detections · {len(techniques)} ATT&CK techniques · "

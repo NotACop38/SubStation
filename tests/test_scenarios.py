@@ -20,7 +20,7 @@ _EXAMPLE = _REPO_ROOT / "scenarios" / "modbus" / "benign-poll.yaml"
 
 def test_bundled_example_loads_and_validates() -> None:
     scenario = load_scenario(_EXAMPLE)
-    assert scenario.name == "benign-poll"
+    assert scenario.name == "modbus-benign-poll"
     assert scenario.protocol is Protocol.MODBUS
     assert scenario.label is Label.BENIGN
     assert len(scenario.actors) == 3
@@ -44,7 +44,7 @@ def test_actor_lookup_and_roles() -> None:
 
 def test_load_scenarios_finds_bundled_modbus() -> None:
     scenarios = load_scenarios(_REPO_ROOT / "scenarios" / "modbus")
-    assert any(s.name == "benign-poll" for s in scenarios)
+    assert any(s.name == "modbus-benign-poll" for s in scenarios)
 
 
 def _write(tmp_path: Path, text: str) -> Path:

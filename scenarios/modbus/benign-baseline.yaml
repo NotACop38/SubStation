@@ -18,7 +18,7 @@
 # anomalous-*.yaml scenarios model.
 # -----------------------------------------------------------------------------
 
-name: benign-baseline
+name: modbus-benign-baseline
 description: >-
   Normal OT operation on one Modbus PLC: continuous HMI polling plus an
   engineering workstation that polls and writes legitimate setpoints from an

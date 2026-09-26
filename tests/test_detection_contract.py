@@ -162,11 +162,11 @@ def test_quiet_on_benign(det: Detection, scenario: Scenario, tmp_path: Path) -> 
 
 _EXPECTED_FIRE_HITS: dict[tuple[str, str], tuple[int, ...]] = {
     # M1: the two out-of-policy write requests.
-    ("M1", "anomalous-m1-unauthorized-write"): (6, 8),
-    ("M1", "anomalous-m1-out-of-policy-write"): (4, 6),
-    ("M1", "anomalous-m1-span-beyond-policy"): (0,),
+    ("M1", "modbus-anomalous-m1-unauthorized-write"): (6, 8),
+    ("M1", "modbus-anomalous-m1-out-of-policy-write"): (4, 6),
+    ("M1", "modbus-anomalous-m1-span-beyond-policy"): (0,),
     # M2: the undefined-function request and the ILLEGAL_FUNCTION exception reply.
-    ("M2", "anomalous-m2-illegal-function"): (2, 3),
+    ("M2", "modbus-anomalous-m2-illegal-function"): (2, 3),
     # D1/D2/D3: the restart / disable-unsolicited / (direct-)operate requests.
     ("D1", "dnp3-anomalous-d1-restart"): (6,),
     ("D2", "dnp3-anomalous-d2-disable-unsolicited"): (4,),

@@ -23,7 +23,7 @@
 # known_pairs -> X1 fires (new asset pair) while NOT firing the new-talker branch.
 # -----------------------------------------------------------------------------
 
-name: anomalous-x1-new-pair
+name: modbus-anomalous-x1-new-pair
 description: >-
   A baselined, legitimate talker (hmi-1 10.0.0.10) reaches a PLC it has never
   talked to in the learned baseline (plc-2 10.0.0.51) amid its normal polling of

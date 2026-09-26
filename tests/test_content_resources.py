@@ -18,4 +18,4 @@ def test_load_registry_and_scenario_via_content_api() -> None:
     registry = load_registry()
     assert any(d.id == "M1" for d in registry)
     scenario = load_scenario(content_path("scenarios", "modbus", "benign-poll.yaml"))
-    assert scenario.name == "benign-poll"
+    assert scenario.name == "modbus-benign-poll"

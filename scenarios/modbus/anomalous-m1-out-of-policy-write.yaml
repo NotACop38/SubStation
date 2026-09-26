@@ -14,7 +14,7 @@
 # in-policy allow-list (source AND unit AND register) does not cover.
 # -----------------------------------------------------------------------------
 
-name: anomalous-m1-out-of-policy-write
+name: modbus-anomalous-m1-out-of-policy-write
 description: >-
   An allow-listed engineering workstation (ews-1, 10.0.0.11) issues writes
   outside policy — to a non-permitted unit (2) and to an out-of-range register

@@ -25,7 +25,7 @@
 # v1.1b3, PRD.md §9), so this scenario now GENERATES and fires M2 in Tier 1.
 # -----------------------------------------------------------------------------
 
-name: anomalous-m2-illegal-function
+name: modbus-anomalous-m2-illegal-function
 description: >-
   A host probes the PLC with a reserved/undefined Modbus function code (0x42),
   the kind of traffic that draws an ILLEGAL_FUNCTION exception. Fires M2

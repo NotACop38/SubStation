@@ -20,7 +20,7 @@
 # 10.0.0.123 is in NEITHER known_talkers NOR known_pairs -> X1 fires (new talker).
 # -----------------------------------------------------------------------------
 
-name: anomalous-x1-new-talker
+name: modbus-anomalous-x1-new-talker
 description: >-
   An unbaselined host (10.0.0.123, never seen in the learned baseline) originates
   Modbus reads to the PLC amid normal HMI/EWS polling. Fires X1 (cross-protocol

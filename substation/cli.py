@@ -9,10 +9,12 @@ stays quiet) and anomalous scenarios (which fire), so one command shows both the
 expected behavior on the bundled synthetic fixtures.
 
 The other subcommands surface the rest of the toolkit from one entrypoint:
-``list`` (bundled scenarios + registered detections), ``validate`` (event-log
-schema validation; also ``python -m substation.schema``), ``coverage`` (the
-generated ATT&CK coverage artifacts; also ``python -m substation.coverage``),
-``detect`` (evaluate normalized JSONL), and ``verify`` (how to run Tier-2).
+``list`` (bundled scenarios + registered detections), ``detect`` (evaluate
+normalized JSONL), ``import-modbus`` (normalize sensor logs), ``policy``
+(compile a site profile into Sigma), ``evaluate-corpus``, ``validate``
+(event-log schema validation; also ``python -m substation.schema``) and
+``coverage`` (the generated ATT&CK coverage artifacts; also ``python -m
+substation.coverage``). Tier-2 validation runs from a checkout (``make verify``).
 
 Safety invariant (PRD.md §6.4): nothing here ever opens a sending socket or
 transmits on a live interface. The simulator is files-only, always.
@@ -59,11 +61,20 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="substation",
         description="Defensive ICS detection-content pack and files-only protocol simulator.",
+        epilog=(
+            "Tier-2 validation (Zeek and ICSNPP over the emitted PCAPs) runs from a "
+            "repository checkout with Docker: make verify. See docs/tier2.md."
+        ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
 
-    demo = sub.add_parser("demo", help="Run the Tier-1 demo loop end to end.")
+    demo = sub.add_parser(
+        "demo",
+        help="Run the Tier-1 demo loop end to end.",
+        description="Generate PCAP + JSONL for each scenario, run the Tier-1 Sigma rules "
+        "over the JSONL, and print the hits and the ATT&CK-for-ICS coverage map.",
+    )
     demo.add_argument(
         "--scenario",
         type=Path,
@@ -87,17 +98,30 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     demo.set_defaults(func=_cmd_demo)
 
-    list_cmd = sub.add_parser("list", help="List registered detections and bundled scenarios.")
+    list_cmd = sub.add_parser(
+        "list",
+        help="List registered detections and bundled scenarios.",
+        description="List the registered detections and the bundled scenarios with the "
+        "detections each one exercises.",
+    )
     list_cmd.set_defaults(func=_cmd_list)
 
-    detect = sub.add_parser("detect", help="Run Tier-1 rules on normalized .jsonl event logs.")
+    detect = sub.add_parser(
+        "detect",
+        help="Run Tier-1 rules on normalized .jsonl event logs.",
+        description="Evaluate the Tier-1 Sigma rules over Substation-schema JSONL event logs "
+        "and print one line per hit. Exits 0 whether or not rules fire.",
+    )
     detect.add_argument("paths", nargs="+", type=Path, help="Substation-schema JSONL files.")
     detect.add_argument("--detection", nargs="+", help="Tier-1 detection IDs (default: all).")
     detect.add_argument("--policy", type=Path, help="Explicit site authorization profile.")
     detect.set_defaults(func=_cmd_detect)
 
     importer = sub.add_parser(
-        "import-modbus", help="Normalize ICSNPP modbus_detailed logs (Zeek JSON or TSV)."
+        "import-modbus",
+        help="Normalize ICSNPP modbus_detailed logs (Zeek JSON or TSV).",
+        description="Project ICSNPP modbus_detailed.log rows into Substation-schema JSONL "
+        "so the Tier-1 rules can run over real sensor output.",
     )
     importer.add_argument("paths", nargs="+", type=Path, help="modbus_detailed.log files.")
     importer.add_argument("--out", type=Path, help="Atomic JSONL output (default: stdout).")
@@ -117,15 +141,29 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     importer.set_defaults(func=_cmd_import_modbus)
 
-    policy = sub.add_parser("policy", help="Compile a site profile into portable Sigma.")
+    policy = sub.add_parser(
+        "policy",
+        help="Compile a site profile into portable Sigma.",
+        description="Work with versioned site authorization profiles.",
+    )
     policy_sub = policy.add_subparsers(dest="policy_command", required=True)
-    compile_cmd = policy_sub.add_parser("compile")
-    compile_cmd.add_argument("path", type=Path)
+    compile_cmd = policy_sub.add_parser(
+        "compile",
+        help="Compile a site profile into Sigma rules for export.",
+        description="Compile a versioned site authorization profile into portable Sigma "
+        "rules, written to a new export directory.",
+    )
+    compile_cmd.add_argument("path", type=Path, help="Site profile YAML.")
     compile_cmd.add_argument("--out", type=Path, required=True, help="New export directory.")
     compile_cmd.set_defaults(func=_cmd_policy)
 
-    corpus = sub.add_parser("evaluate-corpus", help="Verify a labeled corpus and report metrics.")
-    corpus.add_argument("path", type=Path)
+    corpus = sub.add_parser(
+        "evaluate-corpus",
+        help="Verify a labeled corpus and report metrics.",
+        description="Verify a labeled corpus manifest and report per-event confusion "
+        "metrics for the Tier-1 rules. Exits 1 if the corpus does not pass.",
+    )
+    corpus.add_argument("path", type=Path, help="Corpus manifest JSON.")
     corpus.set_defaults(func=_cmd_corpus)
 
     validate = sub.add_parser(
@@ -157,9 +195,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     coverage.set_defaults(func=_cmd_coverage)
 
-    verify = sub.add_parser("verify", help="How to run Tier-2 (Docker) validation.")
-    verify.set_defaults(func=_cmd_verify)
-
     return parser
 
 
@@ -188,9 +223,9 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     if registry is None:
         return 1
 
+    # Load and check every scenario before generating anything, so a bad file
+    # fails fast and the report columns can be sized to the longest name.
     all_scenarios: list[Scenario] = []
-    all_hits: list[Hit] = []
-    per_scenario_hits: list[tuple[Scenario, list[Hit]]] = []
     seen_names: dict[str, Path] = {}
     for scenario_path in scenario_paths:
         # Content resolves from the checkout or from the installed wheel.
@@ -218,6 +253,12 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             )
             return 1
         seen_names[scenario.name] = scenario_path
+        all_scenarios.append(scenario)
+
+    width = max(len(scenario.name) for scenario in all_scenarios)
+    all_hits: list[Hit] = []
+    per_scenario_hits: list[tuple[Scenario, list[Hit]]] = []
+    for scenario in all_scenarios:
         try:
             emitted = write_artifacts(scenario, artifacts_dir)
         except (EmitError, Dnp3Error, ModbusError, S7Error) as exc:
@@ -231,10 +272,9 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         else:
             verdict = "quiet (no hits)"
         print(
-            f"[{scenario.label.value:9}] {scenario.name:<34} "
-            f"{emitted.event_count:>2} events -> {verdict}"
+            f"[{scenario.label.value:9}] {scenario.name:<{width}}  "
+            f"{emitted.event_count:>3} events -> {verdict}"
         )
-        all_scenarios.append(scenario)
         all_hits.extend(hits)
         per_scenario_hits.append((scenario, hits))
 
@@ -340,12 +380,13 @@ def _cmd_list(_args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print("\nScenarios (scenarios/):")
+    width = max((len(scenario.name) for scenario in scenarios), default=0)
     for scenario in scenarios:
         exercised = ", ".join(
             [*scenario.exercises.fires, *(f"{d} quiet" for d in scenario.exercises.quiet)]
         )
         print(
-            f"  {scenario.name:<40} {scenario.protocol.value:<7} {scenario.label.value:<9} "
+            f"  {scenario.name:<{width}}  {scenario.protocol.value:<7} {scenario.label.value:<9} "
             f"exercises: {exercised or '-'}"
         )
     return 0
@@ -470,21 +511,6 @@ def _cmd_coverage(args: argparse.Namespace) -> int:
     if args.out is not None:
         argv += ["--out", str(args.out)]
     return coverage_main(argv)
-
-
-def _cmd_verify(_args: argparse.Namespace) -> int:
-    # Tier 2 is a local, Docker-orchestrated gate (real Zeek/ICSNPP + Suricata),
-    # deliberately kept out of the pure-Python installed path so the Tier-1
-    # headline promise ("only Python 3.11+") holds. It is driven by the Makefile.
-    print(
-        "Tier-2 validation runs Zeek/ICSNPP over the emitted PCAPs for request\n"
-        "identity/count parity and stateful detection checks. It is\n"
-        "driven from a repo checkout:\n\n"
-        "    make verify VERIFY_ARGS=--require-complete\n\n"
-        "Use VERIFY_ARGS='--native --require-complete' with local Zeek and the S7 plugin.\n"
-        "Tier 1 (this CLI's `demo`) stays pure-Python and needs no Docker."
-    )
-    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
