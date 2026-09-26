@@ -79,3 +79,4 @@ exercises:
   quiet:
     - M2   # all function codes are legal Modbus writes.
     - M3   # two writes from one host is not a function-code/unit-id sweep.
+    - M4   # a few small reads; no address-space sweep.

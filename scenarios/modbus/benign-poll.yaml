@@ -99,3 +99,4 @@ exercises:
     - M1   # unauthorized write: EWS is allow-listed, so M1 must NOT fire.
     - M2   # illegal function code: all functions here are legal.
     - M3   # function-code / unit-id sweep: steady polling is not a sweep.
+    - M4   # bulk read / address-space sweep: fixed polling blocks are not a sweep.

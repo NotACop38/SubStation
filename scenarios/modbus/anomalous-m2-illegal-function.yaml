@@ -74,3 +74,4 @@ exercises:
   quiet:
     - M1   # an undefined code is not a recognized write; allow-list rule idle.
     - M3   # one abnormal code to one unit is not a function/unit sweep.
+    - M4   # no address-space sweep.

@@ -78,6 +78,7 @@ _ICSNPP = {
 # the (unavailable) S7comm plugin to observe its protocol.
 _NOTICE_TOKEN = {
     "M3": "ModbusSweep::Sweep",
+    "M4": "ModbusReadSweep::ReadSweep",
     "D4": "Dnp3Enum::Enumeration",
     "S3": "S7Enum::Enumeration",
     "X1": "CrossProtoBaseline::BaselineDeviation",

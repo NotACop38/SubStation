@@ -72,3 +72,4 @@ exercises:
   quiet:
     - M2   # every function code is a legal Modbus write.
     - M3   # two off-policy writes across two units is not a function/unit sweep.
+    - M4   # one small read; no address-space sweep.

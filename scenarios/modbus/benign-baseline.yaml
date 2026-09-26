@@ -111,4 +111,5 @@ exercises:
     - M1   # writes here are from the allow-listed EWS to in-policy registers.
     - M2   # every function code is legal/standard.
     - M3   # steady polling + a couple of writes is not a code/unit sweep.
+    - M4   # repeated reads of the same few blocks: tiny, fixed coverage.
     - X1   # every talker/pair/function here is part of the learned baseline.

@@ -77,3 +77,4 @@ exercises:
   quiet:
     - M1   # the sweep is read-only — no write functions.
     - M2   # every function code is legal; the anomaly is breadth, not illegality.
+    - M4   # one-address reads per unit: diversity of units, not address coverage.

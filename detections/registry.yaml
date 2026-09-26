@@ -93,6 +93,27 @@ detections:
         - id: T0888
           name: Remote System Information Discovery
 
+  - id: M4
+    title: Bulk read / address-space sweep
+    protocol: modbus
+    engine: zeek
+    tier: 2
+    # Coverage-based collection signal: distinct address pages read from one
+    # table, not request volume. Stateful, so Zeek (docs/design.md §6.5); its
+    # fire/quiet runs in the Tier-2 runner over PCAP. ATT&CK mapping verified
+    # against the live matrix on 2026-09-26 (detections/docs/M4-read-sweep.md).
+    status: tier2
+    rule: detections/zeek/modbus_m4_read_sweep.zeek
+    doc: detections/docs/M4-read-sweep.md
+    attack:
+      tactic: Collection
+      tactic_id: TA0100
+      techniques:
+        - id: T0801
+          name: Monitor Process State
+        - id: T0861
+          name: Point & Tag Identification
+
   # ---------------------------------------------------------------------------
   # DNP3 (Phase 3). ATT&CK mappings verified against the live ATT&CK-for-ICS
   # matrix on 2026-06-04 (docs/spikes note the restructured techniques): the

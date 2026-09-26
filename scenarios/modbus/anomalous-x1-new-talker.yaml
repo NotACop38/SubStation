@@ -87,3 +87,4 @@ exercises:
   quiet:
     - M1   # the new talker only reads — no write functions at all.
     - M2   # every function code is legal/standard Modbus.
+    - M4   # small reads; no address-space sweep.

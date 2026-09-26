@@ -1,0 +1,96 @@
+# =============================================================================
+# Benign Modbus boundary — high-volume polling of a large, fixed working set
+# =============================================================================
+# The M4 volume-versus-coverage boundary (docs/design.md §8). A SCADA poller
+# reads a 500-register map in four maximum-size requests, three cycles in a row:
+# twelve reads covering 1,500 register values — more volume than the M4 sweep
+# scenario — yet it never leaves the same 32 pages, so coverage stays at half
+# the default threshold. Volume alone must not fire a collection detection.
+# -----------------------------------------------------------------------------
+
+name: modbus-benign-bulk-poll
+description: >-
+  The operator HMI (10.0.0.10) polls a fixed 500-register map (holding registers
+  0-499) in four 125-register reads per cycle for three cycles: high read volume,
+  constant 32-page coverage. M4 stays quiet, as do M1, M2, M3 and X1.
+
+protocol: modbus
+label: benign
+
+timing:
+  start: 0.0
+  default_interval: 0.5
+
+actors:
+  - id: hmi-1            # operator HMI: the SCADA poller.
+    role: hmi
+    host: 10.0.0.10
+  - id: plc-1
+    role: plc
+    host: 10.0.0.50
+    port: 502
+
+exchanges:
+  # --- cycle 1 ----------------------------------------------------------------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 0, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 125, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 250, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 375, quantity: 125 }
+
+  # --- cycle 2 ----------------------------------------------------------------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 5.0
+    params: { unit_id: 1, address: 0, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 125, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 250, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 375, quantity: 125 }
+
+  # --- cycle 3 ----------------------------------------------------------------
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    offset: 10.0
+    params: { unit_id: 1, address: 0, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 125, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 250, quantity: 125 }
+  - source: hmi-1
+    target: plc-1
+    function: ReadHoldingRegisters
+    params: { unit_id: 1, address: 375, quantity: 125 }
+
+exercises:
+  quiet:
+    - M1   # read-only.
+    - M2   # every function code is legal.
+    - M3   # one function code, one unit id.
+    - M4   # 1,500 register reads, but only 32 distinct pages.
+    - X1   # known talker, pair and function.

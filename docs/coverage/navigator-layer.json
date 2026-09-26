@@ -96,6 +96,36 @@
       "showSubtechniques": false
     },
     {
+      "techniqueID": "T0801",
+      "tactic": "collection",
+      "score": 1,
+      "color": "",
+      "comment": "M4 — Bulk read / address-space sweep",
+      "enabled": true,
+      "metadata": [
+        {
+          "name": "M4",
+          "value": "zeek/tier2, tier2"
+        }
+      ],
+      "showSubtechniques": false
+    },
+    {
+      "techniqueID": "T0861",
+      "tactic": "collection",
+      "score": 1,
+      "color": "",
+      "comment": "M4 — Bulk read / address-space sweep",
+      "enabled": true,
+      "metadata": [
+        {
+          "name": "M4",
+          "value": "zeek/tier2, tier2"
+        }
+      ],
+      "showSubtechniques": false
+    },
+    {
       "techniqueID": "T0816",
       "tactic": "inhibit-response-function",
       "score": 1,

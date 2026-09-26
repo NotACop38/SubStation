@@ -25,7 +25,7 @@ def test_bundled_example_loads_and_validates() -> None:
     assert scenario.label is Label.BENIGN
     assert len(scenario.actors) == 3
     assert len(scenario.exchanges) == 3
-    assert scenario.exercises.quiet == ("M1", "M2", "M3")
+    assert scenario.exercises.quiet == ("M1", "M2", "M3", "M4")
     assert scenario.exercises.fires == ()
     # Every exchange references a declared actor.
     ids = {a.id for a in scenario.actors}
