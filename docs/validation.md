@@ -7,7 +7,7 @@ can rerun.
 
 | Gate | Command | Result |
 |---|---|---|
-| Local CI | `make ci` | Pass: format, lint, strict mypy, schema, coverage drift, security, and 687 tests: 637 pass, 37 Zeek-rule contract cases defer to Tier 2, 13 need native Zeek |
+| Local CI | `make ci` | Pass: format, lint, strict mypy, schema, coverage drift, security, and 699 tests: 649 pass, 37 Zeek-rule contract cases defer to Tier 2, 13 need native Zeek |
 | Tier 2 | `make verify VERIFY_ARGS=--require-complete` | 65 checks passed, 0 failed (Docker, Zeek 8.2); Suricata reported as "no rules shipped" |
 | External corpus | `make corpus` | Pass: 3 labeled cases, 42 event evaluations, no false positives or negatives |
 | SIEM backend | `make verify-sigma` | Authored and exported rules hit identically in the official SQLite backend over 342 events |
