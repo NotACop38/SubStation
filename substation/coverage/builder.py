@@ -1,14 +1,15 @@
-"""Coverage-map + ATT&CK Navigator layer builder (PRD.md §6.7).
+"""Coverage-map + ATT&CK Navigator layer builder (docs/design.md §6.7).
 
 Reads the detection registry (:mod:`substation.detect.registry`) and renders, from
 that single metadata source:
 
 * a **human-readable table** (markdown) and the same data as **JSON** — technique,
   tactic, protocol, detection ID, engine, status; and
-* an **ATT&CK Navigator layer** (JSON) users can load directly into the Navigator.
+* an **ATT&CK Navigator layer** (JSON) users can load directly into the Navigator; and
+* an **SVG coverage matrix** for the README (:mod:`substation.coverage.svg`).
 
-All three are *generated*, never hand-maintained, so they cannot drift from the
-detections (PRD.md §6.7). Rendering is deterministic — given the same registry the
+All four are *generated*, never hand-maintained, so they cannot drift from the
+detections (docs/design.md §6.7). Rendering is deterministic — given the same registry the
 byte output is identical — so ``make ci`` can diff the committed copies against a
 fresh build and fail on drift (see :mod:`substation.coverage.__main__`).
 """
@@ -20,10 +21,13 @@ from typing import Any
 
 from substation.detect.registry import Detection, load_registry
 
+from .svg import render_svg
+
 __all__ = [
     "MARKDOWN_FILENAME",
     "JSON_FILENAME",
     "NAVIGATOR_FILENAME",
+    "SVG_FILENAME",
     "render_markdown",
     "render_json",
     "render_navigator_layer",
@@ -33,6 +37,7 @@ __all__ = [
 MARKDOWN_FILENAME = "coverage.md"
 JSON_FILENAME = "coverage.json"
 NAVIGATOR_FILENAME = "navigator-layer.json"
+SVG_FILENAME = "coverage-matrix.svg"
 
 # ATT&CK-for-ICS domain identifier used by the Navigator layer format.
 _ATTACK_DOMAIN = "ics-attack"
@@ -278,4 +283,5 @@ def render_all(detections: list[Detection] | None = None) -> dict[str, str]:
         MARKDOWN_FILENAME: render_markdown(dets),
         JSON_FILENAME: render_json(dets),
         NAVIGATOR_FILENAME: render_navigator_layer(dets),
+        SVG_FILENAME: render_svg(dets),
     }

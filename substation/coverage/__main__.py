@@ -6,12 +6,12 @@ Usage::
 
 Default: render every coverage artifact from ``detections/registry.yaml`` into
 the committed snapshot directory ``docs/coverage/`` (``coverage.md``,
-``coverage.json``, ``navigator-layer.json``). These are GENERATED — never
-hand-edit them.
+``coverage.json``, ``navigator-layer.json``, ``coverage-matrix.svg``). These are
+GENERATED — never hand-edit them.
 
 ``--check``: render in memory and compare against the committed files; exit 1 if
 any is missing or stale (drift). This is what ``make ci`` runs so the committed
-coverage map can never fall out of sync with the registry (PRD.md §6.7).
+coverage map can never fall out of sync with the registry (docs/design.md §6.7).
 
 Exit code is 0 on success, 1 on drift / write failure.
 """

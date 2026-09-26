@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET  # noqa: S405 - parses our own generated SVG
+from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from substation.coverage import __main__ as coverage_main
+from substation.coverage import builder, svg
 from substation.coverage.builder import (
     JSON_FILENAME,
     MARKDOWN_FILENAME,
     NAVIGATOR_FILENAME,
+    SVG_FILENAME,
     render_all,
     render_navigator_layer,
 )
@@ -18,9 +23,9 @@ from substation.detect.registry import load_registry
 REGISTRY = load_registry()
 
 
-def test_render_all_emits_three_artifacts() -> None:
+def test_render_all_emits_four_artifacts() -> None:
     artifacts = render_all()
-    assert set(artifacts) == {MARKDOWN_FILENAME, JSON_FILENAME, NAVIGATOR_FILENAME}
+    assert set(artifacts) == {MARKDOWN_FILENAME, JSON_FILENAME, NAVIGATOR_FILENAME, SVG_FILENAME}
 
 
 def test_markdown_table_has_every_detection() -> None:
@@ -69,3 +74,28 @@ def test_check_mode_passes_when_fresh_and_fails_when_stale(tmp_path: Path) -> No
 
     # Missing directory -> --check reports drift (nothing committed yet).
     assert coverage_main.main(["--check", "--out", str(tmp_path / "absent")]) == 1
+
+
+_SVG_NS = "{http://www.w3.org/2000/svg}"
+
+
+def test_svg_columns_follow_the_canonical_tactic_order() -> None:
+    assert [tid for tid, _ in svg._TACTIC_LABELS] == [tid for tid, _ in builder._ICS_TACTICS]
+    for (tid, lines), (_, name) in zip(svg._TACTIC_LABELS, builder._ICS_TACTICS, strict=True):
+        assert " ".join(lines) == name, tid
+
+
+def test_svg_is_well_formed_and_shows_every_detection_once() -> None:
+    root = ET.fromstring(render_all()[SVG_FILENAME])  # noqa: S314 - trusted, generated input
+    assert root.tag == f"{_SVG_NS}svg"
+    texts = [node.text for node in root.iter(f"{_SVG_NS}text")]
+    for det in REGISTRY:
+        assert texts.count(det.id) == 1, det.id
+    covered = len({det.attack.tactic_id for det in REGISTRY})
+    assert f"{covered}/{len(builder._ICS_TACTICS)}" in texts
+    assert str(len(REGISTRY)) in texts
+
+
+def test_svg_rejects_content_it_cannot_place() -> None:
+    with pytest.raises(ValueError, match="protocol"):
+        svg.render_svg([replace(REGISTRY[0], protocol="bacnet")])
