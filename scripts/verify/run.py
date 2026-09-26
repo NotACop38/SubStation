@@ -424,7 +424,8 @@ def fidelity_check(proto: str, results: Results) -> None:
                     else:
                         results.ok(
                             f"fidelity[dnp3] {scenario_file.name}: {len(events)} messages "
-                            "match direction, connection order, functions, IIN and object/control fields"
+                            "match direction, connection order, functions, IIN and "
+                            "object/control fields"
                         )
                 except (OSError, ValueError) as exc:
                     results.fail(f"fidelity[dnp3] {scenario_file.name}: {exc}")
@@ -613,9 +614,7 @@ def detection_check(
 
 
 def suricata_check(results: Results) -> None:
-    rules = [p for p in _DET_SURICATA.glob("*.rules")] + [
-        p for p in _DET_SURICATA.glob("*.suricata")
-    ]
+    rules = [*_DET_SURICATA.glob("*.rules"), *_DET_SURICATA.glob("*.suricata")]
     if not rules:
         results.skip(
             "suricata: no Suricata rules shipped (detections/suricata is empty) — "
@@ -683,7 +682,8 @@ def main() -> int:
             return 2
         version = subprocess.run([_NATIVE_ZEEK, "--version"], capture_output=True, text=True)
         print(
-            f"verify: native {version.stdout.strip()} (host installation, not the pinned Docker image)"
+            f"verify: native {version.stdout.strip()} "
+            "(host installation, not the pinned Docker image)"
         )
     else:
         if not _docker_ok():

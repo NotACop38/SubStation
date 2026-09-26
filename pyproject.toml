@@ -39,7 +39,6 @@ dev = [
     "build==1.5.0",  # sdist + wheel builder for `make release` (PyPA build).
     "setuptools==84.0.0",  # release uses --no-isolation; install the backend explicitly.
     "wheel==0.48.0",
-    "Pillow==12.3.0",  # optional: `make demo-gif` headless GIF render.
 ]
 
 [project.scripts]
@@ -63,7 +62,7 @@ include = ["substation*"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-src = ["substation", "tests"]
+src = ["substation", "tests", "scripts"]
 
 [tool.ruff.lint]
 # Format + lint are both driven by ruff (see Makefile).
@@ -73,6 +72,10 @@ select = ["E", "F", "I", "W", "B", "UP", "SIM", "C4", "S"]
 [tool.ruff.lint.per-file-ignores]
 # Tests may use asserts (S101) and fixtures freely.
 "tests/**" = ["S101"]
+# Tooling scripts run fixed git/docker/zeek/cmake argument lists without a shell
+# (bandit skips B603/B607 for scripts/ too) and put the checkout on sys.path
+# before importing the package.
+"scripts/**" = ["S603", "S607", "E402"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -84,7 +87,7 @@ disallow_untyped_defs = true
 disallow_any_generics = true
 no_implicit_reexport = true
 show_error_codes = true
-files = ["substation", "tests"]
+files = ["substation", "tests", "scripts"]
 
 [[tool.mypy.overrides]]
 # Third-party libs without type stubs (revisited as code lands). pytest ships

@@ -16,10 +16,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scapy.all import Ether, IP, Raw, TCP, rdpcap, wrpcap
+from scapy.layers.inet import IP, TCP
+from scapy.layers.l2 import Ether
+from scapy.packet import Raw
+from scapy.utils import rdpcap, wrpcap
+from substation.ingest.modbus import load_modbus_log
 
 from scripts.verify import run
-from substation.ingest.modbus import load_modbus_log
 
 SOURCE_SHA256 = "a84656f9af62b2c948200ec288d51b81f03037c277a31a40efee0cfb244f1e30"
 SOURCE_REVISION = "27f22b41fd9839c0bad1b98df9c6289e578fd02a"  # pragma: allowlist secret

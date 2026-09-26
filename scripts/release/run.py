@@ -245,7 +245,8 @@ def _check_release_tree(
         if tagged != _git("rev-parse", "HEAD") or target != current or _working_tree_dirty():
             raise ReleaseError(
                 f"v{target} already exists; retry only from its clean tagged checkout "
-                "with matching project version. Refusing to rebuild a different tree under that tag."
+                "with matching project version. Refusing to rebuild a different tree "
+                "under that tag."
             )
         return
     if not allow_dirty:

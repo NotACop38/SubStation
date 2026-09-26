@@ -6,12 +6,12 @@
 
 PY ?= python3
 PKG := substation
-SRC := substation tests
+SRC := substation tests scripts setup.py
 
 .DEFAULT_GOAL := help
 
 .PHONY: help check-python dev ci format format-check lint type test schema coverage-build \
-        coverage-check security demo demo-gif demo-cast verify verify-sigma release hooks clean corpus lock
+        coverage-check security demo verify verify-sigma release hooks clean corpus lock
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -87,12 +87,6 @@ corpus: check-python ## Check attributed corpus hashes and labeled detection met
 
 verify-sigma: check-python ## Compare authored/exported Sigma hits with the official SQLite backend
 	$(PY) scripts/verify/sigma_backend.py
-
-demo-gif: ## Render the embedded demo GIF headlessly (deterministic; no TTY needed)
-	$(PY) scripts/render-demo-gif.py
-
-demo-cast: ## Record `make demo` to an animated SVG/GIF (asciinema + agg; needs a TTY)
-	scripts/record-demo.sh
 
 verify: check-python ## Tier-2 validation: real Zeek/ICSNPP fidelity + Zeek/Suricata detections (Docker)
 	$(PY) scripts/verify/run.py $(VERIFY_ARGS)

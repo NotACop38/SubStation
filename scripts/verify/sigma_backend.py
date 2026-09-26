@@ -20,7 +20,6 @@ sys.path.insert(0, str(ROOT))
 
 from sigma.backends.sqlite.sqlite import sqliteBackend
 from sigma.collection import SigmaCollection
-
 from substation.detect import load_events
 from substation.detect.registry import load_registry
 from substation.detect.sigma_eval import matching_indices, parse_rule

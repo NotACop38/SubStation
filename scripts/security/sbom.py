@@ -73,7 +73,10 @@ def build_sbom() -> dict[str, Any]:
             "properties": [
                 {
                     "name": "substation:inventory-scope",
-                    "value": "Hash-locked inventory; complete runtime/dev graph for recorded marker environment",
+                    "value": (
+                        "Hash-locked inventory; complete runtime/dev graph for recorded "
+                        "marker environment"
+                    ),
                 },
                 {
                     "name": "substation:marker-environment",
@@ -99,7 +102,8 @@ def main() -> int:
         print(f"sbom: FAILED: {exc}", file=sys.stderr)
         return 1
     print(
-        f"sbom: wrote {args.out.name} ({len(sbom['components'])} components, {len(sbom['dependencies'])} dependency records)"
+        f"sbom: wrote {args.out.name} ({len(sbom['components'])} components, "
+        f"{len(sbom['dependencies'])} dependency records)"
     )
     return 0
 
