@@ -26,6 +26,16 @@ def _construct_mapping_no_duplicates(
     mapping: dict[object, object] = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
+        try:
+            hash(key)
+        except TypeError:
+            # PyYAML's own construct_mapping performs this check; keep it.
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                "found unhashable key",
+                key_node.start_mark,
+            ) from None
         if key in mapping:
             raise yaml.constructor.ConstructorError(
                 "while constructing a mapping",
@@ -47,10 +57,14 @@ def safe_load_strict(text: str) -> object:
     """Parse YAML ``text`` safely, rejecting duplicate mapping keys.
 
     Raises :class:`yaml.YAMLError` (the same family ``yaml.safe_load`` raises)
-    on malformed input or a duplicate key.
+    on malformed input, a duplicate or unhashable key, or nesting too deep to
+    parse.
     """
     # _StrictLoader is a SafeLoader subclass (no arbitrary object construction)
     # that additionally rejects duplicate mapping keys; this is as safe as
     # yaml.safe_load. noqa/nosec silence the ruff/bandit yaml.load heuristics,
     # which only whitelist the loader by name.
-    return yaml.load(text, Loader=_StrictLoader)  # noqa: S506  # nosec B506
+    try:
+        return yaml.load(text, Loader=_StrictLoader)  # noqa: S506  # nosec B506
+    except RecursionError:
+        raise yaml.YAMLError("YAML nesting is too deep to parse") from None

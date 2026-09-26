@@ -118,7 +118,7 @@ def test_sigma_rule_consistent_with_registry(det: Detection) -> None:
     Guards against drift between the verified registry metadata (which the
     coverage map is generated from) and the authored rule's own tags.
     """
-    rule = load_rule(det.rule_path)
+    rule = load_rule(det.rule_path).sigma
     assert rule.logsource.service == det.protocol, (
         f"{det.id}: rule logsource.service {rule.logsource.service!r} != "
         f"registry protocol {det.protocol!r}"

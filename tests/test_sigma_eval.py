@@ -106,8 +106,9 @@ detection:
 
 
 def test_unsupported_wildcard_raises() -> None:
-    rule = parse_rule(
-        """
+    with pytest.raises(SigmaEvalError, match="wildcard"):
+        parse_rule(
+            """
 title: wildcard
 id: 00000000-0000-0000-0000-000000000003
 logsource: {product: ot, service: modbus}
@@ -116,26 +117,69 @@ detection:
         func_name: READ_*
     condition: sel
 """
-    )
-    with pytest.raises(SigmaEvalError):
-        matching_indices(rule, [_event(func_name="READ_COILS")])
+        )
 
 
-@pytest.mark.parametrize("events", [[], [{}], [{"action_class": "read"}]])
-def test_unsupported_branch_is_rejected_before_evaluating_events(
-    events: list[dict[str, object]],
-) -> None:
-    rule = parse_rule(
-        """title: unsupported branch
+def test_unsupported_branch_is_rejected_when_the_rule_is_parsed() -> None:
+    # A later branch that a short-circuit would never reach is still rejected.
+    with pytest.raises(SigmaEvalError, match="wildcard"):
+        parse_rule(
+            """title: unsupported branch
 logsource: {product: ot}
 detection:
     ordinary: {action_class: read}
     wildcard: {func_name: 'READ_*'}
     condition: ordinary or wildcard
 """
+        )
+
+
+def _single(selection: str, condition: str = "sel") -> str:
+    return (
+        "title: t\nlogsource: {product: ot}\ndetection:\n"
+        f"    sel: {selection}\n    condition: {condition}\n"
     )
-    with pytest.raises(SigmaEvalError, match="wildcard"):
-        matching_indices(rule, events)
+
+
+@pytest.mark.parametrize(
+    ("selection", "message"),
+    [
+        ("{f|expand: '%hosts%'}", "placeholder"),
+        ("{ts|hour: 5}", "timestamp-part"),
+        ("{f|re: 'a.*'}", "SigmaRegularExpression"),
+        ("{f|cidr: 10.0.0.0/8}", "SigmaCIDRExpression"),
+        ("{f: null}", "SigmaNull"),
+        ("{f|fieldref: g}", "SigmaFieldReference"),
+    ],
+)
+def test_constructs_that_would_be_misevaluated_are_rejected(selection: str, message: str) -> None:
+    with pytest.raises(SigmaEvalError, match=message):
+        parse_rule(_single(selection))
+
+
+def test_malformed_conditions_fail_as_sigma_eval_errors() -> None:
+    with pytest.raises(SigmaEvalError, match="invalid Sigma rule"):
+        parse_rule(_single("{f: 1}", condition="sel and nosuch"))
+
+
+def test_escaped_wildcards_match_literally() -> None:
+    rule = parse_rule(_single("{f: 'a\\*b'}"))
+    assert matching_indices(rule, [{"f": "a*b"}, {"f": "a\\*b"}, {"f": "axb"}]) == [0]
+
+
+def test_equality_is_typed_like_the_sql_backend() -> None:
+    quoted = parse_rule(_single("{port: '502'}"))
+    number = parse_rule(_single("{port: 502}"))
+    events: list[dict[str, object]] = [{"port": 502}, {"port": "502"}, {"port": 502.0}]
+    assert matching_indices(quoted, events) == [1]
+    assert matching_indices(number, events) == [0, 2]
+    flag = parse_rule(_single("{flag: true}"))
+    assert matching_indices(flag, [{"flag": True}, {"flag": 1}, {"flag": "true"}]) == [0]
+
+
+def test_missing_fields_never_match_and_negate_to_true() -> None:
+    rule = parse_rule(_single("{f: x}", condition="not sel"))
+    assert matching_indices(rule, [{}, {"f": "x"}, {"f": None}]) == [0, 2]
 
 
 def test_strings_follow_sigma_case_insensitive_default() -> None:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from substation.coverage import __main__ as coverage_main
-from substation.coverage import builder, svg
+from substation.coverage import svg
 from substation.coverage.builder import (
     JSON_FILENAME,
     MARKDOWN_FILENAME,
@@ -18,7 +18,7 @@ from substation.coverage.builder import (
     render_all,
     render_navigator_layer,
 )
-from substation.detect.registry import load_registry
+from substation.detect.registry import ICS_TACTICS, load_registry
 
 REGISTRY = load_registry()
 
@@ -80,8 +80,8 @@ _SVG_NS = "{http://www.w3.org/2000/svg}"
 
 
 def test_svg_columns_follow_the_canonical_tactic_order() -> None:
-    assert [tid for tid, _ in svg._TACTIC_LABELS] == [tid for tid, _ in builder._ICS_TACTICS]
-    for (tid, lines), (_, name) in zip(svg._TACTIC_LABELS, builder._ICS_TACTICS, strict=True):
+    assert [tid for tid, _ in svg._TACTIC_LABELS] == [tid for tid, _ in ICS_TACTICS]
+    for (tid, lines), (_, name) in zip(svg._TACTIC_LABELS, ICS_TACTICS, strict=True):
         assert " ".join(lines) == name, tid
 
 
@@ -92,10 +92,20 @@ def test_svg_is_well_formed_and_shows_every_detection_once() -> None:
     for det in REGISTRY:
         assert texts.count(det.id) == 1, det.id
     covered = len({det.attack.tactic_id for det in REGISTRY})
-    assert f"{covered}/{len(builder._ICS_TACTICS)}" in texts
+    assert f"{covered}/{len(ICS_TACTICS)}" in texts
     assert str(len(REGISTRY)) in texts
 
 
 def test_svg_rejects_content_it_cannot_place() -> None:
     with pytest.raises(ValueError, match="protocol"):
         svg.render_svg([replace(REGISTRY[0], protocol="bacnet")])
+
+
+def test_coverage_requires_out_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(coverage_main, "_CHECKOUT_OUT", tmp_path / "absent")
+    monkeypatch.chdir(tmp_path)
+    assert coverage_main.main([]) == 1
+    assert "--out is required" in capsys.readouterr().err
+    assert not (tmp_path / "docs").exists()

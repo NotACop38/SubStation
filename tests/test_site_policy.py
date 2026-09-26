@@ -173,3 +173,31 @@ def test_aliases_are_rejected_before_yaml_object_construction(
     monkeypatch.setattr(policy_module, "safe_load_strict", construction_must_not_run)
     with pytest.raises(SchemaValidationError, match="anchors or aliases"):
         policy_module.load_policy(source)
+
+
+def test_ipv4_mapped_addresses_are_rejected_with_the_ipv4_form(tmp_path: Path) -> None:
+    from substation.policy import load_policy
+
+    data = policy_data()
+    data["modbus"]["writes"][0]["sources"] = ["::ffff:192.0.2.10"]
+    source = tmp_path / "policy.yaml"
+    source.write_text(yaml.safe_dump(data))
+    with pytest.raises(SchemaValidationError, match=r"use the IPv4 form 192\.0\.2\.10"):
+        load_policy(source)
+
+
+def test_exported_rules_get_ordinary_permissions(tmp_path: Path) -> None:
+    import os
+    import stat
+
+    from substation.policy import export_policy, load_policy
+
+    source = tmp_path / "policy.yaml"
+    source.write_text(yaml.safe_dump(policy_data()))
+    previous = os.umask(0o022)
+    try:
+        export_policy(load_policy(source), tmp_path / "rules")
+    finally:
+        os.umask(previous)
+    assert stat.S_IMODE((tmp_path / "rules").stat().st_mode) == 0o755
+    assert {stat.S_IMODE(p.stat().st_mode) for p in (tmp_path / "rules").iterdir()} == {0o644}

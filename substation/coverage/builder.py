@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from substation.detect.registry import Detection, load_registry
+from substation.detect.registry import ICS_TACTICS, Detection, load_registry
 
 from .svg import render_svg
 
@@ -42,25 +42,6 @@ SVG_FILENAME = "coverage-matrix.svg"
 # ATT&CK-for-ICS domain identifier used by the Navigator layer format.
 _ATTACK_DOMAIN = "ics-attack"
 
-# The complete set of ATT&CK-for-ICS tactics, in matrix (left-to-right) order.
-# Tactics are STABLE (CLAUDE.md treats tactic IDs as stable, unlike technique IDs
-# which are VERIFY-gated per detection), so this canonical list lets the coverage
-# map show covered-vs-gap at the tactic level without inventing technique IDs.
-# (id, display name)
-_ICS_TACTICS: tuple[tuple[str, str], ...] = (
-    ("TA0108", "Initial Access"),
-    ("TA0104", "Execution"),
-    ("TA0110", "Persistence"),
-    ("TA0111", "Privilege Escalation"),
-    ("TA0103", "Evasion"),
-    ("TA0102", "Discovery"),
-    ("TA0109", "Lateral Movement"),
-    ("TA0100", "Collection"),
-    ("TA0101", "Command and Control"),
-    ("TA0107", "Inhibit Response Function"),
-    ("TA0106", "Impair Process Control"),
-    ("TA0105", "Impact"),
-)
 # Navigator layer-format / app versions this layer targets (configuration, not an
 # ATT&CK content claim). Score gradient runs pale -> strong with coverage count.
 _LAYER_VERSION = "4.5"
@@ -85,8 +66,8 @@ def _render_tactic_coverage(detections: list[Detection]) -> list[str]:
     for det in detections:
         by_tactic.setdefault(det.attack.tactic_id, []).append(det.id)
 
-    covered = sum(1 for tid, _ in _ICS_TACTICS if by_tactic.get(tid))
-    total = len(_ICS_TACTICS)
+    covered = sum(1 for tid, _ in ICS_TACTICS if by_tactic.get(tid))
+    total = len(ICS_TACTICS)
     lines = [
         "## Content mapped by tactic",
         "",
@@ -97,7 +78,7 @@ def _render_tactic_coverage(detections: list[Detection]) -> list[str]:
         "| Tactic | ID | Detections | Coverage |",
         "|---|---|---|---|",
     ]
-    for tid, name in _ICS_TACTICS:
+    for tid, name in ICS_TACTICS:
         ids = by_tactic.get(tid, [])
         if ids:
             lines.append(f"| {name} | {tid} | {', '.join(ids)} | mapped |")
@@ -166,7 +147,7 @@ def _tactic_coverage_records(detections: list[Detection]) -> list[dict[str, Any]
     for det in detections:
         by_tactic.setdefault(det.attack.tactic_id, []).append(det.id)
     records: list[dict[str, Any]] = []
-    for tid, name in _ICS_TACTICS:
+    for tid, name in ICS_TACTICS:
         ids = by_tactic.get(tid, [])
         records.append(
             {
@@ -188,7 +169,7 @@ def render_json(detections: list[Detection]) -> str:
         "domain": _ATTACK_DOMAIN,
         "interpretation": "Content mappings only; no production effectiveness claim.",
         "detection_count": len(detections),
-        "tactics_total": len(_ICS_TACTICS),
+        "tactics_total": len(ICS_TACTICS),
         "tactics_covered": sum(1 for rec in tactic_coverage if rec["covered"]),
         "detections": [_detection_record(det) for det in detections],
         "tactic_coverage": tactic_coverage,

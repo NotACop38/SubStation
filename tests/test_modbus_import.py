@@ -263,3 +263,23 @@ def test_a_log_of_only_unprojectable_rows_imports_as_empty(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "skipped 1 unprojectable row(s)" in captured.err
+
+
+def test_import_output_keeps_ordinary_or_existing_permissions(tmp_path: Path) -> None:
+    import os
+    import stat
+
+    source = tmp_path / "sensor.log"
+    source.write_text(json.dumps(sensor_record()) + "\n")
+    fresh, existing = tmp_path / "fresh.jsonl", tmp_path / "existing.jsonl"
+    existing.write_text("old\n")
+    existing.chmod(0o640)
+    previous = os.umask(0o022)
+    try:
+        assert main(["import-modbus", str(source), "--out", str(fresh)]) == 0
+        assert main(["import-modbus", str(source), "--out", str(existing)]) == 0
+    finally:
+        os.umask(previous)
+    assert stat.S_IMODE(fresh.stat().st_mode) == 0o644
+    assert stat.S_IMODE(existing.stat().st_mode) == 0o640
+    assert existing.read_text() == fresh.read_text()

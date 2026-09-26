@@ -90,7 +90,8 @@ def _norm_s7comm(event: dict[str, Any]) -> str | None:
 
     # General s7comm_header path.
     func = f"rosctr=0x{rosctr:02x},function=0x{function:02x}"
-    if subfunction != 0:
+    # Mirror the Zeek rule: ICSNPP uses 0xff for an absent subfunction.
+    if subfunction not in (0, 0xFF):
         func = f"{func},subfunction=0x{subfunction:02x}"
     if plc_control:
         func = f"{func},plc_control={plc_control}"

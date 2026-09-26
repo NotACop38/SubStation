@@ -30,7 +30,7 @@ from pathlib import Path
 from substation import __version__
 from substation.content import ContentError, content_path
 from substation.coverage import render_coverage_map
-from substation.detect import Hit, run_detections
+from substation.detect import Hit, prepare_rules, run_detections
 from substation.detect.registry import Detection, RegistryError, load_registry
 from substation.detect.sigma_eval import SigmaEvalError
 from substation.emit import EmitError, write_artifacts
@@ -136,7 +136,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "paths",
         type=Path,
         nargs="*",
-        help="Files or directories to validate (default: the committed golden events).",
+        help="Files or directories to validate (default in a checkout: the golden events).",
     )
     validate.set_defaults(func=_cmd_validate)
 
@@ -377,7 +377,8 @@ def _cmd_detect(args: argparse.Namespace) -> int:
     from substation.policy import load_policy
 
     policy = load_policy(args.policy) if args.policy is not None else None
-    results = [(path, run_detections(path, detections, policy=policy)) for path in args.paths]
+    rules = prepare_rules(detections, policy=policy)
+    results = [(path, run_detections(path, rules=rules)) for path in args.paths]
     for path, hits in results:
         for hit in hits:
             print(

@@ -18,7 +18,7 @@ from substation.detect.registry import Detection
 __all__ = ["render_svg"]
 
 # Tactic columns in matrix order, with hand-tuned line breaks for the header box.
-# IDs and names mirror ``builder._ICS_TACTICS``; a test keeps the two in sync.
+# IDs and names mirror ``registry.ICS_TACTICS``; a test keeps the two in sync.
 _TACTIC_LABELS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("TA0108", ("Initial", "Access")),
     ("TA0104", ("Execution",)),

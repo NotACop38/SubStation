@@ -17,7 +17,8 @@ import yaml
 
 from substation._yaml import safe_load_strict
 from substation.detect.registry import load_registry
-from substation.detect.sigma_eval import matching_indices, parse_rule
+from substation.detect.sigma_eval import parse_rule
+from substation.io import default_mode, write_durably
 from substation.schema import SchemaValidationError, iter_jsonl_lines
 
 _CHANNELS = {"D1", "D2", "D3", "S1", "S2"}
@@ -55,7 +56,12 @@ def _int(value: Any, minimum: int, maximum: int) -> int:
 def _ip(value: Any) -> str:
     if not isinstance(value, str) or "%" in value:
         raise ValueError("expected an IP address without a scope identifier")
-    return str(ipaddress.ip_address(value))
+    address = ipaddress.ip_address(value)
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        # Events carry IPv4 traffic in dotted form, and Python versions format the
+        # mapped form differently, which would change the policy hash.
+        raise ValueError(f"use the IPv4 form {address.ipv4_mapped} for {value!r}")
+    return str(address)
 
 
 def _channel(grant: dict[str, Any]) -> dict[str, Any]:
@@ -224,9 +230,7 @@ def compile_policy(policy: dict[str, Any]) -> dict[str, str]:
             "base_rule_sha256": hashlib.sha256(source.encode()).hexdigest(),
         }
         output[det.id] = yaml.safe_dump(document, sort_keys=False, allow_unicode=True)
-        matching_indices(
-            parse_rule(output[det.id]), []
-        )  # Reject unsupported Sigma even without events.
+        parse_rule(output[det.id])  # Reject unsupported Sigma before anything is published.
     return output
 
 
@@ -238,7 +242,7 @@ def export_policy(policy: dict[str, Any], destination: Path) -> None:
     staging = Path(tempfile.mkdtemp(prefix=".substation-policy-", dir=destination.parent))
     try:
         for name, content in rules.items():
-            (staging / f"{name}.yml").write_text(content, encoding="utf-8")
+            write_durably(staging / f"{name}.yml", content)
         manifest = {
             "schema": "substation-policy-export/v1",
             "policy": policy,
@@ -248,9 +252,9 @@ def export_policy(policy: dict[str, Any], destination: Path) -> None:
                 for name, content in rules.items()
             },
         }
-        (staging / "manifest.json").write_text(
-            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-        )
+        write_durably(staging / "manifest.json", json.dumps(manifest, indent=2) + "\n")
+        # mkdtemp creates a private directory; publish with ordinary permissions.
+        staging.chmod(default_mode(0o777))
         # An empty destination created concurrently may be replaced; nonempty dirs
         # are protected by rename semantics. No partially populated export is visible.
         os.rename(staging, destination)

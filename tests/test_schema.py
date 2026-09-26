@@ -315,3 +315,22 @@ def test_dnp3_detail_rejects_out_of_range_iin() -> None:
     event = _a_valid_dnp3_request()
     event["detail"]["iin"] = 70000  # > 16-bit
     assert list(iter_event_errors(event, schema)) != []
+
+
+def test_an_empty_named_directory_fails_even_beside_valid_files(tmp_path: Path) -> None:
+    from substation.schema.__main__ import main as schema_main
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    good = _REPO_ROOT / "tests" / "data" / "events" / "modbus" / "valid.jsonl"
+    assert schema_main([str(good)]) == 0
+    assert schema_main([str(empty), str(good)]) == 1
+
+
+def test_validate_requires_paths_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from substation.schema import __main__ as schema_cli
+
+    monkeypatch.setattr(schema_cli, "_DEFAULT_TARGETS", (tmp_path / "absent",))
+    assert schema_cli.main([]) == 1

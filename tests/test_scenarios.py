@@ -267,3 +267,17 @@ def test_unused_protocol_parameters_do_not_silently_change_fixture_intent(
     scenario = load_scenario(_write(tmp_path, text))
     with pytest.raises(ValueError, match="unknown/unused"):
         write_artifacts(scenario, tmp_path / "out")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "? [a, b]\n: c\n",  # an unhashable (sequence) mapping key
+        "x: " + "[" * 3000 + "]" * 3000 + "\n",  # nesting deeper than the parser allows
+    ],
+)
+def test_pathological_yaml_fails_as_a_scenario_error(tmp_path: Path, body: str) -> None:
+    path = tmp_path / "scenario.yaml"
+    path.write_text(body)
+    with pytest.raises(ScenarioError, match="invalid YAML"):
+        load_scenario(path)

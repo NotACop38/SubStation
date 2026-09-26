@@ -16,6 +16,7 @@ detection there makes :func:`run_detections` pick it up with no code change.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -25,15 +26,23 @@ from substation.schema import (
     MAX_JSONL_LINES,
     SchemaValidationError,
     iter_jsonl_lines,
+    json_line,
     load_event_schema,
     parse_json_event,
     validate_event,
 )
 
 from .registry import Detection, load_registry
-from .sigma_eval import load_rule, matching_indices, parse_rule
+from .sigma_eval import ParsedRule, load_rule, matching_indices, parse_rule
 
-__all__ = ["Hit", "run_detections", "load_events", "MAX_JSONL_LINES", "MAX_JSONL_BYTES"]
+__all__ = [
+    "Hit",
+    "prepare_rules",
+    "run_detections",
+    "load_events",
+    "MAX_JSONL_LINES",
+    "MAX_JSONL_BYTES",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,17 +68,39 @@ def load_events(events_path: str | Path) -> list[dict[str, Any]]:
         raise FileNotFoundError(f"event log not found: {path} (was the generate stage run?)")
     events: list[dict[str, Any]] = []
     schema = load_event_schema()
-    for line_no, line in iter_jsonl_lines(
+    for line_no, raw in iter_jsonl_lines(
         path, max_bytes=MAX_JSONL_BYTES, max_lines=MAX_JSONL_LINES
     ):
-        if line.strip():
-            try:
-                event = parse_json_event(line)
-                validate_event(event, schema)
-            except ValueError as exc:
-                raise SchemaValidationError(f"{path}:{line_no}: {exc}") from exc
-            events.append(event)
+        line = json_line(raw)
+        if line is None:
+            continue
+        try:
+            event = parse_json_event(line)
+            validate_event(event, schema)
+        except ValueError as exc:
+            raise SchemaValidationError(f"{path}:{line_no}: {exc}") from exc
+        events.append(event)
     return events
+
+
+def prepare_rules(
+    detections: list[Detection] | None = None, *, policy: dict[str, Any] | None = None
+) -> dict[str, ParsedRule]:
+    """Parse the rule of every Tier-1 Sigma detection once, keyed by detection id.
+
+    With ``policy``, rules are compiled from the site profile instead of read from
+    the bundled files. Tier-2 detections (Zeek/Suricata) are skipped. Prepare once
+    and pass the result to :func:`run_detections` to evaluate several logs.
+    """
+    registry = load_registry() if detections is None else detections
+    from substation.policy import compile_policy
+
+    compiled = compile_policy(policy) if policy is not None else None
+    return {
+        det.id: parse_rule(compiled[det.id]) if compiled is not None else load_rule(det.rule_path)
+        for det in registry
+        if det.engine == "sigma" and det.tier == 1
+    }
 
 
 def run_detections(
@@ -77,23 +108,21 @@ def run_detections(
     detections: list[Detection] | None = None,
     *,
     policy: dict[str, Any] | None = None,
+    rules: Mapping[str, ParsedRule] | None = None,
 ) -> list[Hit]:
     """Evaluate Tier-1 Sigma detections over the JSONL event log at ``events_path``.
 
-    Returns one :class:`Hit` per (detection, matching event). Tier-2 detections
-    (Zeek/Suricata) are skipped — they run in the Tier-2 runner over PCAP. Pass
-    ``detections`` to scope evaluation to a subset (the harness does this);
-    otherwise the full registry is used.
+    Returns one :class:`Hit` per (detection, matching event), in detection order.
+    Pass prepared ``rules`` (see :func:`prepare_rules`) to reuse parsed rules across
+    logs; otherwise the rules of ``detections`` (default: the whole registry) are
+    prepared here, applying ``policy`` if given.
     """
     events = load_events(events_path)
-    registry = load_registry() if detections is None else detections
-    from substation.policy import compile_policy
-
-    compiled = compile_policy(policy) if policy is not None else None
+    if rules is None:
+        rules = prepare_rules(detections, policy=policy)
+    elif detections is not None or policy is not None:
+        raise ValueError("pass prepared rules, or detections/policy to prepare them; not both")
     hits: list[Hit] = []
-    for det in registry:
-        if det.engine != "sigma" or det.tier != 1:
-            continue
-        rule = parse_rule(compiled[det.id]) if compiled is not None else load_rule(det.rule_path)
-        hits.extend(Hit(detection_id=det.id, event_index=i) for i in matching_indices(rule, events))
+    for det_id, rule in rules.items():
+        hits.extend(Hit(detection_id=det_id, event_index=i) for i in matching_indices(rule, events))
     return hits
