@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -95,9 +96,25 @@ def _build_parser() -> argparse.ArgumentParser:
     detect.add_argument("--policy", type=Path, help="Explicit site authorization profile.")
     detect.set_defaults(func=_cmd_detect)
 
-    importer = sub.add_parser("import-modbus", help="Normalize ICSNPP Modbus JSON/TSV logs.")
-    importer.add_argument("paths", nargs="+", type=Path)
+    importer = sub.add_parser(
+        "import-modbus", help="Normalize ICSNPP modbus_detailed logs (Zeek JSON or TSV)."
+    )
+    importer.add_argument("paths", nargs="+", type=Path, help="modbus_detailed.log files.")
     importer.add_argument("--out", type=Path, help="Atomic JSONL output (default: stdout).")
+    importer.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail on rows the adapter cannot project (unsupported function, unmatched "
+        "transaction) instead of skipping and reporting them.",
+    )
+    importer.add_argument(
+        "--zeek-container-limit",
+        type=int,
+        default=100,
+        metavar="N",
+        help="The sensor's Log::default_max_field_container_elements (default: 100). "
+        "Value vectors cut at this length are marked truncated, not rejected.",
+    )
     importer.set_defaults(func=_cmd_import_modbus)
 
     policy = sub.add_parser("policy", help="Compile a site profile into portable Sigma.")
@@ -388,9 +405,14 @@ def _cmd_import_modbus(args: argparse.Namespace) -> int:
 
     if args.out and any(args.out.resolve() == path.resolve() for path in args.paths):
         raise SchemaValidationError("output must differ from every input")
+    if args.zeek_container_limit < 1:
+        raise SchemaValidationError("--zeek-container-limit must be at least 1")
+    skipped: Counter[str] | None = None if args.strict else Counter()
     events = []
     for path in args.paths:
-        events.extend(load_modbus_log(path))
+        events.extend(
+            load_modbus_log(path, skipped=skipped, container_limit=args.zeek_container_limit)
+        )
         if len(events) > MAX_JSONL_LINES:
             raise SchemaValidationError("combined projections exceed event load cap")
     output = "".join(json.dumps(event, allow_nan=False) + "\n" for event in events)
@@ -404,6 +426,20 @@ def _cmd_import_modbus(args: argparse.Namespace) -> int:
         f"import-modbus: {len(events)} observations; transaction timestamps retained",
         file=sys.stderr,
     )
+    if skipped:
+        reasons = ", ".join(f"{count} {reason}" for reason, count in sorted(skipped.items()))
+        print(
+            f"import-modbus: skipped {skipped.total()} unprojectable row(s): {reasons} "
+            "(use --strict to fail instead)",
+            file=sys.stderr,
+        )
+    truncated = sum(1 for event in events if "truncated_values" in event.get("observation", {}))
+    if truncated:
+        print(
+            f"import-modbus: {truncated} observation(s) have sensor-truncated value vectors; "
+            "raise Log::default_max_field_container_elements on the sensor to keep them",
+            file=sys.stderr,
+        )
     return 0
 
 

@@ -200,6 +200,11 @@ def ensure_icsnpp(name: str) -> Path | None:
 
 def run_zeek(pcap: Path, loads: list[str], mounts: list[tuple[Path, str]]) -> Path:
     """Run ``zeek -r pcap <loads>`` in the container; return a host dir of logs."""
+    # Every run logs complete value vectors (Zeek truncates them by default).
+    verification = _REPO_ROOT / "scripts" / "verify"
+    if not any(container == "/verification" for _, container in mounts):
+        mounts = [*mounts, (verification, "/verification")]
+    loads = ["/verification/zeek-log-limits.zeek", *loads]
     outdir = Path(tempfile.mkdtemp(prefix="zeeklogs-"))
     if _NATIVE_ZEEK:
         local_loads = []

@@ -27,7 +27,14 @@
         "source": {"const": "icsnpp-modbus"},
         "kind": {"const": "transaction_projection"},
         "line": {"type": "integer", "minimum": 1},
-        "timestamp": {"const": "transaction"}
+        "timestamp": {"const": "transaction"},
+        "truncated_values": {
+          "description": "Value vector the sensor truncated; it is omitted from detail.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {"enum": ["request_values", "response_values"]}
+        }
       }
     },
     "ts": {

@@ -1,8 +1,15 @@
 """Import ICSNPP Modbus detailed transactions, with explicit projection provenance.
 
 The eight core functions require a matched transaction. Unknown/unmatched rows
-omit direction in upstream logs and are rejected. Never infer packet timestamps
-from the transaction timestamp.
+omit direction in upstream logs, so they cannot be projected: by default they are
+rejected; a caller may instead count and skip them. Malformed input always fails.
+Never infer packet timestamps from the transaction timestamp.
+
+Zeek truncates logged vectors at ``Log::default_max_field_container_elements``
+(100 by default). A vector of exactly that many elements, shorter than its
+quantity, is dropped from the projection and named in
+``observation.truncated_values``; address, quantity and function are kept, so
+rules that do not read values still see the transaction.
 """
 
 from __future__ import annotations
@@ -48,6 +55,8 @@ _TYPES = {
 }
 _REQUIRED = {"ts", "uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p", "tid", "unit", "func"}
 _CODES = {name: code for code, name in FUNCTION_NAMES.items()}
+# Zeek's default Log::default_max_field_container_elements.
+ZEEK_CONTAINER_LIMIT = 100
 _HEADERS = {
     "separator": r"\x09",
     "set_separator": ",",
@@ -55,6 +64,14 @@ _HEADERS = {
     "unset_field": "-",
     "path": "modbus_detailed",
 }
+
+
+class UnsupportedRow(ValueError):
+    """A well-formed row this adapter cannot project (unknown function, unmatched)."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 def _integer(value: Any, maximum: int, field: str) -> int:
@@ -84,7 +101,21 @@ def _tsv_value(raw: str, kind: str) -> Any:
     return re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: chr(int(m[1], 16)), raw)
 
 
-def _project(row: Any, line: int) -> list[dict[str, Any]]:
+def _vector_length(row: dict[str, Any], key: str, quantity: int, limit: int) -> bool:
+    """Check a value vector against ``quantity``; return True if the sensor truncated it.
+
+    Only a vector of exactly the sensor's container limit, below the quantity, is
+    truncation. Any other length difference is malformed input.
+    """
+    length = len(row.get(key, []))
+    if length == quantity:
+        return False
+    if length == limit < quantity:
+        return True
+    raise ValueError(f"{key} length differs from quantity")
+
+
+def _project(row: Any, line: int, limit: int) -> list[dict[str, Any]]:
     if not isinstance(row, dict) or not row.keys() >= _REQUIRED or row.keys() - _TYPES.keys():
         raise ValueError("expected ICSNPP modbus_detailed fields; missing or unknown fields")
     for key, value in row.items():
@@ -106,9 +137,14 @@ def _project(row: Any, line: int) -> list[dict[str, Any]]:
     func = row["func"]
     code = _CODES.get(func)
     if code is None:
-        raise ValueError(f"unsupported function {func!r}; only eight matched core families")
+        raise UnsupportedRow(
+            f"function {func}", f"unsupported function {func!r}; only eight matched core families"
+        )
     if row.get("matched") is not True:
-        raise ValueError("unmatched core transaction: request/response direction is ambiguous")
+        raise UnsupportedRow(
+            "unmatched transaction",
+            "unmatched core transaction: request/response direction is ambiguous",
+        )
     if not {"address", "quantity"} <= row.keys():
         raise ValueError("core transaction requires address and quantity")
     quantity = row["quantity"]
@@ -117,14 +153,17 @@ def _project(row: Any, line: int) -> list[dict[str, Any]]:
     is_error = bool(row.get("exception_code"))
     if code in {1, 2, 3, 4} and row.get("request_values"):
         raise ValueError("read request cannot contain write values")
-    if code in {5, 6, 15, 16} and len(row.get("request_values", [])) != quantity:
-        raise ValueError("request_values length differs from quantity")
+    truncated: list[str] = []
+    if code in {5, 6, 15, 16} and _vector_length(row, "request_values", quantity, limit):
+        truncated.append("request_values")
+    if not quantity and not is_error and code in {1, 2, 3, 4, 5, 6}:
+        raise ValueError("response_values length differs from quantity")
     if (
         not is_error
         and code in {1, 2, 3, 4, 5, 6}
-        and (not quantity or len(row.get("response_values", [])) != quantity)
+        and _vector_length(row, "response_values", quantity, limit)
     ):
-        raise ValueError("response_values length differs from quantity")
+        truncated.append("response_values")
     if (is_error or code in {15, 16}) and row.get("response_values"):
         raise ValueError("exception/multiple-write ACK cannot contain response_values")
     if code in {1, 2, 5, 15}:
@@ -142,7 +181,7 @@ def _project(row: Any, line: int) -> list[dict[str, Any]]:
             if key in row:
                 detail[key] = row[key]
         values = "request_values" if is_orig else "response_values"
-        if row.get(values):
+        if row.get(values) and values not in truncated:
             detail[values] = row[values]
         if not is_orig:
             detail["matched"] = True
@@ -167,14 +206,27 @@ def _project(row: Any, line: int) -> list[dict[str, Any]]:
                 "timestamp": "transaction",
             },
         }
+        if values in truncated:
+            event["observation"]["truncated_values"] = [values]
         if exception:
             event["error"] = row["exception_code"]
         events.append(event)
     return events
 
 
-def load_modbus_log(path: str | Path) -> list[dict[str, Any]]:
-    """Load strict Zeek JSON/TSV; no partial result on unsupported/ambiguous input."""
+def load_modbus_log(
+    path: str | Path,
+    *,
+    skipped: Counter[str] | None = None,
+    container_limit: int = ZEEK_CONTAINER_LIMIT,
+) -> list[dict[str, Any]]:
+    """Load strict Zeek JSON/TSV; no partial result on malformed input.
+
+    Rows with an unsupported function or an unmatched transaction fail the load,
+    unless ``skipped`` is given: they are then counted there by reason and left
+    out. Malformed rows always fail. ``container_limit`` is the sensor's
+    ``Log::default_max_field_container_elements``.
+    """
     events: list[dict[str, Any]] = []
     headers: dict[str, str] = {}
     fields: list[str] = []
@@ -221,7 +273,13 @@ def load_modbus_log(path: str | Path) -> list[dict[str, Any]]:
                     for f, t, v in zip(fields, types, values, strict=True)
                     if v != "-"
                 }
-            projected = _project(row, line)
+            try:
+                projected = _project(row, line, container_limit)
+            except UnsupportedRow as exc:
+                if skipped is None:
+                    raise
+                skipped[exc.reason] += 1
+                continue
             for event in projected:
                 validate_event(event, schema)
             events.extend(projected)
@@ -229,7 +287,7 @@ def load_modbus_log(path: str | Path) -> list[dict[str, Any]]:
                 raise ValueError("projected events exceed the event load cap")
         except (ValueError, TypeError, OverflowError) as exc:
             raise SchemaValidationError(f"{path}:{line}: {exc}") from exc
-    if not events:
+    if not events and not (skipped and skipped.total()):
         raise SchemaValidationError(f"{path}: no supported sensor observations")
     return events
 
