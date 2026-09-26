@@ -27,6 +27,7 @@ logs cannot drift from the contract the detections bind to (``docs/schema.md``).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import socket
@@ -620,6 +621,11 @@ class _ProbeLog:
             self._fh.write(line)
             self._fh.flush()
         except OSError as exc:
+            # The honeypot stops on this error. Release the file now, dropping the
+            # line that could not be written, so the shutdown close cannot fail on
+            # it again and replace this error.
+            with contextlib.suppress(OSError):
+                self._fh.close()
             raise ProbeLogError(f"cannot write probe log {self._path}: {exc}") from exc
         self._size += len(line)
 

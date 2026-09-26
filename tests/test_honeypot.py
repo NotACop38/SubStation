@@ -326,6 +326,8 @@ def test_probe_log_failure_is_raised_not_swallowed() -> None:
     log = _ProbeLog(Path("/dev/full"), max_bytes=0)
     with pytest.raises(ProbeLogError, match="cannot write probe log"):
         log.write(events[0])
+    # The failed write released the file, so the shutdown close cannot fail again.
+    log.close()
     # serve_forever keeps serving after client OSErrors; a log failure must stop it.
     assert not issubclass(ProbeLogError, OSError)
 
