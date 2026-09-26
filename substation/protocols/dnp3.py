@@ -20,7 +20,7 @@ taken from the verified source, never invented from memory (CLAUDE.md VERIFY gat
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from substation.protocols import _common
@@ -777,7 +777,7 @@ def build_events(scenario: Scenario) -> list[Dnp3Event]:
             conn.selected = (seq, block) if code == SELECT else None
         conn.last_response_ts = last_ts
 
-    return events
+    return [replace(event, ts=_common.quantize_ts(event.ts)) for event in events]
 
 
 def _make_event(

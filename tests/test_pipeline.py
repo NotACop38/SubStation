@@ -218,3 +218,21 @@ def test_syn_segments_carry_no_acknowledgement_number(tmp_path: Path) -> None:
         tcp = packet[TCP]
         if "A" not in tcp.flags:
             assert tcp.ack == 0, tcp.flags
+
+
+@pytest.mark.parametrize(
+    "scenario_path",
+    sorted((_REPO_ROOT / "scenarios").rglob("*.yaml")),
+    ids=lambda path: path.stem,
+)
+def test_timestamps_are_microsecond_instants(scenario_path: Path, tmp_path: Path) -> None:
+    import json
+    import re
+
+    # Classic PCAP records microseconds; the JSON log must carry the same instants,
+    # never float residue from summed offsets (3.0749999999999997).
+    result = write_artifacts(load_scenario(scenario_path), tmp_path)
+    text = result.jsonl.read_text()
+    stamps = [json.loads(line)["ts"] for line in text.splitlines()]
+    assert all(ts == round(ts, 6) for ts in stamps)
+    assert not re.search(r'"ts": \d+\.\d{7,}', text)

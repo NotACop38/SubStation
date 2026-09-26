@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from substation.protocols import _common
@@ -437,7 +437,7 @@ def build_events(scenario: Scenario) -> list[S7Event]:
         else:
             _append_plus(events, conn, token, exchange.params, msg_ts, where)
 
-    return events
+    return [replace(event, ts=_common.quantize_ts(event.ts)) for event in events]
 
 
 # --- COTP / S7comm / S7comm-plus event builders ------------------------------

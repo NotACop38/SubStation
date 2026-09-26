@@ -21,7 +21,7 @@ gate). Numeric function codes are Modbus Application Protocol spec v1.1b3 (PRD Â
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from substation.protocols import _common
@@ -620,7 +620,7 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
             )
         )
 
-    return events
+    return [replace(event, ts=_common.quantize_ts(event.ts)) for event in events]
 
 
 def event_to_dict(event: ModbusEvent) -> dict[str, Any]:
