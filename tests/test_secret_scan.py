@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -87,3 +88,57 @@ def test_reviewed_hash_is_bound_to_exact_line_path_and_detector(tmp_path: Path) 
     source.write_text(line + "\n")
     findings["evidence.json"][0]["type"] = "Secret Keyword"
     assert _unreviewed_findings(tmp_path, findings) == findings
+
+
+def test_inline_allow_comments_do_not_exempt_content(tmp_path: Path) -> None:
+    # Deliberately synthetic credential shape, assembled to avoid fixture flags.
+    key = "AKIA" + "Q" * 16
+    (tmp_path / "config.py").write_text(f"KEY = '{key}'  # pragma: allowlist secret\n")
+    assert secret_scan._run_detect_secrets(tmp_path) == 1
+
+
+@pytest.mark.parametrize("name", [".gitleaks.toml", ".gitleaksignore"])
+def test_in_tree_scanner_configuration_is_refused(tmp_path: Path, name: str) -> None:
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "nested" / name).write_text("allow everything\n")
+    with pytest.raises(ValueError, match="scanner configuration"):
+        secret_scan._refuse_scanner_config(tmp_path)
+
+
+def test_gitleaks_ignores_inline_allow_comments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        commands.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/fake")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert secret_scan._run_gitleaks_native(tmp_path) == 0
+    assert secret_scan._run_gitleaks_docker(tmp_path) == 0
+    gitleaks = [cmd for cmd in commands if "--redact" in cmd]
+    assert len(gitleaks) == 2
+    assert all("--ignore-gitleaks-allow" in cmd for cmd in gitleaks)
+
+
+def test_every_reviewed_fingerprint_matches_a_current_line() -> None:
+    import json
+
+    # Stale exceptions accumulate silently; each must still name a real line.
+    root = Path(secret_scan.__file__).resolve().parents[2]
+    reviewed = json.loads((root / "scripts/security/reviewed-hash-lines.json").read_text())
+    for path, fingerprints in reviewed.items():
+        lines = (root / path).read_text(encoding="utf-8").splitlines()
+        current = {secret_scan.line_fingerprint(line) for line in lines}
+        assert set(fingerprints) <= current, path
+
+
+def test_fingerprint_helper_prints_the_reviewed_form(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "pins.py").write_text("first\nPIN = 'abc'\n")
+    monkeypatch.setattr(secret_scan, "_REPO_ROOT", tmp_path)
+    assert secret_scan.main(["--fingerprint", "pins.py:2"]) == 0
+    assert capsys.readouterr().out.strip() == secret_scan.line_fingerprint("PIN = 'abc'")

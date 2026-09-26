@@ -28,7 +28,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN = "7ebeb03a0f954541369361651d1c27d09a64b5a3"  # pragma: allowlist secret
+PIN = "7ebeb03a0f954541369361651d1c27d09a64b5a3"
 UPSTREAM = "https://github.com/cisagov/icsnpp-s7comm.git"
 PATCH = ROOT / "scripts/verify/patches/icsnpp-s7comm-bounds.patch"
 DOCKERFILE = ROOT / "scripts/verify/zeek-s7comm.Dockerfile"

@@ -5,6 +5,11 @@ Native gitleaks is preferred; pinned detect-secrets is the Python alternative.
 Docker gitleaks is explicit opt-in. Every backend scans the same snapshot,
 including new non-ignored files for a working-tree scan. This is not a history
 scan. Missing scanners and unreadable input fail the gate.
+
+Scanned content cannot exempt itself: inline allow comments (detect-secrets'
+``pragma: allowlist secret``, ``gitleaks:allow``) are ignored and in-tree
+gitleaks configuration is refused. The only exceptions are the reviewed digest
+lines in ``scripts/security/reviewed-hash-lines.json``.
 """
 
 from __future__ import annotations
@@ -79,6 +84,23 @@ def _snapshot(destination: Path, *, staged: bool) -> None:
         target.write_bytes(data)
 
 
+# In-tree files a scanner would read as configuration, letting content exempt itself.
+_SCANNER_CONFIG_NAMES = frozenset({".gitleaks.toml", ".gitleaksignore"})
+
+
+def _refuse_scanner_config(root: Path) -> None:
+    found = sorted(
+        str(path.relative_to(root))
+        for path in root.rglob("*")
+        if path.name in _SCANNER_CONFIG_NAMES
+    )
+    if found:
+        raise ValueError(
+            f"scanner configuration in the tree is not allowed ({', '.join(found)}); "
+            "record reviewed exceptions in scripts/security/reviewed-hash-lines.json"
+        )
+
+
 def _docker_usable() -> bool:
     if shutil.which("docker") is None:
         return False
@@ -91,7 +113,7 @@ def _run_gitleaks_native(root: Path) -> int | None:
         return None
     print("secret_scan: backend = gitleaks (native)")
     return subprocess.run(
-        ["gitleaks", "dir", str(root), "--no-banner", "--redact"],
+        ["gitleaks", "dir", str(root), "--no-banner", "--redact", "--ignore-gitleaks-allow"],
         cwd=root,
     ).returncode
 
@@ -121,8 +143,15 @@ def _run_gitleaks_docker(root: Path = _REPO_ROOT) -> int | None:
             "/repo",
             "--no-banner",
             "--redact",
+            "--ignore-gitleaks-allow",
         ],
     ).returncode
+
+
+def line_fingerprint(line: str) -> str:
+    """The reviewed-exception fingerprint of one source line (sha256, 4 x 16 hex)."""
+    digest = hashlib.sha256(line.encode()).hexdigest()
+    return ":".join(digest[i : i + 16] for i in range(0, 64, 16))
 
 
 def _unreviewed_findings(root: Path, findings: dict[str, Any]) -> dict[str, Any]:
@@ -152,8 +181,7 @@ def _unreviewed_findings(root: Path, findings: dict[str, Any]) -> dict[str, Any]
         unreviewed = []
         for entry in entries:
             line = lines[entry["line_number"] - 1]
-            digest = hashlib.sha256(line.encode()).hexdigest()
-            fingerprint = ":".join(digest[i : i + 16] for i in range(0, 64, 16))
+            fingerprint = line_fingerprint(line)
             if entry["type"] != "Hex High Entropy String" or fingerprint not in approved.get(
                 path, []
             ):
@@ -172,7 +200,17 @@ def _run_detect_secrets(root: Path) -> int | None:
         return None
     print("secret_scan: backend = detect-secrets")
     proc = subprocess.run(
-        [sys.executable, "-m", "detect_secrets", "scan", "--all-files", "."],
+        [
+            sys.executable,
+            "-m",
+            "detect_secrets",
+            "scan",
+            "--all-files",
+            # Inline "pragma: allowlist secret" comments must not exempt content.
+            "--disable-filter",
+            "detect_secrets.filters.allowlist.is_line_allowlisted",
+            ".",
+        ],
         cwd=root,
         capture_output=True,
         text=True,
@@ -217,7 +255,21 @@ def _run_builtin(root: Path) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--staged", action="store_true", help="Scan the exact complete Git index.")
+    parser.add_argument(
+        "--fingerprint",
+        metavar="PATH:LINE",
+        help="Print the reviewed-exception fingerprint of one line, then exit.",
+    )
     args = parser.parse_args(argv)
+    if args.fingerprint is not None:
+        path, _, number = args.fingerprint.rpartition(":")
+        try:
+            line = (_REPO_ROOT / path).read_text(encoding="utf-8").splitlines()[int(number) - 1]
+        except (OSError, ValueError, IndexError) as exc:
+            print(f"secret_scan: cannot read {args.fingerprint}: {exc}", file=sys.stderr)
+            return 2
+        print(line_fingerprint(line))
+        return 0
     backend = os.environ.get("SUBSTATION_SECRET_SCANNER", "auto")
     if backend not in ("auto", "gitleaks-docker"):
         print(f"secret_scan: unknown scanner {backend!r}", file=sys.stderr)
@@ -226,6 +278,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         with tempfile.TemporaryDirectory(prefix="substation-secret-scan-") as tmp:
             root = Path(tmp)
             _snapshot(root, staged=args.staged)
+            _refuse_scanner_config(root)
             print(f"secret_scan: scope = {'index' if args.staged else 'working tree'}")
             if backend == "gitleaks-docker":
                 rc = _run_gitleaks_docker(root)
