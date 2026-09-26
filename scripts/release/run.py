@@ -119,15 +119,14 @@ def _target_version(args: argparse.Namespace, current: str) -> str:
     return f"{major}.{minor}.{patch + 1}"
 
 
-def _unreleased_notes(text: str) -> str:
-    """Return the ``[Unreleased]`` notes; refuse a release without any."""
+def _unreleased_section(text: str) -> re.Match[str]:
+    """Locate the ``[Unreleased]`` section; refuse a release without notes."""
     match = _UNRELEASED_RE.search(text)
     if match is None:
         raise ReleaseError(f"{_CHANGELOG} has no '## [Unreleased]' section")
-    notes = match.group("body").strip("\n")
-    if not notes.strip():
+    if not match.group("body").strip():
         raise ReleaseError(f"{_CHANGELOG} [Unreleased] is empty; record the release notes first")
-    return notes
+    return match
 
 
 def _set_version(version: str) -> None:
@@ -144,9 +143,8 @@ def _promote_changelog(version: str, date: str) -> None:
     """Move the ``[Unreleased]`` notes under a new ``[version] - date`` heading."""
     path = _path(_CHANGELOG)
     text = path.read_text(encoding="utf-8")
-    notes = _unreleased_notes(text)
-    match = _UNRELEASED_RE.search(text)
-    assert match is not None  # noqa: S101 - checked by _unreleased_notes
+    match = _unreleased_section(text)
+    notes = match.group("body").strip("\n")
     rest = text[match.end() :]
     section = f"## [Unreleased]\n\n## [{version}] - {date}\n\n{notes}\n" + ("\n" if rest else "")
     path.write_text(text[: match.start()] + section + rest, encoding="utf-8")
@@ -160,7 +158,7 @@ def _preflight(target: str) -> None:
         raise ReleaseError("the working tree is not clean; commit or stash changes first")
     if _git("tag", "--list", f"v{target}"):
         raise ReleaseError(f"tag v{target} already exists; choose a new version")
-    _unreleased_notes(_path(_CHANGELOG).read_text(encoding="utf-8"))
+    _unreleased_section(_path(_CHANGELOG).read_text(encoding="utf-8"))
 
 
 def _gate(args: argparse.Namespace) -> None:
