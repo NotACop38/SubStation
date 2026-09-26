@@ -67,14 +67,21 @@ fire when:         output_control AND NOT authorized_channel
 ## Scenarios
 
 - **Fires:** [`dnp3-anomalous-d3-unauthorized-operate.yaml`](../../scenarios/dnp3/anomalous-d3-unauthorized-operate.yaml)
-  — `rogue-1` (10.0.1.77, not allow-listed) issues `OPERATE` and `DIRECT_OPERATE`
-  CROB commands amid a **legitimate operate from the allow-listed master**.
-  Validated: D3 fires on exactly the two rogue controls and stays silent on the
-  master's legitimate operate.
+  — `rogue-1` (10.0.1.77, not allow-listed) trips breaker 7 with a correct
+  select-before-operate (`SELECT` then `OPERATE`, Trip + Pulse On) and pulses
+  output 8 with `DIRECT_OPERATE`, amid a **legitimate select-before-operate from the
+  allow-listed master**. Validated: D3 fires on exactly the three rogue requests and
+  stays silent on the master's controls.
 - **Quiet:** [`dnp3-benign-baseline.yaml`](../../scenarios/dnp3/benign-baseline.yaml)
+  and [`dnp3-benign-master-startup.yaml`](../../scenarios/dnp3/benign-master-startup.yaml)
   — the allow-listed master polls and operates legitimately. Validated: 0 hits. Also
   quiet on the D1/D2/D4 anomalous scenarios (none issue an operate from a
   non-allow-listed source).
+
+The modeled outstation echoes each control block with a status, as a device
+would: `Success`, `No Select` for an `OPERATE` without its matching `SELECT`, or
+`Not Supported` for a non-interoperable control code. D3 keys on the request, so
+it fires whether or not the device accepted the command.
 
 ## ATT&CK-for-ICS mapping
 

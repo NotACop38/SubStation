@@ -168,9 +168,9 @@ _EXPECTED_FIRE_HITS: dict[tuple[str, str], tuple[int, ...]] = {
     # M2: the undefined-function request and the ILLEGAL_FUNCTION exception reply.
     ("M2", "anomalous-m2-illegal-function"): (2, 3),
     # D1/D2/D3: the restart / disable-unsolicited / (direct-)operate requests.
-    ("D1", "dnp3-anomalous-d1-restart"): (5,),
-    ("D2", "dnp3-anomalous-d2-disable-unsolicited"): (3,),
-    ("D3", "dnp3-anomalous-d3-unauthorized-operate"): (4, 6),
+    ("D1", "dnp3-anomalous-d1-restart"): (6,),
+    ("D2", "dnp3-anomalous-d2-disable-unsolicited"): (4,),
+    ("D3", "dnp3-anomalous-d3-unauthorized-operate"): (5, 8, 10),
     # S1: the PLC Stop request. S2: the download-sequence + Create Object requests.
     ("S1", "s7-anomalous-s1-cpu-stop"): (12,),
     ("S2", "s7-anomalous-s2-program-download"): (10, 12, 14, 16),

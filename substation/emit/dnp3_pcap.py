@@ -18,10 +18,12 @@ from pathlib import Path
 
 from substation.emit import _tcp
 from substation.protocols.dnp3 import (
+    CONTROL_STATUS,
     OBJECT_TYPES,
     RESPONSE,
     UNSOLICITED_RESPONSE,
     Dnp3Event,
+    control_code,
     dnp3_crc,
     object_payload_size,
 )
@@ -29,11 +31,6 @@ from substation.protocols.dnp3 import (
 __all__ = ["write_pcap"]
 
 _DNP3_START = b"\x05\x64"
-
-# Inverse of the CROB label tables (dnp3.py) so the encoder can rebuild the wire
-# control_code byte from the schema-clean detail.control labels.
-_OP_CODE = {"Nul": 0, "Pulse On": 1, "Pulse Off": 2, "Latch On": 3, "Latch Off": 4}
-_TRIP_CODE = {"Nul": 0, "Close": 1, "Trip": 2}
 
 
 def _object_group_var(event: Dnp3Event) -> tuple[int, int, int]:
@@ -95,23 +92,21 @@ def _crob_objects(event: Dnp3Event) -> bytes:
     """A Control-Relay-Output-Block object (group 12 var 1, qualifier 0x28).
 
     Qualifier 0x28 carries a **2-byte** object count and a **2-byte** index prefix, so
-    control indices up to 65535 round-trip (PR #9 review).
+    control indices up to 65535 round-trip (PR #9 review). A response echoes the
+    request's block with the outstation's status.
     """
     ctl = event.control or {}
-    # Preserve pre-correction Dnp3Event objects as well as current spaced labels.
-    op = _OP_CODE[str(ctl.get("operation_type", "Nul")).replace("_", " ")]
-    trip = _TRIP_CODE.get(str(ctl.get("trip_control_code", "Nul")), 0)
-    clear = 0x20 if ctl.get("clear_bit") else 0x00
-    control_code = (trip << 6) | clear | op
+    code = control_code(ctl)
+    status = CONTROL_STATUS[str(ctl.get("status_code", "Success"))]
     index = int(ctl.get("index_number", 0)) & 0xFFFF
     count = int(ctl.get("execute_count", 1)) & 0xFF
     on_time = int(ctl.get("on_time", 0)) & 0xFFFFFFFF
     off_time = int(ctl.get("off_time", 0)) & 0xFFFFFFFF
     crob = (
-        bytes([control_code, count])
+        bytes([code, count])
         + on_time.to_bytes(4, "little")
         + off_time.to_bytes(4, "little")
-        + bytes([0x00])  # status (commanded request)
+        + bytes([status])  # 0 on a request
     )
     # qualifier 0x28: 2-byte object count, each prefixed by a 2-byte index.
     return (
@@ -121,15 +116,13 @@ def _crob_objects(event: Dnp3Event) -> bytes:
 
 def _app_bytes(event: Dnp3Event) -> bytes:
     """Application-layer bytes: app control + function code + (iin) + objects."""
-    # FIR+FIN application fragment (single-fragment messages); seq left 0 for
-    # determinism — Zeek's fc logging keys on the header, not the sequence.
-    app_control = 0xC0
-    out = bytes([app_control, event.func_code])
+    # Single-fragment messages; the model sets FIR/FIN, CON/UNS and the sequence.
+    out = bytes([event.app_control, event.func_code])
     if not event.is_orig:  # responses (RESPONSE / UNSOLICITED_RESPONSE) carry IIN.
         # The envelope uses Zeek's numeric representation of the two IIN octets:
         # first octet in bits 8..15, second in bits 0..7 (not a little-endian u16).
         out += int(event.iin or 0).to_bytes(2, "big")
-    if event.is_orig and event.control is not None:
+    if event.control is not None:
         out += _crob_objects(event)
     elif event.is_orig and event.objects is not None:
         # READ/WRITE/unsolicited-config requests: object header from the shared

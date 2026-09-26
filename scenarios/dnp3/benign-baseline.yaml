@@ -21,11 +21,11 @@
 name: dnp3-benign-baseline
 description: >-
   Normal DNP3 operation on one outstation: an allow-listed master enables
-  unsolicited reporting, polls continuously and issues a legitimate operate,
-  while the outstation returns solicited responses and spontaneous unsolicited
-  responses. The canonical quiet baseline that D1 (restart), D2
+  unsolicited reporting, polls continuously and closes a breaker with
+  select-before-operate, while the outstation returns solicited responses and
+  spontaneous unsolicited responses that the master confirms. The canonical quiet baseline that D1 (restart), D2
   (disable-unsolicited), D3 (unauthorized operate) and D4 (enumeration) must all
-  stay silent on (PRD.md §8).
+  stay silent on (docs/design.md §8).
 
 protocol: dnp3
 label: benign
@@ -76,9 +76,13 @@ exchanges:
   # In-policy: control from the permitted master, so D3 stays quiet.
   - source: master-1
     target: rtu-1
-    function: Operate
+    function: Select
     offset: 6.0
-    params: { index_number: 2, operation_type: Latch_On, trip_control_code: Close, execute_count: 1 }
+    params: { index_number: 2, operation_type: Pulse_On, trip_control_code: Close, on_time: 1000 }
+  - source: master-1
+    target: rtu-1
+    function: Operate
+    params: { index_number: 2, operation_type: Pulse_On, trip_control_code: Close, on_time: 1000 }
 
   # --- polling continues after the control: operation is continuous ---------
   - source: master-1

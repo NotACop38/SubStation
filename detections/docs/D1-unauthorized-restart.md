@@ -49,8 +49,10 @@ Tier-1 `.jsonl` event log (`docs/schema.md`):
 
 - `proto` = `dnp3`, `direction` = `request`, `func_name` ∈
   {`COLD_RESTART`, `WARM_RESTART`}. `func_name` carries Zeek's
-  `DNP3::function_codes[fc]` name (spike 04), so the rule transfers to production
-  Zeek `dnp3.log` (`fc_request`) unchanged.
+  `DNP3::function_codes[fc]` name (spike 04), the same string Zeek's `dnp3.log`
+  records in `fc_request`. The log itself still needs mapping: it has no `proto`,
+  `direction` or `conn.*` fields and can merge consecutive requests (spike 08), so
+  the rule does not apply to it unchanged.
 - `conn.orig_h` — the issuing source. On a **request** (`is_orig: true`) the
   originator *is* the source (`docs/schema.md` → `conn`), so `conn.orig_h` is the
   master that issued the restart.
