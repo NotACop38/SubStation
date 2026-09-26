@@ -1,4 +1,4 @@
-"""Passive, isolated Modbus/TCP honeypot that logs inbound probes (PRD §6.10).
+"""Passive, isolated Modbus/TCP honeypot that logs inbound probes (docs/design.md §6.10).
 
 A minimal Modbus responder for **research**: it binds a listening socket, answers
 inbound requests with **banner/coil/register stubs only**, and records every probe
@@ -52,6 +52,7 @@ from substation.protocols.modbus import (
     ModbusEvent,
     event_to_dict,
     function_action_class,
+    zeek_exception_name,
     zeek_function_name,
 )
 from substation.schema import load_event_schema, validate_event
@@ -109,7 +110,7 @@ class HoneypotConfigError(ValueError):
 
 @dataclass(slots=True)
 class StubDevice:
-    """In-memory coil/register stubs (PRD §6.10: "coil/register stubs" only).
+    """In-memory coil/register stubs (docs/design.md §6.10: "coil/register stubs" only).
 
     Not a process model: reads return a deterministic default unless a prior write
     set the address, and the address space is bounded so a recon sweep of a large
@@ -249,7 +250,7 @@ def _response_event(
             resp_p=conn.resp_p,
             is_orig=False,
             func_code=parsed.func_code | _EXCEPTION_FLAG,
-            func_name=f"{_func_name(parsed.func_code)}_EXCEPTION",
+            func_name=zeek_exception_name(parsed.func_code),
             action_class=action_class,
             unit=parsed.unit,
             tid=parsed.tid,

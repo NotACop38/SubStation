@@ -1,8 +1,8 @@
-"""Modbus semantics shared by the JSON and PCAP emitters (PRD §6.1, §6.4).
+"""Modbus semantics shared by the JSON and PCAP emitters (docs/design.md §6.1, §6.4).
 
 :func:`build_events` turns a loaded :class:`~substation.scenarios.Scenario` into
 an ordered list of :class:`ModbusEvent` — the **single intermediate model both
-emitters consume** (the LOCKED core design principle, PRD §6.1). Independent
+emitters consume** (the LOCKED core design principle, docs/design.md §6.1). Independent
 parser checks verify that the two emitted representations agree.
 
 This module is pure Python and protocol-semantic only: it carries *what each
@@ -14,8 +14,8 @@ no scapy — means JSON-only consumers never pull a packet library.
 
 Function-code names are the frozen Zeek ``Modbus::function_codes`` spellings
 recorded in ``docs/schema.md`` and ``docs/spikes/01-icsnpp-modbus-fields.md`` —
-taken from the verified source, never invented from memory (CLAUDE.md VERIFY
-gate). Numeric function codes are Modbus Application Protocol spec v1.1b3 (PRD §9).
+taken from the verified source, never invented from memory (AGENTS.md VERIFY
+gate). Numeric function codes are Modbus Application Protocol spec v1.1b3 (docs/design.md §9).
 """
 
 from __future__ import annotations
@@ -44,6 +44,7 @@ __all__ = [
     "is_standard_function",
     "abnormal_function_name",
     "function_action_class",
+    "zeek_exception_name",
     "zeek_function_name",
 ]
 
@@ -51,7 +52,7 @@ DEFAULT_MODBUS_PORT = 502
 # Synthetic outstation turnaround between a request and its response (seconds).
 RESPONSE_DELAY = 0.05
 
-# Modbus function codes (Modbus Application Protocol Specification v1.1b3, PRD §9).
+# Modbus function codes (Modbus Application Protocol Specification v1.1b3, docs/design.md §9).
 READ_COILS = 0x01
 READ_DISCRETE_INPUTS = 0x02
 READ_HOLDING_REGISTERS = 0x03
@@ -125,27 +126,29 @@ ACTION_CLASS: dict[int, str] = {
     WRITE_MULTIPLE_REGISTERS: "write",
     0x07: "diagnostic",
     0x08: "diagnostic",
-    0x09: "diagnostic",
+    # Programming and firmware functions change controller logic, like an S7
+    # block download, so they are writes (and fall under M1 outside policy).
+    0x09: "write",  # PROGRAM_484
     0x0A: "diagnostic",
     0x0B: "diagnostic",
     0x0C: "diagnostic",
-    0x0D: "diagnostic",
+    0x0D: "write",  # PROGRAM_584_984
     0x0E: "diagnostic",
     0x11: "diagnostic",
-    0x12: "diagnostic",
-    0x13: "diagnostic",
+    0x12: "write",  # PROGRAM_884_U84
+    0x13: "control",  # RESET_COMM_LINK_884_U84: a device-state change, like a restart
     0x14: "read",
     0x15: "write",
     0x16: "write",
     0x17: "write",
     0x18: "read",
-    0x28: "diagnostic",
+    0x28: "write",  # PROGRAM_CONCEPT
     0x29: "diagnostic",
     0x2B: "diagnostic",
-    0x5A: "diagnostic",
+    0x5A: "write",  # PROGRAM_UNITY
     0x5B: "diagnostic",
-    0x7D: "diagnostic",
-    0x7E: "diagnostic",
+    0x7D: "write",  # FIRMWARE_REPLACEMENT
+    0x7E: "write",  # PROGRAM_584_984_2
     0x7F: "diagnostic",
 }
 
@@ -169,13 +172,13 @@ _MAX_WRITE_BITS = 1968
 _U16 = 0xFFFF
 
 # A request may carry a reserved/undefined (non-standard) function code — the M2
-# "illegal/abnormal function code" recon signal (PRD §5.1). Zeek's
+# "illegal/abnormal function code" recon signal (docs/design.md §5.1). Zeek's
 # ``Modbus::function_codes`` table renders any code *absent* from it as
 # ``unknown-<decimal>`` (verified against base/protocols/modbus/consts.zeek on
 # 2026-06-04 — NB 0x09 is *not* undefined there, it is the legacy PROGRAM_484, so
 # the emitter only treats codes genuinely absent from that table as abnormal). A
 # spec-compliant outstation answers an unsupported function with an
-# ILLEGAL_FUNCTION exception (Modbus Application Protocol spec v1.1b3, PRD §9).
+# ILLEGAL_FUNCTION exception (Modbus Application Protocol spec v1.1b3, docs/design.md §9).
 _MAX_REQUEST_FUNCTION = 0x7F  # 0x80+ is the exception-response bit; never a request code.
 EXCEPTION_FLAG = 0x80  # set on the function code in an exception response (code | 0x80).
 ILLEGAL_FUNCTION = "ILLEGAL_FUNCTION"
@@ -253,6 +256,19 @@ def abnormal_function_name(code: int) -> str:
 def zeek_function_name(code: int) -> str:
     """Zeek-rendered function name, including ``unknown-N`` for undefined codes."""
     return ZEEK_FUNCTION_NAMES.get(code, abnormal_function_name(code))
+
+
+def zeek_exception_name(code: int) -> str:
+    """Zeek's name for the exception response to request function ``code``.
+
+    Mirrors ``build_func`` in base/protocols/modbus/main.zeek (verified against
+    the pinned Zeek 8.2 image): a defined function gets ``<NAME>_EXCEPTION``; an
+    undefined one falls back to the table default for the exception byte, so the
+    reply to ``unknown-66`` is ``unknown-194``.
+    """
+    if code in ZEEK_FUNCTION_NAMES:
+        return f"{ZEEK_FUNCTION_NAMES[code]}_EXCEPTION"
+    return abnormal_function_name(code | EXCEPTION_FLAG)
 
 
 def function_action_class(code: int) -> str:
@@ -437,7 +453,7 @@ def _abnormal_payload(params: Mapping[str, object], where: str) -> _Payload:
 
     An undefined function code carries no defined data model, so ``address`` and
     ``quantity`` are optional. They are kept as a **pair** so the one shared model
-    drives both emitters identically (PRD §6.1): if either is given the other is
+    drives both emitters identically (docs/design.md §6.1): if either is given the other is
     defaulted (address->0, quantity->1), so the JSON and the PCAP body never
     disagree on which fields are present (codex P3). No response values are
     synthesized (the outstation answers with an exception).
@@ -586,13 +602,12 @@ def build_events(scenario: Scenario) -> list[ModbusEvent]:
             )
         )
         # An exception response carries the exception function on the wire
-        # (code | 0x80) and the `<FUNCTION>_EXCEPTION` name — the established schema
-        # convention (the honeypot + the golden events render exceptions this way),
-        # so detections/baselines keying on func_code/func_name match the PCAP and
-        # honeypot telemetry alike (codex P2).
+        # (code | 0x80) and Zeek's name for it (`<FUNCTION>_EXCEPTION`, or
+        # `unknown-<code|0x80>` for an undefined function), so detections keying on
+        # func_code/func_name match Zeek, the PCAP and honeypot telemetry alike.
         if exception_name is not None:
             response_func_code = code | EXCEPTION_FLAG
-            response_func_name = f"{func_name}_EXCEPTION"
+            response_func_name = zeek_exception_name(code)
         else:
             response_func_code = code
             response_func_name = func_name

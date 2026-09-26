@@ -20,7 +20,12 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from substation.protocols.modbus import FUNCTION_NAMES, function_action_class, zeek_function_name
+from substation.protocols.modbus import (
+    FUNCTION_NAMES,
+    function_action_class,
+    zeek_exception_name,
+    zeek_function_name,
+)
 from substation.schema import (
     MAX_JSONL_LINES,
     SchemaValidationError,
@@ -175,7 +180,7 @@ def _project(row: Any, line: int, limit: int) -> list[dict[str, Any]]:
     for is_orig in (True, False):
         exception = not is_orig and bool(row.get("exception_code"))
         raw_code = code | 128 if exception else code
-        name = zeek_function_name(code & 127) + ("_EXCEPTION" if exception else "")
+        name = zeek_exception_name(code) if exception else zeek_function_name(code)
         detail = {"tid": row["tid"], "unit": row["unit"], "func": name}
         for key in ("address", "quantity", "modbus_detailed_link_id"):
             if key in row:
