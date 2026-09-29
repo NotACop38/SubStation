@@ -9,6 +9,8 @@ Releases are cut **locally** with `make release` (there is no cloud CI/CD); the
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-29
+
 ### Added
 
 - **M4, Modbus bulk read / address-space sweep** (Zeek; Collection: T0801, T0861):
